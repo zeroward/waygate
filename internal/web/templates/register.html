@@ -1,0 +1,33 @@
+{{template "header" .}}
+{{$f := .Data}}
+<section class="panel narrow">
+  <p class="eyebrow">The gates of Icecrown</p>
+  <h1>Register</h1>
+  <p class="lede">One account per player. Username and password are what you type in the 3.3.5a client.</p>
+  {{if $f.Error}}<div class="flash flash-error" role="alert">{{$f.Error}}</div>{{end}}
+  <form method="post" action="/register" class="form" autocomplete="on">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <label>Username
+      <input name="username" required minlength="3" maxlength="16" pattern="[A-Za-z0-9]{3,16}" value="{{$f.Username}}" autocomplete="username">
+      <span class="hint">3–16 letters or digits. Stored uppercase for the authserver.</span>
+    </label>
+    <label>Email
+      <input type="email" name="email" required maxlength="255" value="{{$f.Email}}" autocomplete="email">
+    </label>
+    <label>Password
+      <input type="password" name="password" required minlength="8" maxlength="16" autocomplete="new-password">
+      <span class="hint">8–16 characters, at least one letter and one number. Client limit is 16.</span>
+    </label>
+    <label>Confirm password
+      <input type="password" name="password_confirm" required minlength="8" maxlength="16" autocomplete="new-password">
+    </label>
+    {{if eq .CaptchaProv "turnstile"}}
+    <div class="cf-turnstile" data-sitekey="{{.CaptchaKey}}" data-theme="dark"></div>
+    {{end}}
+    {{if eq .CaptchaProv "hcaptcha"}}
+    <div class="h-captcha" data-sitekey="{{.CaptchaKey}}" data-theme="dark"></div>
+    {{end}}
+    <button type="submit" class="btn btn-gold">Create account</button>
+  </form>
+</section>
+{{template "footer" .}}

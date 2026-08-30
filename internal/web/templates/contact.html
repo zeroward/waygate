@@ -1,0 +1,34 @@
+{{template "header" .}}
+<section class="panel narrow">
+  <p class="eyebrow">Send word to Icecrown</p>
+  <h1>Contact</h1>
+  {{if .SMTP}}
+  <p class="lede">Staff will see this in the realm mailbox.</p>
+  <form method="post" action="/contact" class="form">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <label>Name
+      <input name="name" required maxlength="80">
+    </label>
+    <label>Email
+      <input type="email" name="email" required maxlength="255">
+    </label>
+    <label>Subject
+      <input name="subject" maxlength="120">
+    </label>
+    <label>Message
+      <textarea name="message" required minlength="10" maxlength="4000" rows="8"></textarea>
+    </label>
+    <button type="submit" class="btn btn-gold">Send</button>
+  </form>
+  {{else}}
+  <p class="lede">Mail is not configured on this site. Reach the staff another way:</p>
+  <ul class="plain">
+    {{if .DiscordURL}}<li>Discord: <a href="{{.DiscordURL}}" rel="noopener noreferrer">{{.DiscordURL}}</a></li>{{end}}
+    {{if .ContactEmail}}<li>Email: <a href="mailto:{{.ContactEmail}}">{{.ContactEmail}}</a></li>{{end}}
+    {{if and (not .DiscordURL) (not .ContactEmail)}}
+    <li>No public contact method is set. Ask the host operator.</li>
+    {{end}}
+  </ul>
+  {{end}}
+</section>
+{{template "footer" .}}

@@ -1,0 +1,30 @@
+{{template "header" .}}
+{{$d := .Data}}
+<section class="panel narrow">
+  {{if eq $d.Stage "confirm"}}
+  <p class="eyebrow">15 minutes · single use</p>
+  <h1>Choose a new password</h1>
+  <form method="post" action="/account/reset/{{$d.Token}}" class="form">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <label>New password
+      <input type="password" name="new_password" required minlength="8" maxlength="16" autocomplete="new-password">
+    </label>
+    <label>Confirm
+      <input type="password" name="new_password_confirm" required minlength="8" maxlength="16" autocomplete="new-password">
+    </label>
+    <button type="submit" class="btn btn-gold">Reset password</button>
+  </form>
+  {{else}}
+  <p class="eyebrow">Mailbox of the Frozen Throne</p>
+  <h1>Reset password</h1>
+  <p class="lede">If the email is on an account, we send a single-use link that expires in 15 minutes.</p>
+  <form method="post" action="/account/reset" class="form">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <label>Email
+      <input type="email" name="email" required maxlength="255" autocomplete="email">
+    </label>
+    <button type="submit" class="btn btn-gold">Send reset link</button>
+  </form>
+  {{end}}
+</section>
+{{template "footer" .}}

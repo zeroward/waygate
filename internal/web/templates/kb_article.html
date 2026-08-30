@@ -1,0 +1,38 @@
+{{template "header" .}}
+{{$d := .Data}}
+{{$a := $d.Article}}
+{{if $d.Draft}}
+<p class="kb-draft-banner" role="status">Draft preview — not visible to players.</p>
+{{end}}
+<div class="kb-article">
+  <article class="panel prose">
+    <p class="eyebrow">{{$a.Category}}</p>
+    <h1>{{$a.Title}}</h1>
+    <p class="kb-meta">Updated {{$d.Updated}}{{if $d.CanEdit}} · <a href="/staff/kb/{{$a.ID}}">Edit</a>{{end}}</p>
+    {{if eq $a.Slug "how-to-connect"}}
+    <p class="kb-realmlist-dl">
+      <a class="btn btn-gold" href="/realmlist.wtf">Download realmlist.wtf</a>
+      <span class="hint">Replace <code>Data/enUS/realmlist.wtf</code> (or enGB, deDE, …). Do not use the launcher.</span>
+    </p>
+    {{end}}
+    {{$d.HTML}}
+  </article>
+  <aside class="panel kb-side">
+    <h2>In {{$a.Category}}</h2>
+    {{if $d.Peers}}
+    <ul class="kb-side-list">
+      {{range $d.Peers}}
+      <li><a href="/kb/{{.Slug}}" {{if eq .Slug $a.Slug}}class="is-current"{{end}}>{{.Title}}</a></li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="muted">No other published articles in this category.</p>
+    {{end}}
+    <p class="kb-prevnext">
+      {{if $d.Prev}}<a href="/kb/{{$d.Prev.Slug}}">← {{$d.Prev.Title}}</a>{{end}}
+      {{if $d.Next}}<a href="/kb/{{$d.Next.Slug}}">{{$d.Next.Title}} →</a>{{end}}
+    </p>
+    <p class="kb-side-more"><a href="/kb">All articles</a></p>
+  </aside>
+</div>
+{{template "footer" .}}

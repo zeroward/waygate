@@ -1,0 +1,31 @@
+{{template "header" .}}
+{{$s := .Data}}
+<section class="panel">
+  <p class="eyebrow">Who is in Northrend</p>
+  <h1>Online players</h1>
+  <p class="lede">{{$s.Online}} players · {{$s.OnlineBots}} bots · {{$s.OnlineGMs}} GMs · Alliance {{$s.Alliance}} · Horde {{$s.Horde}}. Bots are omitted from the list.</p>
+  {{if $s.Players}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Level</th><th>Race</th><th>Class</th><th>Zone</th><th>Faction</th></tr>
+      </thead>
+      <tbody>
+        {{range $s.Players}}
+        <tr>
+          <td class="name">{{.Name}}</td>
+          <td>{{.Level}}</td>
+          <td>{{.Race}}</td>
+          <td class="class-{{classSlug .ClassID}}">{{.Class}}</td>
+          <td>{{.Zone}}</td>
+          <td class="faction-{{.Faction}}">{{.Faction}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">Nobody human is online right now.</p>
+  {{end}}
+</section>
+{{template "footer" .}}

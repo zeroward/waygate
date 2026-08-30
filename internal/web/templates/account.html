@@ -1,0 +1,108 @@
+{{template "header" .}}
+{{$d := .Data}}
+{{if .User}}
+<div class="account">
+  <section class="panel">
+    <p class="eyebrow">The Helm of Domination</p>
+    <h1>{{.User.Username}}</h1>
+    <p class="lede">Signed in to the website. This is not your in-game session.</p>
+    <dl class="kv">
+      <dt>Username</dt><dd>{{.User.Username}}</dd>
+      <dt>Email</dt><dd>{{.User.Email}}</dd>
+    </dl>
+    {{if .Staff}}
+    <p><a class="btn" href="/staff">Admin panel</a></p>
+    {{end}}
+
+    <h2>Characters</h2>
+    <p class="hint">Unstuck sends a logged-out character to their hearth (inn bind).</p>
+    {{if $d.Characters}}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Level</th>
+            <th>Class</th>
+            <th>Gold</th>
+            <th>Played</th>
+            <th>Last logout</th>
+            <th>Location</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $d.Characters}}
+          <tr>
+            <td class="name">{{.Name}}{{if .Online}} <span class="char-online">Online</span>{{end}}</td>
+            <td>{{.Level}}</td>
+            <td class="class-{{classSlug .ClassID}}">{{.Class}} <span class="muted">{{.Race}}</span></td>
+            <td class="money">{{.Gold}}</td>
+            <td>{{.Played}}</td>
+            <td>{{.Logout}}</td>
+            <td>{{.Location}}</td>
+            <td class="char-unstuck">
+              {{if .Online}}
+              <span class="muted">Log out first</span>
+              {{else}}
+              <form method="post" action="/account/unstuck" data-unstuck>
+                <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+                <input type="hidden" name="guid" value="{{.GUID}}">
+                <button type="submit" class="btn btn-gold">Unstuck</button>
+              </form>
+              {{end}}
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="empty">No characters yet. Log into the realm with this account to create one.</p>
+    {{end}}
+  </section>
+
+  <section class="panel account-pass">
+    <h2 id="password">Change password</h2>
+    <p class="hint">Uses SOAP when the worldserver is up so AzerothCore writes a fresh SRP6 salt and verifier. SQL SRP6 is the fallback.</p>
+    <form method="post" action="/account/password" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Current password
+        <input type="password" name="current_password" required maxlength="16" autocomplete="current-password">
+      </label>
+      <label>New password
+        <input type="password" name="new_password" required minlength="8" maxlength="16" autocomplete="new-password">
+      </label>
+      <label>Confirm new password
+        <input type="password" name="new_password_confirm" required minlength="8" maxlength="16" autocomplete="new-password">
+      </label>
+      <button type="submit" class="btn btn-gold">Update password</button>
+    </form>
+    <form method="post" action="/account/logout" class="form-inline">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <button type="submit" class="btn">Log out</button>
+    </form>
+  </section>
+</div>
+{{else}}
+<section class="panel narrow">
+  <p class="eyebrow">Log in</p>
+  <h1>Account</h1>
+  <p class="lede">Website login uses the same SRP6 verifier as the authserver. Passwords are never stored in plaintext.</p>
+  <form method="post" action="/account/login" class="form" autocomplete="on">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    {{if and .Next (ne .Next "/account")}}<input type="hidden" name="next" value="{{.Next}}">{{end}}
+    <label>Username
+      <input name="username" required maxlength="16" autocomplete="username">
+    </label>
+    <label>Password
+      <input type="password" name="password" required maxlength="16" autocomplete="current-password">
+    </label>
+    <button type="submit" class="btn btn-gold">Log in</button>
+  </form>
+  <p class="muted">No account? <a href="/register">Register</a>
+    {{if .SMTP}} · <a href="/account/reset">Forgot password</a>{{end}}
+  </p>
+</section>
+{{end}}
+{{template "footer" .}}

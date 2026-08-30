@@ -1,0 +1,85 @@
+{{define "header"}}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{if .Title}}{{.Title}} — {{end}}{{.RealmName}}</title>
+  <meta name="description" content="{{.RealmName}} — {{.CoreName}} account registration and realm status.">
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/css/app.css?v=17">
+  {{if eq .CaptchaProv "turnstile"}}
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+  {{end}}
+  {{if eq .CaptchaProv "hcaptcha"}}
+  <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
+  {{end}}
+  {{if eq .Active "staff"}}
+  <script src="/static/js/staff.js?v=9" defer></script>
+  {{end}}
+  {{if eq .Active "kb"}}
+  <script src="/static/js/kb.js?v=2" defer></script>
+  {{end}}
+  {{if eq .Active "account"}}
+  <script src="/static/js/account.js?v=1" defer></script>
+  {{end}}
+</head>
+<body class="page-{{.Active}}">
+  <div class="frost" aria-hidden="true"></div>
+  {{if .Demo}}
+  <div class="demo-banner">Demo mode — no AzerothCore databases. Status and accounts are simulated.</div>
+  {{end}}
+  <header class="mast">
+    <div class="mast-inner">
+      <a class="brand" href="/">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-text">
+          <span class="brand-realm">{{.RealmName}}</span>
+          <span class="brand-core">WotLK 3.3.5a</span>
+        </span>
+      </a>
+
+      <input type="checkbox" id="nav-toggle" class="nav-toggle" hidden>
+      <label for="nav-toggle" class="nav-burger" aria-label="Menu"><span></span></label>
+
+      <nav class="nav-primary">
+        <a href="/" {{if eq .Active "home"}}class="is-active"{{end}}>Home</a>
+        <a href="/kb" {{if eq .Active "kb"}}class="is-active"{{end}}><span class="nav-wide">Knowledge Base</span><span class="nav-narrow">Docs</span></a>
+        <a href="/downloads" {{if eq .Active "downloads"}}class="is-active"{{end}}>Downloads</a>
+        <a href="/online" {{if eq .Active "online"}}class="is-active"{{end}}>Online</a>
+        <a href="/leaderboards" {{if eq .Active "leaderboards"}}class="is-active"{{end}}>Leaderboards</a>
+      </nav>
+
+      <div class="nav-util">
+        {{if .Staff}}<a href="/staff" class="nav-util-link{{if eq .Active "staff"}} is-active{{end}}">Admin panel</a>{{end}}
+        <a href="/contact" class="nav-util-link{{if eq .Active "contact"}} is-active{{end}}">Contact</a>
+        <div class="nav-account">
+        {{if .User}}
+        <details class="user-menu">
+          <summary>
+            <span class="user-avatar" aria-hidden="true">{{initial .User.Username}}</span>
+            <span class="user-name">{{.User.Username}}</span>
+            <span class="user-chevron" aria-hidden="true"></span>
+          </summary>
+          <div class="user-menu-panel">
+            <a href="/account">Account</a>
+            <a href="/account#password">Change password</a>
+            <form method="post" action="/account/logout">
+              <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+              <button type="submit">Logout</button>
+            </form>
+          </div>
+        </details>
+        {{else}}
+        <a href="/account" class="nav-signin">Sign in</a>
+        <a href="/register" class="nav-register">Register</a>
+        {{end}}
+        </div>
+      </div>
+    </div>
+  </header>
+  <main class="wrap">
+    {{if .Flash}}
+    <div class="flash flash-{{.Flash.Kind}}" role="status">{{.Flash.Text}}</div>
+    {{end}}
+{{end}}

@@ -1,0 +1,44 @@
+{{template "header" .}}
+{{$d := .Data}}
+<section class="panel kb-staff-table">
+  <div class="kb-index-head">
+    <div>
+      <p class="eyebrow">Admin</p>
+      <h1>Knowledge Base</h1>
+      <p class="lede">Create, edit, and publish articles. Players only see published pages.</p>
+    </div>
+    <p class="kb-index-actions">
+      <a class="btn btn-gold" href="/staff/kb/new">New article</a>
+      <a class="btn" href="/kb">Public index</a>
+    </p>
+  </div>
+  {{if $d.Articles}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Slug</th>
+          <th>Category</th>
+          <th>Published</th>
+          <th>Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $d.Articles}}
+        <tr>
+          <td class="name"><a href="/staff/kb/{{.ID}}">{{.Title}}</a></td>
+          <td><code>{{.Slug}}</code></td>
+          <td>{{.Category}}</td>
+          <td>{{if .Published}}Yes{{else}}Draft{{end}}</td>
+          <td>{{.UpdatedAt.Format "2006-01-02 15:04"}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">No articles yet.</p>
+  {{end}}
+</section>
+{{template "footer" .}}

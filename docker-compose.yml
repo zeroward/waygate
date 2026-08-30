@@ -1,0 +1,67 @@
+# Join the existing AzerothCore compose network.
+#
+# Official AC compose names the network `{project}_ac-network`, e.g.
+#   azerothcore-wotlk_ac-network
+# not the bare name `ac-network`. Set AC_NETWORK in `.env` (see .env.example):
+#
+#   docker network ls | grep ac-network
+#   docker-compose up -d --build
+#
+# Demo / offline UI (no AC databases):
+#   docker-compose -f docker-compose.demo.yml up --build
+
+services:
+  waygate:
+    build: .
+    image: ghcr.io/zeroward/waygate:local
+    container_name: waygate
+    restart: unless-stopped
+    ports:
+      - "${WEBREG_PORT:-3080}:3080"
+    env_file:
+      - .env
+    environment:
+      LISTEN_ADDR: ":3080"
+      MODULES_DIR: /azerothcore/modules
+      CLAMAV_ADDR: clamav:3310
+    user: "${WEBREG_UID:-1000}:${WEBREG_GID:-1000}"
+    volumes:
+      - ./content:/app/content:ro,z
+      - ./downloads:/app/downloads:z
+      - ./data:/app/data:z
+      - ${AC_MODULES_DIR:-/var/home/core/azerothcore/azerothcore-wotlk/modules}:/azerothcore/modules:ro,z
+    read_only: true
+    tmpfs:
+      - /tmp
+    depends_on:
+      - clamav
+    networks:
+      - ac-network
+
+  clamav:
+    image: clamav/clamav:1.4
+    container_name: ac-clamav
+    restart: unless-stopped
+    # Do not publish 3310. Only waygate on ac-network may talk to clamd.
+    environment:
+      CLAMAV_NO_CLAMD: "false"
+    volumes:
+      - clamav-db:/var/lib/clamav
+      - ./clamav/start.sh:/start-webreg.sh:ro,z
+    entrypoint: ["/bin/sh", "/start-webreg.sh"]
+    healthcheck:
+      test: ["CMD", "clamdscan", "--ping", "5"]
+      interval: 30s
+      timeout: 10s
+      retries: 30
+      start_period: 300s
+    networks:
+      - ac-network
+
+networks:
+  ac-network:
+    external: true
+    name: ${AC_NETWORK:-azerothcore-wotlk_ac-network}
+
+volumes:
+  clamav-db:

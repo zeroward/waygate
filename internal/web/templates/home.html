@@ -1,0 +1,52 @@
+{{template "header" .}}
+{{$s := .Data}}
+<div class="home">
+  <section class="home-hero">
+    <p class="home-kicker">
+      <span class="live{{if $s.RealmUp}} is-up{{end}}" aria-hidden="true"></span>
+      {{if $s.RealmUp}}Online{{else}}Offline{{end}}
+      <span class="dot">·</span>
+      WotLK 3.3.5a
+      <span class="dot">·</span>
+      Build 12340
+    </p>
+    <h1>{{.RealmName}}</h1>
+    <p class="lede">{{$s.Blurb}}</p>
+    {{if .User}}
+    <p class="home-cta-quiet"><a href="/downloads">Download the client</a> or <a href="/kb/how-to-connect">how to connect</a></p>
+    {{end}}
+  </section>
+
+  <section class="metrics" aria-label="Realm population">
+    <a class="metric" href="/online">
+      <span class="metric-label">Players</span>
+      <span class="metric-value">{{$s.Online}}</span>
+      <span class="metric-sub"><span class="faction-Alliance">{{$s.Alliance}} Alliance</span> · <span class="faction-Horde">{{$s.Horde}} Horde</span></span>
+    </a>
+    <div class="metric">
+      <span class="metric-label">Bots</span>
+      <span class="metric-value">{{$s.OnlineBots}}</span>
+      <span class="metric-sub">Playerbots in the world</span>
+    </div>
+    <div class="metric">
+      <span class="metric-label">GMs</span>
+      <span class="metric-value">{{$s.OnlineGMs}}</span>
+      <span class="metric-sub">Included in players</span>
+    </div>
+  </section>
+
+  {{if $s.Modules}}
+  <section class="home-mods">
+    <header class="home-mods-head">
+      <h2>Installed modules</h2>
+      <span class="mod-count">{{len $s.Modules}}</span>
+    </header>
+    <ul class="mod-list">
+      {{range $s.Modules}}
+      <li class="mod-chip"{{if .Blurb}} title="{{.Blurb}}"{{end}}>{{.Title}}{{if .Version}} <span class="mod-ver">{{.Version}}</span>{{end}}</li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+</div>
+{{template "footer" .}}

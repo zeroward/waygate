@@ -1,0 +1,41 @@
+{{template "header" .}}
+{{$d := .Data}}
+{{$s := $d.Snap}}
+<section class="panel">
+  <p class="eyebrow">Glory of the frozen wastes</p>
+  <h1>Leaderboards</h1>
+  <p class="lede">Real player characters only. Random playerbots are excluded.</p>
+  <nav class="tabs">
+    <a href="/leaderboards?tab=playtime" {{if eq $d.Tab "playtime"}}class="is-active"{{end}}>Playtime</a>
+    <a href="/leaderboards?tab=kills" {{if eq $d.Tab "kills"}}class="is-active"{{end}}>Honorable kills</a>
+    <a href="/leaderboards?tab=honor" {{if eq $d.Tab "honor"}}class="is-active"{{end}}>Honor</a>
+    <a href="/leaderboards?tab=arena" {{if eq $d.Tab "arena"}}class="is-active"{{end}}>Arena points</a>
+  </nav>
+  {{$rows := $s.Playtime}}
+  {{if eq $d.Tab "kills"}}{{$rows = $s.Kills}}{{end}}
+  {{if eq $d.Tab "honor"}}{{$rows = $s.Honor}}{{end}}
+  {{if eq $d.Tab "arena"}}{{$rows = $s.Arena}}{{end}}
+  {{if $rows}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>#</th><th>Name</th><th>Level</th><th>Class</th><th>Value</th></tr>
+      </thead>
+      <tbody>
+        {{range $rows}}
+        <tr>
+          <td class="rank">{{.Rank}}</td>
+          <td class="name">{{.Name}}</td>
+          <td>{{.Level}}</td>
+          <td>{{.Class}}</td>
+          <td>{{.Value}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">No characters to rank yet.</p>
+  {{end}}
+</section>
+{{template "footer" .}}

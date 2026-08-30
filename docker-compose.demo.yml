@@ -1,0 +1,25 @@
+services:
+  waygate:
+    build: .
+    image: ghcr.io/zeroward/waygate:local
+    container_name: waygate-demo
+    ports:
+      - "${WEBREG_PORT:-3080}:3080"
+    environment:
+      LISTEN_ADDR: ":3080"
+      DEMO_MODE: "true"
+      REALM_NAME: Icecrown
+      PUBLIC_HOST: 127.0.0.1
+      PUBLIC_AUTH_PORT: 3724
+      PUBLIC_WORLD_PORT: 28085
+      CAPTCHA_PROVIDER: none
+      SOAP_ENABLED: "false"
+      ACCOUNT_CREATE_MODE: sql
+    user: "${WEBREG_UID:-1000}:${WEBREG_GID:-1000}"
+    volumes:
+      - ./content:/app/content:ro,z
+      - ./downloads:/app/downloads:z
+      - ./data:/app/data:z
+    read_only: true
+    tmpfs:
+      - /tmp

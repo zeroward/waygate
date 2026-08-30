@@ -1,0 +1,279 @@
+{{template "header" .}}
+{{$d := .Data}}
+{{$sel := $d.Selected}}
+<div class="staff" data-staff data-actor-gm="{{$d.ActorGM}}" data-actor-user="{{$d.ActorUser}}">
+  <section class="home-hero">
+    <p class="home-kicker">{{rankName .User.GMLevel}}</p>
+    <h1>Admin panel</h1>
+    <p class="lede">Create accounts, reset passwords, publish Downloads, and set GM or Admin. Super GM cannot be granted here.</p>
+    {{if .CanEditKB}}<p class="home-cta-quiet"><a href="/staff/kb">Knowledge Base articles</a></p>{{end}}
+  </section>
+
+  <section class="panel staff-create">
+    <h2>Create account</h2>
+    <form method="post" action="/staff/create" class="staff-create-form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Username
+        <input name="username" required minlength="3" maxlength="16" pattern="[A-Za-z0-9]{3,16}" autocomplete="off">
+      </label>
+      <label>Email (optional)
+        <input type="email" name="email" maxlength="255" autocomplete="off">
+      </label>
+      <label>Password
+        <input type="password" name="password" required minlength="8" maxlength="16" autocomplete="new-password">
+      </label>
+      <label>Confirm
+        <input type="password" name="password_confirm" required minlength="8" maxlength="16" autocomplete="new-password">
+      </label>
+      <div class="staff-create-go">
+        <button type="submit" class="btn btn-gold">Create</button>
+      </div>
+    </form>
+  </section>
+
+  <div class="staff-work{{if $sel}} has-selection{{end}}">
+    <section class="panel staff-table-card">
+      <header class="home-mods-head">
+        <h2>Accounts</h2>
+        <span class="mod-count">{{$d.Total}}</span>
+      </header>
+      <form method="get" action="/staff" class="staff-search">
+        <input name="q" value="{{$d.Query}}" placeholder="Search username or email" maxlength="32">
+        <label class="staff-check"><input type="checkbox" name="bots" value="1" {{if $d.IncludeBots}}checked{{end}}> Show bots</label>
+        <input type="hidden" name="select" value="{{if $sel}}{{$sel.Username}}{{end}}" data-staff-search-select>
+        <button type="submit" class="btn">Filter</button>
+      </form>
+      {{if $d.Accounts}}
+      <div class="table-wrap">
+        <table data-staff-table>
+          <thead>
+            <tr>
+              <th>Username</th>
+              <th>Email</th>
+              <th>Joined</th>
+              <th>Last login</th>
+              <th>GM</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {{range $d.Accounts}}
+            <tr class="staff-row{{if and $sel (eq .Username $sel.Username)}} is-selected{{end}}"
+                tabindex="0"
+                data-user="{{.Username}}"
+                data-email="{{.Email}}"
+                data-gm="{{.GMLevel}}"
+                data-online="{{if .Online}}1{{else}}0{{end}}"
+                aria-selected="{{if and $sel (eq .Username $sel.Username)}}true{{else}}false{{end}}">
+              <td class="name">{{.Username}}</td>
+              <td>{{if .Email}}{{.Email}}{{else}}—{{end}}</td>
+              <td>{{.JoinDate}}</td>
+              <td>{{.LastLogin}}</td>
+              <td>{{if .GMLevel}}{{rankName .GMLevel}}{{else}}—{{end}}</td>
+              <td>{{if .Online}}online{{else}}offline{{end}}</td>
+            </tr>
+            {{end}}
+          </tbody>
+        </table>
+      </div>
+      {{if or $d.HasPrev $d.HasNext}}
+      <p class="staff-pager">
+        {{if $d.HasPrev}}<a href="/staff?q={{$d.Query | urlquery}}{{if $d.IncludeBots}}&amp;bots=1{{end}}&amp;p={{$d.PrevPage}}{{if $sel}}&amp;select={{$sel.Username | urlquery}}{{end}}">Previous</a>{{end}}
+        Page {{$d.Page}}{{if $d.Pages}} / {{$d.Pages}}{{end}}
+        {{if $d.HasNext}}<a href="/staff?q={{$d.Query | urlquery}}{{if $d.IncludeBots}}&amp;bots=1{{end}}&amp;p={{$d.NextPage}}{{if $sel}}&amp;select={{$sel.Username | urlquery}}{{end}}">Next</a>{{end}}
+      </p>
+      {{end}}
+      {{else}}
+      <p class="empty">No accounts match.</p>
+      {{end}}
+    </section>
+
+    <div class="staff-sheet-backdrop" data-staff-backdrop{{if not $sel}} hidden{{end}}></div>
+    <aside class="staff-drawer panel{{if $sel}} is-open{{end}}" data-staff-drawer aria-label="Account actions">
+      <div class="staff-empty" data-staff-empty{{if $sel}} hidden{{end}}>
+        <p>Select an account to manage it.</p>
+      </div>
+      <div class="staff-actions" data-staff-actions{{if not $sel}} hidden{{end}}>
+        <header class="staff-drawer-head">
+          <h2 data-staff-name>{{if $sel}}{{$sel.Username}}{{end}}</h2>
+          <div class="staff-drawer-meta">
+            <span class="badge{{if and $sel $sel.GMLevel}} badge-gold{{end}}" data-staff-gm-badge>{{if $sel}}{{rankName $sel.GMLevel}}{{end}}</span>
+            <span class="staff-status{{if and $sel $sel.Online}} is-online{{else}} is-offline{{end}}" data-staff-status>{{if $sel}}{{if $sel.Online}}online{{else}}offline{{end}}{{end}}</span>
+          </div>
+        </header>
+
+        {{if and .Flash $sel}}
+        <p class="staff-panel-flash flash-{{.Flash.Kind}} is-flash" data-staff-flash role="status" aria-live="polite">{{.Flash.Text}}</p>
+        {{else}}
+        <p class="staff-panel-flash" data-staff-flash hidden role="status" aria-live="polite"></p>
+        {{end}}
+
+        <p class="staff-blocked" data-staff-blocked{{if or (not $sel) $d.CanModify}} hidden{{end}}>{{if and $sel (not $d.CanModify)}}Cannot modify {{rankName $sel.GMLevel}}{{end}}</p>
+
+        <form method="post" action="/staff/reset" class="staff-reset" data-staff-reset{{if not $d.CanModify}} aria-disabled="true"{{end}}>
+          <h3>Reset password</h3>
+          <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+          <input type="hidden" name="username" value="{{if $sel}}{{$sel.Username}}{{end}}" data-staff-user-field autocomplete="off">
+          {{if $d.Query}}<input type="hidden" name="q" value="{{$d.Query}}">{{end}}
+          {{if $d.IncludeBots}}<input type="hidden" name="bots" value="1">{{end}}
+          {{if gt $d.Page 1}}<input type="hidden" name="p" value="{{$d.Page}}">{{end}}
+          <label>New password
+            <input type="password" name="new_password" required minlength="8" maxlength="16" autocomplete="new-password" {{if not $d.CanModify}}disabled{{end}}>
+          </label>
+          <label>Confirm
+            <input type="password" name="new_password_confirm" required minlength="8" maxlength="16" autocomplete="new-password" {{if not $d.CanModify}}disabled{{end}}>
+          </label>
+          <button type="submit" class="btn btn-gold" data-staff-reset-go {{if not $d.CanModify}}disabled{{end}}>Set password</button>
+          <div class="staff-confirm" data-staff-confirm hidden>
+            <p data-staff-confirm-text>Set a new password for {{if $sel}}{{$sel.Username}}{{else}}this account{{end}}?</p>
+            <div class="staff-confirm-actions">
+              <button type="button" class="btn btn-gold" data-staff-confirm-yes>Confirm</button>
+              <button type="button" class="btn btn-ghost" data-staff-confirm-no>Cancel</button>
+            </div>
+          </div>
+        </form>
+
+        <form method="post" action="/staff/rank" class="staff-rank" data-staff-rank{{if not $d.CanRank}} aria-disabled="true"{{end}}>
+          <h3>Rank</h3>
+          <p class="hint">GM or Admin only. Super GM cannot be granted. You can only assign a rank below your own.</p>
+          <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+          <input type="hidden" name="username" value="{{if $sel}}{{$sel.Username}}{{end}}" data-staff-user-field autocomplete="off">
+          {{if $d.Query}}<input type="hidden" name="q" value="{{$d.Query}}">{{end}}
+          {{if $d.IncludeBots}}<input type="hidden" name="bots" value="1">{{end}}
+          {{if gt $d.Page 1}}<input type="hidden" name="p" value="{{$d.Page}}">{{end}}
+          <label>New rank
+            <select name="rank" data-staff-rank-select {{if not $d.CanRank}}disabled{{end}}>
+              <option value="0" {{if eq (printf "%d" $d.SelRank) "0"}}selected{{end}}>Player</option>
+              <option value="2" {{if eq (printf "%d" $d.SelRank) "2"}}selected{{end}} {{if ge $d.ActorGM 3}}{{else}}disabled{{end}}>GM</option>
+              <option value="3" {{if eq (printf "%d" $d.SelRank) "3"}}selected{{end}} {{if ge $d.ActorGM 4}}{{else}}disabled{{end}}>Admin</option>
+            </select>
+          </label>
+          <button type="submit" class="btn btn-gold" data-staff-rank-go {{if not $d.CanRank}}disabled{{end}}>Set rank</button>
+          <div class="staff-confirm" data-staff-rank-confirm hidden>
+            <p data-staff-rank-confirm-text>Change this account's rank?</p>
+            <div class="staff-confirm-actions">
+              <button type="button" class="btn btn-gold" data-staff-rank-yes>Confirm</button>
+              <button type="button" class="btn btn-ghost" data-staff-rank-no>Cancel</button>
+            </div>
+          </div>
+        </form>
+
+        <div class="staff-drawer-tools">
+          <button type="button" class="btn" data-staff-copy>Copy username</button>
+          <button type="button" class="btn btn-ghost" data-staff-clear>Clear selection</button>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <section class="panel staff-dl" id="downloads">
+    <header class="home-mods-head">
+      <h2>Downloads</h2>
+      <span class="mod-count">{{len $d.Downloads}}</span>
+    </header>
+    <p class="staff-dl-lede">Published on the Downloads tab for logged-in players. Virus scanning is temporarily off.{{if $d.DownloadsMax}} Max {{$d.DownloadsMax}}.{{end}} Types: .zip, .7z, .rar, .mpq, .patch, .exe.</p>
+    {{if not $d.DownloadsWritable}}
+    <p class="flash flash-error">The downloads folder is not writable. Mount it read-write and let the site process user write it.</p>
+    {{end}}
+    <form method="post" action="/staff/downloads" enctype="multipart/form-data" class="staff-dl-form" data-dl-form data-dl-scan-max="{{$d.DownloadsScanMax}}" {{if not $d.DownloadsWritable}}aria-disabled="true"{{end}}>
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Category
+        <select name="category" data-dl-category {{if not $d.DownloadsWritable}}disabled{{end}}>
+          <option value="client">Client</option>
+          <option value="mods">Addon</option>
+          <option value="patches" selected>Patch</option>
+        </select>
+      </label>
+      <label class="staff-dl-file">File
+        <input type="file" name="file" required accept=".zip,.7z,.rar,.mpq,.patch,.exe" {{if not $d.DownloadsWritable}}disabled{{end}}>
+      </label>
+      <div class="staff-dl-extra" data-dl-for="client" hidden>
+        <label>Client name
+          <input name="title" maxlength="120" autocomplete="off" data-req="1" {{if not $d.DownloadsWritable}}disabled{{end}}>
+        </label>
+        <label>Client version
+          <input name="version" maxlength="40" placeholder="3.3.5a (12340)" autocomplete="off" data-req="1" {{if not $d.DownloadsWritable}}disabled{{end}}>
+        </label>
+      </div>
+      <div class="staff-dl-extra" data-dl-for="mods" hidden>
+        <label>Name
+          <input name="title" maxlength="120" autocomplete="off" {{if not $d.DownloadsWritable}}disabled{{end}}>
+        </label>
+        <label>Source link
+          <input type="url" name="source_url" maxlength="500" placeholder="https://" autocomplete="off" {{if not $d.DownloadsWritable}}disabled{{end}}>
+        </label>
+        <label>Addon ID
+          <input name="addon_id" maxlength="64" pattern="[A-Za-z0-9][A-Za-z0-9-]{0,63}" autocomplete="off" {{if not $d.DownloadsWritable}}disabled{{end}}>
+        </label>
+        <label>Addon version
+          <input name="addon_version" maxlength="40" autocomplete="off" {{if not $d.DownloadsWritable}}disabled{{end}}>
+        </label>
+      </div>
+      <div class="staff-dl-extra staff-dl-desc" data-dl-for="mods patches" hidden>
+        <label>Description
+          <textarea name="description" rows="2" maxlength="2000" {{if not $d.DownloadsWritable}}disabled{{end}}></textarea>
+        </label>
+      </div>
+      <div class="staff-dl-extra" data-dl-for="patches" hidden>
+        <label class="staff-check">
+          <input type="checkbox" name="mandatory" value="1" {{if not $d.DownloadsWritable}}disabled{{end}}> Mandatory to play
+        </label>
+      </div>
+      <div class="staff-dl-go">
+        <button type="submit" class="btn btn-gold" {{if not $d.DownloadsWritable}}disabled{{end}}>Upload</button>
+      </div>
+      <div class="staff-dl-progress" data-dl-progress hidden>
+        <p data-dl-progress-label>Uploading…</p>
+        <div class="staff-dl-bar" data-dl-progress-bar role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+          <span class="staff-dl-bar-fill" data-dl-progress-fill></span>
+        </div>
+      </div>
+    </form>
+    {{if $d.Downloads}}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Title</th>
+            <th>Category</th>
+            <th>File</th>
+            <th>Size</th>
+            <th>Scan</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $d.Downloads}}
+          <tr>
+            <td class="name">{{.Title}}{{if .Featured}} <span class="badge badge-gold">Featured</span>{{end}}</td>
+            <td>{{.Label}}</td>
+            <td>{{.FileName}}</td>
+            <td>{{if .Ready}}{{.SizeHuman}}{{else}}—{{end}}</td>
+            <td>{{if .ClamAVLabel}}{{.ClamAVLabel}}{{else}}—{{end}}</td>
+            <td>{{if .Ready}}ready{{else}}missing{{end}}</td>
+            <td>
+              <form method="post" action="/staff/downloads/delete" class="staff-dl-del" data-confirm-msg="Remove {{.Title}}?">
+                <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+                <input type="hidden" name="id" value="{{.ID}}">
+                <button type="submit" class="btn" {{if not $d.DownloadsWritable}}disabled{{end}}>Remove</button>
+                <div class="staff-confirm" data-inline-confirm hidden>
+                  <p>Remove {{.Title}}?</p>
+                  <div class="staff-confirm-actions">
+                    <button type="button" class="btn btn-gold" data-inline-yes>Confirm</button>
+                    <button type="button" class="btn btn-ghost" data-inline-no>Cancel</button>
+                  </div>
+                </div>
+              </form>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="empty">No files yet. Upload one above.</p>
+    {{end}}
+  </section>
+</div>
+{{template "footer" .}}

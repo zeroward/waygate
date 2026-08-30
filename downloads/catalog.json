@@ -1,0 +1,68 @@
+{
+  "intro": "A clean Wrath of the Lich King 3.3.5a client (build 12340), plus patches and addons published by the realm's admins.",
+  "items": [
+    {
+      "id": "1144",
+      "title": "Bagnon",
+      "category": "mods",
+      "file": "mods/ww-wotlk-bagnon.zip",
+      "version": "2.13.3",
+      "description": "Bagnon is a bag replacement addon designed to help the player find items as quickly and as easily as possible.",
+      "sha256": "4e183f6f11528733d860b3d974fbaf78b52911dd995f7e06cf64f935b26f9210",
+      "source_url": "https://warperia.com/addon-wotlk/bagnon/",
+      "addon_id": "1144",
+      "uploaded_at": "2026-08-30 06:08 UTC",
+      "clamav": "not scanned"
+    },
+    {
+      "id": "1172",
+      "title": "GatherMate2",
+      "category": "mods",
+      "file": "mods/ww-wotlk-gathermate-2.zip",
+      "version": "1.25",
+      "description": "Collects Herbs, Mines and Fishing locations and adds them to the world map and minimap. You will be able to track the nodes whenever you want, without having to search.",
+      "sha256": "7bcc1e1ce45c7912dcd6c8b5a5518a2931f242dd616615fda46f72e0906ed39c",
+      "source_url": "https://warperia.com/addon-wotlk/gathermate2/",
+      "addon_id": "1172",
+      "uploaded_at": "2026-08-30 06:11 UTC",
+      "clamav": "not scanned"
+    },
+    {
+      "id": "1141",
+      "title": "AtlasLoot Enhanced",
+      "category": "mods",
+      "file": "mods/ww-wotlk-atlaslootenchanced.zip",
+      "version": "5.11.04",
+      "description": "AtlasLoot Enhanced is an UI mod allowing for loot tables of bosses to be browsed whenever needed within the game.   Slash Commands /al or /atlasloot by itself brings up the loot browser. /atlasloot options brings up the options menu. /atlasloot reset resets the last viewed loot table (fixes disconnects when opening AtlasLoot) and moves all draggable frames back to the middle of the screen. /atlasloot mmb toggles the minimap button on / off. /atlasloot togglebg toggles background pictures on / off.",
+      "sha256": "cc68f60705f8188e49ad95af868442d51b496282fc8944af755bf54a7072b79a",
+      "source_url": "https://warperia.com/addon-wotlk/atlasloot-enhanced/",
+      "addon_id": "1141",
+      "uploaded_at": "2026-08-30 06:12 UTC",
+      "clamav": "not scanned"
+    },
+    {
+      "id": "3303",
+      "title": "Questie",
+      "category": "mods",
+      "file": "mods/Questie-335.zip",
+      "version": "9.8.4-335",
+      "description": "A quest helper for World of Warcraft Wrath of the Lich King",
+      "sha256": "1ac9b4ad7979971861788169c942c238cd89a9159545680d78956eca1449eb76",
+      "source_url": "https://warperia.com/addon-wotlk/questie/",
+      "addon_id": "3303",
+      "uploaded_at": "2026-08-30 06:13 UTC",
+      "clamav": "not scanned"
+    },
+    {
+      "id": "patches-mandatory-patches",
+      "title": "mandatory patches",
+      "category": "patches",
+      "file": "patches/mandatory_patches.7z",
+      "description": "- Patch-H.MPQ - Characters, WOD models NPCs and Goblin textures\r\n- Patch-F.MPQ \u0026 Patch-G.MPQ - Mount and creatures\r\n- Patch-T.MPQ - Environment and city textures\r\n- Patch-S.MPQ - Better sunlight effect\r\n- Patch-O.mpq - Fly anywhere",
+      "sha256": "097da0191d8f91305f142186548bdc04cd0707a88e79722db5e95bfd91c0b7fb",
+      "uploaded_at": "2026-08-30 07:08 UTC",
+      "clamav": "not scanned",
+      "mandatory": true
+    }
+  ]
+}

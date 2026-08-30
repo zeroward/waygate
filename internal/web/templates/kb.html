@@ -1,0 +1,79 @@
+{{template "header" .}}
+{{$d := .Data}}
+<section class="panel kb-index">
+  <div class="kb-index-head">
+    <div>
+      <p class="eyebrow">Guides</p>
+      <h1>Knowledge Base</h1>
+      <p class="lede">How to play on {{.RealmName}} — connecting, downloads, and realm notes.</p>
+    </div>
+    {{if $d.CanEdit}}
+    <p class="kb-index-actions">
+      <a class="btn btn-gold" href="/staff/kb/new">New article</a>
+      <a class="btn" href="/staff/kb">All articles</a>
+    </p>
+    {{end}}
+  </div>
+  <form method="get" action="/kb" class="dl-search" role="search">
+    <input name="q" value="{{$d.Query}}" placeholder="Search articles…" maxlength="64" autocomplete="off">
+    <button type="submit" class="btn">Search</button>
+  </form>
+  {{if $d.Groups}}
+  {{range $d.Groups}}
+  <section class="kb-cat">
+    <h2>{{.Name}}</h2>
+    <ul class="kb-list">
+      {{range .Articles}}
+      <li>
+        <a href="/kb/{{.Slug}}">{{.Title}}</a>
+        {{if .Summary}}<span class="kb-sum">{{.Summary}}</span>{{end}}
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+  {{else}}
+  {{if $d.Query}}
+  <p class="empty">No articles match “{{$d.Query}}”.</p>
+  {{else}}
+  <p class="empty">No published articles yet.</p>
+  {{end}}
+  {{end}}
+</section>
+{{if $d.CanEdit}}
+<section class="panel kb-staff-table">
+  <header class="home-mods-head">
+    <h2>All articles</h2>
+  </header>
+  <p class="muted">Drafts are hidden from players until you publish them.</p>
+  {{if $d.Staff}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Title</th>
+          <th>Slug</th>
+          <th>Category</th>
+          <th>Published</th>
+          <th>Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $d.Staff}}
+        <tr>
+          <td class="name"><a href="/staff/kb/{{.ID}}">{{.Title}}</a></td>
+          <td><code>{{.Slug}}</code></td>
+          <td>{{.Category}}</td>
+          <td>{{if .Published}}Yes{{else}}Draft{{end}}</td>
+          <td>{{.UpdatedAt.Format "2006-01-02 15:04"}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">No articles yet.</p>
+  {{end}}
+</section>
+{{end}}
+{{template "footer" .}}
