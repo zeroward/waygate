@@ -81,6 +81,8 @@ type Config struct {
 	RateTickets  int
 
 	WowCredentialsMax int
+	WebAuthnRPID      string
+	WebAuthnOrigins   []string
 
 	HowToConnectFile string
 	KBPath           string
@@ -158,6 +160,7 @@ func Load() (Config, error) {
 		RateUnstuck:        envInt("RATE_LIMIT_UNSTUCK", 5),
 		RateTickets:        envInt("RATE_LIMIT_TICKETS", 5),
 		WowCredentialsMax:  envInt("WOW_CREDENTIALS_MAX", 5),
+		WebAuthnRPID:       strings.TrimSpace(env("WEBAUTHN_RP_ID", "")),
 		HowToConnectFile:   env("HOW_TO_CONNECT_FILE", "content/how-to-connect.md"),
 		KBPath:             env("KB_PATH", "data/kb.sqlite"),
 		DownloadsDir:       env("DOWNLOADS_DIR", "downloads"),
@@ -170,6 +173,14 @@ func Load() (Config, error) {
 	}
 
 	c.BotPrefixes = parsePrefixes(env("BOT_USERNAME_PREFIXES", "rndbot"))
+	if raw := env("WEBAUTHN_ORIGINS", ""); raw != "" {
+		for _, p := range strings.Split(raw, ",") {
+			p = strings.TrimSpace(strings.TrimRight(p, "/"))
+			if p != "" {
+				c.WebAuthnOrigins = append(c.WebAuthnOrigins, p)
+			}
+		}
+	}
 
 	if err := c.validate(); err != nil {
 		return Config{}, err

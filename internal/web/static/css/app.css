@@ -1041,6 +1041,20 @@ tr:hover td { background: rgba(255, 255, 255, 0.02); }
 }
 .totp-qr { display: block; image-rendering: pixelated; }
 
+.passkey-list { list-style: none; margin: 0 0 1rem; padding: 0; }
+.passkey-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.passkey-row form { margin: 0; }
+.passkey-add { margin-top: 0.75rem; }
+.passkey-or { text-align: center; margin: 0.85rem 0; }
+
 .account { display: flex; flex-direction: column; gap: 1rem; }
 .account-pass { max-width: 34rem; }
 .account h2 { margin-top: 1.35rem; }

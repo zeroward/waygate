@@ -148,9 +148,39 @@
     </form>
     {{end}}
   </section>
+
+  {{if $d.PasskeysOK}}
+  <section class="panel account-pass" id="passkeys" data-csrf="{{.CSRF}}">
+    <h2>Passkeys</h2>
+    <p class="hint">Website login only — Face ID, Windows Hello, a security key, or a password manager. This cannot log you into Wow.exe.</p>
+    {{if $d.Passkeys}}
+    <ul class="passkey-list">
+      {{range $d.Passkeys}}
+      <li class="passkey-row">
+        <span><strong>{{.Name}}</strong>{{if .Created}} <span class="muted">{{.Created}}</span>{{end}}</span>
+        <form method="post" action="/account/passkey/delete">
+          <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+          <input type="hidden" name="id" value="{{.ID}}">
+          <button type="submit" class="btn">Remove</button>
+        </form>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="empty">No passkeys yet.</p>
+    {{end}}
+    <p class="hint" data-passkey-status hidden></p>
+    <div class="form passkey-add">
+      <label>Name
+        <input data-passkey-name maxlength="40" placeholder="Phone, security key, …" autocomplete="off">
+      </label>
+      <button type="button" class="btn btn-gold" data-passkey-register>Add passkey</button>
+    </div>
+  </section>
+  {{end}}
 </div>
 {{else if $d.TOTPPending}}
-<section class="panel narrow">
+<section class="panel narrow" data-csrf="{{.CSRF}}" data-passkey-next="{{.Next}}">
   <p class="eyebrow">Second factor</p>
   <h1>Authenticator</h1>
   <p class="lede">Enter the 6-digit code from your app, or a recovery code.</p>
@@ -161,9 +191,14 @@
     </label>
     <button type="submit" class="btn btn-gold">Continue</button>
   </form>
+  {{if $d.PasskeysOK}}
+  <p class="passkey-or muted">or</p>
+  <p class="hint" data-passkey-status hidden></p>
+  <button type="button" class="btn" data-passkey-login>Use a passkey instead</button>
+  {{end}}
 </section>
 {{else}}
-<section class="panel narrow">
+<section class="panel narrow" data-csrf="{{.CSRF}}" data-passkey-next="{{.Next}}">
   <p class="eyebrow">Log in</p>
   <h1>Account</h1>
   <p class="lede">Website login is separate from Wow.exe. You can add extra client usernames after you sign in.</p>
@@ -171,13 +206,18 @@
     <input type="hidden" name="csrf_token" value="{{.CSRF}}">
     {{if and .Next (ne .Next "/account")}}<input type="hidden" name="next" value="{{.Next}}">{{end}}
     <label>Username
-      <input name="username" required maxlength="16" autocomplete="username">
+      <input name="username" required maxlength="16" autocomplete="username webauthn">
     </label>
     <label>Password
       <input type="password" name="password" required maxlength="16" autocomplete="current-password">
     </label>
     <button type="submit" class="btn btn-gold">Log in</button>
   </form>
+  {{if $d.PasskeysOK}}
+  <p class="passkey-or muted">or</p>
+  <p class="hint" data-passkey-status hidden></p>
+  <button type="button" class="btn" data-passkey-login>Sign in with a passkey</button>
+  {{end}}
   <p class="muted">No account? <a href="/register">Register</a>
     {{if .SMTP}} · <a href="/account/reset">Forgot password</a>{{end}}
   </p>

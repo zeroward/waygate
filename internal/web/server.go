@@ -24,6 +24,8 @@ import (
 	"github.com/zeroward/waygate/internal/session"
 	"github.com/zeroward/waygate/internal/status"
 	"github.com/zeroward/waygate/internal/wow"
+
+	"github.com/go-webauthn/webauthn/webauthn"
 )
 
 type Server struct {
@@ -46,6 +48,7 @@ type Server struct {
 	id        *identity.Service
 	downloads *downloads.Store
 	armory    *armory.Service
+	wa        *webauthn.WebAuthn
 }
 
 func New(
@@ -101,6 +104,12 @@ func New(
 			log.Error("identity migrate", "err", err)
 		}
 	}
+	wa, waErr := newWebAuthn(cfg)
+	if waErr != nil {
+		log.Error("webauthn disabled", "err", waErr)
+	} else if wa != nil {
+		log.Info("webauthn", "rp", wa.Config.RPID, "origins", wa.Config.RPOrigins)
+	}
 	s := &Server{
 		cfg:       cfg,
 		log:       log,
@@ -121,6 +130,7 @@ func New(
 		id:        idSvc,
 		downloads: downloads.New(cfg.DownloadsDir, cfg.DownloadsCatalog),
 		armory:    armory.New(cfg, st.Database(), log),
+		wa:        wa,
 	}
 	if err := s.seedHowToConnect(); err != nil {
 		_ = kbStore.Close()
@@ -157,6 +167,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /account/totp/start", s.totpStartPOST)
 	mux.HandleFunc("POST /account/totp/confirm", s.totpConfirmPOST)
 	mux.HandleFunc("POST /account/totp/disable", s.totpDisablePOST)
+	mux.HandleFunc("POST /account/passkey/register/begin", s.passkeyRegisterBegin)
+	mux.HandleFunc("POST /account/passkey/register/finish", s.passkeyRegisterFinish)
+	mux.HandleFunc("POST /account/passkey/login/begin", s.passkeyLoginBegin)
+	mux.HandleFunc("POST /account/passkey/login/finish", s.passkeyLoginFinish)
+	mux.HandleFunc("POST /account/passkey/delete", s.passkeyDeletePOST)
 	mux.HandleFunc("POST /account/logout", s.logoutPOST)
 	mux.HandleFunc("POST /account/password", s.passwordPOST)
 	mux.HandleFunc("POST /account/unstuck", s.unstuckPOST)

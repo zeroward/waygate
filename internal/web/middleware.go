@@ -18,7 +18,7 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("X-XSS-Protection", "0")
-		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=(), publickey-credentials-get=(self), publickey-credentials-create=(self)")
 		w.Header().Set("Content-Security-Policy", s.csp())
 		if s.cfg.SessionSecure {
 			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")

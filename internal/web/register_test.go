@@ -48,6 +48,7 @@ func testWeb(t *testing.T) (*httptest.Server, *Server) {
 		HowToConnectFile:  "",
 		AccountMode:       "sql",
 		DownloadsDir:      t.TempDir(),
+		SiteURL:           "http://localhost",
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	acc := account.New(cfg, nil, nil)

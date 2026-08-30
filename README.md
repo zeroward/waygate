@@ -158,6 +158,8 @@ See `.env.example` for the full list. Important variables:
 | `WEBREG_PORT` | Host port published by compose (default 3080) |
 | `DEMO_MODE` | Skip MySQL/SOAP; fake status |
 | `LISTEN_ADDR` | Bind address (`:3080`) |
+| `SITE_URL` | Public origin for mail links and passkeys (RP ID is the hostname) |
+| `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGINS` | Optional passkey overrides; default from `SITE_URL` |
 | `REALM_NAME` / `SITE_BLURB` / `CORE_NAME` | Home page |
 | `PUBLIC_HOST` | `realmlist.wtf` hostname |
 | `PUBLIC_AUTH_PORT` | Usually 3724 |
@@ -191,7 +193,7 @@ Never commit `.env`. SOAP passwords and MySQL passwords stay server-side.
 - Rate limits on register, login, contact, reset.
 - Captcha on register when configured. **Production should not use `CAPTCHA_PROVIDER=none`.**
 - **TODO:** vote-for-points (not in v1).
-- **TODO:** TOTP 2FA for website login (AzerothCore `totp_secret` is a different system; do not fake it).
+- Website login supports TOTP and passkeys. Neither applies to the 3.3.5a client.
 - Email uniqueness is enforced with a `SELECT` then `INSERT`. AzerothCore has no unique index on `account.email`. Do not treat that as a security boundary.
 
 Versioning is SemVer. This tree is **0.x alpha** (`v0.1.0-alpha.1`) until it has had in-depth security testing. Pre-releases are GitHub prereleases; `latest` on GHCR tracks `main`, not alphas.

@@ -12,12 +12,13 @@ import (
 )
 
 var (
-	ErrNotFound    = errors.New("user not found")
-	ErrTaken       = errors.New("username is already taken")
-	ErrEmailTaken  = errors.New("email is already registered")
-	ErrBadPassword = errors.New("invalid username or password")
-	ErrLinkTaken   = errors.New("that client login is already linked")
-	ErrTooMany     = errors.New("too many WoW client logins")
+	ErrNotFound        = errors.New("user not found")
+	ErrTaken           = errors.New("username is already taken")
+	ErrEmailTaken      = errors.New("email is already registered")
+	ErrBadPassword     = errors.New("invalid username or password")
+	ErrLinkTaken       = errors.New("that client login is already linked")
+	ErrTooMany         = errors.New("too many WoW client logins")
+	ErrTooManyPasskeys = errors.New("too many passkeys")
 )
 
 type User struct {
@@ -79,6 +80,7 @@ CREATE TABLE IF NOT EXISTS webauthn_credentials (
   sign_count INTEGER NOT NULL DEFAULT 0,
   aaguid TEXT NOT NULL DEFAULT '',
   name TEXT NOT NULL DEFAULT '',
+  cred_json TEXT NOT NULL DEFAULT '',
   created_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS identity_meta (
@@ -86,6 +88,11 @@ CREATE TABLE IF NOT EXISTS identity_meta (
   v TEXT NOT NULL
 );
 `)
+	if err != nil {
+		return err
+	}
+	_, _ = db.Exec(`ALTER TABLE webauthn_credentials ADD COLUMN cred_json TEXT NOT NULL DEFAULT ''`)
+	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_webauthn_user ON webauthn_credentials(user_id)`)
 	return err
 }
 

@@ -677,8 +677,10 @@ func (s *Server) accountGET(w http.ResponseWriter, r *http.Request) {
 		links, _ = s.id.Links(r.Context(), sess.User.ID)
 	}
 	totpOn := false
+	var passkeys []identity.Passkey
 	if sess.User != nil {
 		totpOn = s.id.TOTPEnabled(r.Context(), sess.User.ID)
+		passkeys, _ = s.id.Store().ListPasskeys(r.Context(), sess.User.ID)
 	}
 	s.view(w, r, "account.html", "Account", "account", map[string]any{
 		"Characters":  chars,
@@ -690,6 +692,9 @@ func (s *Server) accountGET(w http.ResponseWriter, r *http.Request) {
 		"TOTPURL":     template.URL(sess.TOTPURL),
 		"TOTPQR":      template.URL(sess.TOTPQR),
 		"TOTPCodes":   sess.TOTPCodes,
+		"Passkeys":    passkeys,
+		"PasskeysOK":  s.wa != nil,
+		"PasskeyMax":  identity.MaxPasskeys,
 	})
 }
 

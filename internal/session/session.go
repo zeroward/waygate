@@ -33,18 +33,21 @@ type Flash struct {
 }
 
 type Session struct {
-	ID          string
-	User        *User
-	PendingUser *User
-	PendingNext string
-	TOTPSecret  string
-	TOTPURL     string
-	TOTPQR      string
-	TOTPCodes   []string
-	CSRF        string
-	Flash       *Flash
-	Created     time.Time
-	Expiry      time.Time
+	ID           string
+	User         *User
+	PendingUser  *User
+	PendingNext  string
+	TOTPSecret   string
+	TOTPURL      string
+	TOTPQR       string
+	TOTPCodes    []string
+	WebAuthnJSON []byte
+	WebAuthnName string
+	WebAuthnNext string
+	CSRF         string
+	Flash        *Flash
+	Created      time.Time
+	Expiry       time.Time
 }
 
 type Store struct {
