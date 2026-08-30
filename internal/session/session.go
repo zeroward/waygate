@@ -39,6 +39,7 @@ type Session struct {
 	PendingNext string
 	TOTPSecret  string
 	TOTPURL     string
+	TOTPQR      string
 	TOTPCodes   []string
 	CSRF        string
 	Flash       *Flash

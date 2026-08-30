@@ -128,8 +128,12 @@
       <button type="submit" class="btn">Disable authenticator</button>
     </form>
     {{else if $d.TOTPSecret}}
+    <p class="hint">Scan this QR with your authenticator app, then enter a 6-digit code to confirm.</p>
+    {{if $d.TOTPQR}}
+    <p class="totp-qr-wrap"><img src="{{$d.TOTPQR}}" alt="Authenticator QR code" width="220" height="220" class="totp-qr"></p>
+    {{end}}
     <p>Secret: <code>{{$d.TOTPSecret}}</code></p>
-    {{if $d.TOTPURL}}<p class="hint"><a href="{{$d.TOTPURL}}">Open in authenticator</a></p>{{end}}
+    {{if $d.TOTPURL}}<p class="hint"><a href="{{$d.TOTPURL}}">Open in authenticator</a> if you cannot scan.</p>{{end}}
     <form method="post" action="/account/totp/confirm" class="form">
       <input type="hidden" name="csrf_token" value="{{.CSRF}}">
       <label>Code from the app

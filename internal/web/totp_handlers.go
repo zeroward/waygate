@@ -3,6 +3,8 @@ package web
 import (
 	"net/http"
 	"strings"
+
+	"github.com/zeroward/waygate/internal/identity"
 )
 
 func (s *Server) totpLoginPOST(w http.ResponseWriter, r *http.Request) {
@@ -49,8 +51,14 @@ func (s *Server) totpStartPOST(w http.ResponseWriter, r *http.Request) {
 	}
 	sess.TOTPSecret = secret
 	sess.TOTPURL = url
+	sess.TOTPQR = ""
+	if qr, err := identity.QRDataURI(url); err != nil {
+		s.log.Error("totp qr", "err", err)
+	} else {
+		sess.TOTPQR = qr
+	}
 	sess.TOTPCodes = nil
-	s.flashRedirect(w, r, "/account#totp", "info", "Scan or enter the secret, then confirm with a code from the app.")
+	s.flashRedirect(w, r, "/account#totp", "info", "Scan the QR code with your authenticator app, then confirm with a code.")
 }
 
 func (s *Server) totpConfirmPOST(w http.ResponseWriter, r *http.Request) {
@@ -66,8 +74,7 @@ func (s *Server) totpConfirmPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, "/account#totp", "error", err.Error())
 		return
 	}
-	sess.TOTPSecret = ""
-	sess.TOTPURL = ""
+	sess.TOTPSecret, sess.TOTPURL, sess.TOTPQR = "", "", ""
 	sess.TOTPCodes = codes
 	s.flashRedirect(w, r, "/account#totp", "success", "Authenticator enabled. Store the recovery codes; they are shown once.")
 }
@@ -88,6 +95,6 @@ func (s *Server) totpDisablePOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, "/account", "error", "Could not disable authenticator.")
 		return
 	}
-	sess.TOTPSecret, sess.TOTPURL, sess.TOTPCodes = "", "", nil
+	sess.TOTPSecret, sess.TOTPURL, sess.TOTPQR, sess.TOTPCodes = "", "", "", nil
 	s.flashRedirect(w, r, "/account#totp", "success", "Authenticator disabled.")
 }

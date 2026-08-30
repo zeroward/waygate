@@ -2,6 +2,8 @@ package identity
 
 import (
 	"context"
+	"encoding/base64"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,5 +41,27 @@ func TestTOTPEnrollAndValidate(t *testing.T) {
 	}
 	if err := id.Store().ValidateTOTP(ctx, u.ID, codes[0]); err == nil {
 		t.Fatal("recovery reuse")
+	}
+}
+
+func TestQRDataURI(t *testing.T) {
+	u := "otpauth://totp/Icecrown:HEROONE?secret=MFRGGZDFMY&issuer=Icecrown"
+	got, err := QRDataURI(u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const prefix = "data:image/png;base64,"
+	if !strings.HasPrefix(got, prefix) {
+		t.Fatalf("qr prefix %q", got[:min(40, len(got))])
+	}
+	raw, err := base64.StdEncoding.DecodeString(got[len(prefix):])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(raw) < 100 || string(raw[:8]) != "\x89PNG\r\n\x1a\n" {
+		t.Fatalf("not a png len=%d", len(raw))
+	}
+	if _, err := QRDataURI(""); err == nil {
+		t.Fatal("empty otpauth should fail")
 	}
 }

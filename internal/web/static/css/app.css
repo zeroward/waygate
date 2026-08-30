@@ -1032,6 +1032,15 @@ tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .kb-edit-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; margin: 1rem 0 0; }
 .kb-delete { margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line); }
 
+.totp-qr-wrap {
+  margin: 0.75rem 0;
+  padding: 0.85rem;
+  display: inline-block;
+  background: #fff;
+  border-radius: 10px;
+}
+.totp-qr { display: block; image-rendering: pixelated; }
+
 .account { display: flex; flex-direction: column; gap: 1rem; }
 .account-pass { max-width: 34rem; }
 .account h2 { margin-top: 1.35rem; }

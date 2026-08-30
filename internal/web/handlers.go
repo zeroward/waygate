@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"html/template"
 	"net/http"
 	"net/url"
 	"path/filepath"
@@ -686,7 +687,8 @@ func (s *Server) accountGET(w http.ResponseWriter, r *http.Request) {
 		"TOTPOn":      totpOn,
 		"TOTPPending": sess.PendingUser != nil && sess.User == nil,
 		"TOTPSecret":  sess.TOTPSecret,
-		"TOTPURL":     sess.TOTPURL,
+		"TOTPURL":     template.URL(sess.TOTPURL),
+		"TOTPQR":      template.URL(sess.TOTPQR),
 		"TOTPCodes":   sess.TOTPCodes,
 	})
 }

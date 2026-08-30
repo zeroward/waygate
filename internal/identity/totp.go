@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/pquerna/otp/totp"
+	qrcode "github.com/skip2/go-qrcode"
 )
 
 type TOTPStatus struct {
@@ -42,6 +44,18 @@ func (s *Store) StartTOTP(ctx context.Context, userID uint32, username, issuer s
 		return "", "", err
 	}
 	return key.Secret(), key.URL(), nil
+}
+
+// QRDataURI returns a PNG data URI for an otpauth URL (CSP allows img-src data:).
+func QRDataURI(otpauth string) (string, error) {
+	if otpauth == "" {
+		return "", fmt.Errorf("empty otpauth url")
+	}
+	png, err := qrcode.Encode(otpauth, qrcode.Medium, 256)
+	if err != nil {
+		return "", err
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(png), nil
 }
 
 func (s *Store) ConfirmTOTP(ctx context.Context, userID uint32, code string) ([]string, error) {
