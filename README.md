@@ -184,6 +184,7 @@ See `.env.example` for the full list. Important variables:
 | `GM_MIN_LEVEL` | Minimum `account_access.gmlevel` for the Admin panel at `/staff` (default 1) |
 | `STATUS_CACHE_SECONDS` | 15–30 recommended |
 | `CAPTCHA_PROVIDER` | `none` / `turnstile` / `hcaptcha` |
+| `REGISTER_KEY` | Optional invite key for public registration (admins can override on the Admin panel) |
 | `SMTP_*` | Enables contact form + 15‑minute single-use password reset |
 | `DISCORD_URL` / `CONTACT_EMAIL` | Shown when SMTP is unset |
 | `TRUST_PROXY` | Honour `X-Forwarded-For` only behind a known proxy |

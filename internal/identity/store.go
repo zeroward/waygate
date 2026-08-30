@@ -285,7 +285,11 @@ func (s *Store) ListUsers(ctx context.Context, q string, limit, offset int) ([]U
 	return out, total, rows.Err()
 }
 
-const metaWGEndpoint = "wg_endpoint"
+const (
+	metaWGEndpoint  = "wg_endpoint"
+	metaRegisterKey = "register_key"
+	metaRegisterSet = "register_key_set"
+)
 
 func (s *Store) WGEndpoint() string {
 	return s.meta(context.Background(), metaWGEndpoint)
@@ -298,6 +302,20 @@ func (s *Store) SetWGEndpoint(ctx context.Context, v string) error {
 		return err
 	}
 	return s.setMeta(ctx, metaWGEndpoint, v)
+}
+
+func (s *Store) RegisterKeyOverride() (key string, set bool) {
+	if s.meta(context.Background(), metaRegisterSet) != "1" {
+		return "", false
+	}
+	return s.meta(context.Background(), metaRegisterKey), true
+}
+
+func (s *Store) SetRegisterKey(ctx context.Context, v string) error {
+	if err := s.setMeta(ctx, metaRegisterSet, "1"); err != nil {
+		return err
+	}
+	return s.setMeta(ctx, metaRegisterKey, strings.TrimSpace(v))
 }
 
 func (s *Store) meta(ctx context.Context, k string) string {

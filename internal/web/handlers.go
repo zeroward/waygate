@@ -2,6 +2,8 @@ package web
 
 import (
 	"context"
+	"crypto/sha256"
+	"crypto/subtle"
 	"errors"
 	"html/template"
 	"net/http"
@@ -9,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/zeroward/waygate/internal/account"
 	"github.com/zeroward/waygate/internal/downloads"
@@ -122,13 +125,44 @@ func (s *Server) leaderboards(w http.ResponseWriter, r *http.Request) {
 const wotlkExpansion uint8 = 2
 
 func (s *Server) registerGET(w http.ResponseWriter, r *http.Request) {
-	s.view(w, r, "register.html", "Register", "register", registerForm{})
+	s.view(w, r, "register.html", "Register", "register", registerForm{NeedKey: s.registerKey() != ""})
 }
 
 type registerForm struct {
 	Username string
 	Email    string
 	Error    string
+	NeedKey  bool
+}
+
+func (s *Server) registerKey() string {
+	if s.id != nil {
+		if key, set := s.id.Store().RegisterKeyOverride(); set {
+			return strings.TrimSpace(key)
+		}
+	}
+	return strings.TrimSpace(s.cfg.RegisterKey)
+}
+
+func validRegisterKey(key string) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil
+	}
+	n := utf8.RuneCountInString(key)
+	if n < 4 || n > 64 {
+		return errors.New("registration key must be 4–64 characters")
+	}
+	return nil
+}
+
+func checkRegisterKey(got, want string) bool {
+	if want == "" {
+		return true
+	}
+	a := sha256.Sum256([]byte(strings.TrimSpace(got)))
+	b := sha256.Sum256([]byte(want))
+	return subtle.ConstantTimeCompare(a[:], b[:]) == 1
 }
 
 func (s *Server) registerPOST(w http.ResponseWriter, r *http.Request) {
@@ -139,6 +173,7 @@ func (s *Server) registerPOST(w http.ResponseWriter, r *http.Request) {
 	form := registerForm{
 		Username: strings.TrimSpace(r.FormValue("username")),
 		Email:    strings.TrimSpace(r.FormValue("email")),
+		NeedKey:  s.registerKey() != "",
 	}
 	fail := func(msg string) {
 		form.Error = msg
@@ -151,6 +186,10 @@ func (s *Server) registerPOST(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := s.captcha.Verify(r.Context(), captchaToken(r), ip); err != nil {
 		fail(err.Error())
+		return
+	}
+	if !checkRegisterKey(r.FormValue("register_key"), s.registerKey()) {
+		fail("Invalid registration key.")
 		return
 	}
 	if err := validate.Username(form.Username); err != nil {
@@ -347,7 +386,34 @@ func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
 		"WGEndpoint":        s.wgEndpoint(),
 		"WGPort":            s.cfg.WGPort,
 		"WGRealmIP":         wg.TunnelIP(s.cfg.WGServerAddr),
+		"RegisterKey":       s.registerKey(),
 	})
+}
+
+func (s *Server) registerKeyPOST(w http.ResponseWriter, r *http.Request) {
+	sess := s.requireStaff(w, r)
+	if sess == nil {
+		return
+	}
+	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
+		return
+	}
+	key := strings.TrimSpace(r.FormValue("register_key"))
+	if err := validRegisterKey(key); err != nil {
+		s.flashRedirect(w, r, "/staff#register-key", "error", err.Error())
+		return
+	}
+	if err := s.id.Store().SetRegisterKey(r.Context(), key); err != nil {
+		s.flashRedirect(w, r, "/staff#register-key", "error", "Could not save the registration key.")
+		return
+	}
+	if key == "" {
+		s.logStaff(sess.User.Username, "register-key", "open")
+		s.flashRedirect(w, r, "/staff#register-key", "success", "Public registration is open (no key required).")
+		return
+	}
+	s.logStaff(sess.User.Username, "register-key", "set")
+	s.flashRedirect(w, r, "/staff#register-key", "success", "Registration now requires a key.")
 }
 
 func (s *Server) logStaff(actor, action, target string) {

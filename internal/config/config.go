@@ -94,6 +94,8 @@ type Config struct {
 	WGServerAddr  string
 	WGAgentListen string
 
+	RegisterKey string
+
 	HowToConnectFile string
 	KBPath           string
 	DownloadsDir     string
@@ -179,6 +181,7 @@ func Load() (Config, error) {
 		WGInterface:        env("WG_INTERFACE", "wg0"),
 		WGServerAddr:       env("WG_SERVER_ADDR", "10.8.0.1/24"),
 		WGAgentListen:      env("WG_AGENT_LISTEN", "127.0.0.1:9180"),
+		RegisterKey:        strings.TrimSpace(env("REGISTER_KEY", "")),
 		HowToConnectFile:   env("HOW_TO_CONNECT_FILE", "content/how-to-connect.md"),
 		KBPath:             env("KB_PATH", "data/kb.sqlite"),
 		DownloadsDir:       env("DOWNLOADS_DIR", "downloads"),

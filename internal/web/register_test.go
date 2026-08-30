@@ -261,6 +261,95 @@ func TestRegisterAndLoginDemo(t *testing.T) {
 	}
 }
 
+func TestRegisterRequiresInviteKey(t *testing.T) {
+	ts, srv := testWeb(t)
+	defer ts.Close()
+	if err := srv.id.Store().SetRegisterKey(context.Background(), "chungus"); err != nil {
+		t.Fatal(err)
+	}
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	res, err := client.Get(ts.URL + "/register")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	html := string(body)
+	if !strings.Contains(html, `name="register_key"`) {
+		t.Fatal("missing key field")
+	}
+	csrf := extractCSRF(html)
+	form := url.Values{
+		"csrf_token": {csrf}, "username": {"HeroOne"}, "email": {"h@example.com"},
+		"password": {"Abcd1234"}, "password_confirm": {"Abcd1234"},
+	}
+	res, err = client.PostForm(ts.URL+"/register", form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest || !strings.Contains(string(out), "Invalid registration key") {
+		t.Fatalf("no key %d %s", res.StatusCode, out)
+	}
+	form.Set("register_key", "wrong")
+	res, err = client.PostForm(ts.URL+"/register", form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != http.StatusBadRequest || !strings.Contains(string(out), "Invalid registration key") {
+		t.Fatalf("wrong key %d %s", res.StatusCode, out)
+	}
+	form.Set("register_key", "chungus")
+	res, err = client.PostForm(ts.URL+"/register", form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusSeeOther && res.StatusCode != http.StatusOK {
+		t.Fatalf("good key %d", res.StatusCode)
+	}
+}
+
+func TestStaffSetsRegisterKey(t *testing.T) {
+	ts, srv := testWeb(t)
+	defer ts.Close()
+	if err := srv.accounts.Create(context.Background(), "Staffer", "Abcd1234", "s@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	srv.accounts.GrantGM("Staffer", 2)
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	login(t, client, ts.URL, "Staffer", "Abcd1234")
+	res, err := client.Get(ts.URL + "/staff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if !strings.Contains(string(body), `id="register-key"`) {
+		t.Fatal("missing staff register key form")
+	}
+	csrf := extractCSRF(string(body))
+	res, err = client.PostForm(ts.URL+"/staff/register-key", url.Values{"csrf_token": {csrf}, "register_key": {"ice-crown"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	anon, err := http.Get(ts.URL + "/register")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg, _ := io.ReadAll(anon.Body)
+	anon.Body.Close()
+	if !strings.Contains(string(reg), `name="register_key"`) {
+		t.Fatal("register form missing key after staff set")
+	}
+}
+
 func TestRegisterRequiresEmailVerifyWhenSMTP(t *testing.T) {
 	ts, srv := testWeb(t)
 	defer ts.Close()

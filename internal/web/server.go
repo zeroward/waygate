@@ -206,6 +206,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /staff/ban", s.staffBanPOST)
 	mux.HandleFunc("POST /staff/unban", s.staffUnbanPOST)
 	mux.HandleFunc("POST /staff/wg", s.wgEndpointPOST)
+	mux.HandleFunc("POST /staff/register-key", s.registerKeyPOST)
 	mux.HandleFunc("POST /staff/downloads", s.staffDownloadPOST)
 	mux.HandleFunc("POST /staff/downloads/delete", s.staffDownloadDeletePOST)
 	mux.HandleFunc("GET /staff/kb", s.staffKB)

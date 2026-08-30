@@ -21,6 +21,12 @@
     <label>Confirm password
       <input type="password" name="password_confirm" required minlength="8" maxlength="16" autocomplete="new-password">
     </label>
+    {{if $f.NeedKey}}
+    <label>Registration key
+      <input name="register_key" required maxlength="64" autocomplete="off">
+      <span class="hint">Ask a GM for this. Public registration is invite-only.</span>
+    </label>
+    {{end}}
     {{if eq .CaptchaProv "turnstile"}}
     <div class="cf-turnstile" data-sitekey="{{.CaptchaKey}}" data-theme="dark"></div>
     {{end}}

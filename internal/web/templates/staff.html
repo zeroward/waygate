@@ -256,6 +256,18 @@
     </aside>
   </div>
 
+  <section class="panel account-pass" id="register-key">
+    <h2>Registration key</h2>
+    <p class="hint">When set, new players must enter this on <a href="/register">/register</a>. Staff “Create account” does not need it. Leave blank to allow anyone to register.</p>
+    <form method="post" action="/staff/register-key" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Key
+        <input name="register_key" value="{{$d.RegisterKey}}" maxlength="64" autocomplete="off" placeholder="optional">
+      </label>
+      <button type="submit" class="btn btn-gold">Save registration key</button>
+    </form>
+  </section>
+
   {{if $d.WGOn}}
   <section class="panel account-pass" id="vpn">
     <h2>VPN endpoint</h2>

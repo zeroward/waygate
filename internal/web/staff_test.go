@@ -91,6 +91,9 @@ func TestStaffCreateAndReset(t *testing.T) {
 	if !strings.Contains(string(body), "Create account") || !strings.Contains(string(body), "Reset password") {
 		t.Fatal("missing staff forms")
 	}
+	if !strings.Contains(string(body), "Registration key") {
+		t.Fatal("missing registration key form")
+	}
 	if !strings.Contains(string(body), "Set rank") {
 		t.Fatal("missing rank form")
 	}
