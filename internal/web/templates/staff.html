@@ -6,7 +6,46 @@
     <p class="home-kicker">{{rankName .User.GMLevel}}</p>
     <h1>Admin panel</h1>
     <p class="lede">Create accounts, reset passwords, publish Downloads, and set GM or Admin. Super GM cannot be granted here.</p>
-    <p class="home-cta-quiet"><a href="/staff/tickets">Player tickets</a>{{if .CanEditKB}} · <a href="/staff/kb">Knowledge Base articles</a>{{end}}</p>
+    {{if .CanEditKB}}<p class="home-cta-quiet"><a href="/staff/kb">Knowledge Base articles</a></p>{{end}}
+  </section>
+
+  <section class="panel staff-tickets" id="tickets">
+    <header class="home-mods-head">
+      <h2>Open tickets</h2>
+      <span class="mod-count">{{len $d.OpenTickets}}</span>
+    </header>
+    <p class="hint">Reply and set status from the queue. Players cannot see other accounts’ tickets.</p>
+    {{if $d.OpenTickets}}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Ref</th>
+            <th>Player</th>
+            <th>Title</th>
+            <th>Category</th>
+            <th>Status</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $d.OpenTickets}}
+          <tr>
+            <td class="name"><a href="/staff/tickets/{{.ID}}">{{.PublicRef}}</a></td>
+            <td>{{.Username}}</td>
+            <td>{{.Title}}</td>
+            <td>{{.Category}}</td>
+            <td>{{.StatusLabel}}</td>
+            <td>{{.UpdatedAt.Format "2006-01-02 15:04"}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="empty">No open tickets.</p>
+    {{end}}
+    <p class="kb-edit-actions"><a class="btn btn-gold" href="/staff/tickets">Ticket queue</a></p>
   </section>
 
   <section class="panel staff-create">

@@ -268,6 +268,7 @@ func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
 		"DownloadsMax":      downloads.HumanSize(s.cfg.DownloadsMaxBytes()),
 		"DownloadsScanMax":  downloadScanMax(s),
 		"Events":            s.recentStaffEvents(r.Context()),
+		"OpenTickets":       s.openTickets(r.Context()),
 	})
 }
 
@@ -290,6 +291,18 @@ func (s *Server) recentStaffEvents(ctx context.Context) []kb.Event {
 		return nil
 	}
 	return ev
+}
+
+func (s *Server) openTickets(ctx context.Context) []kb.Ticket {
+	if s.kb == nil {
+		return nil
+	}
+	list, err := s.kb.ListOpenTickets(ctx)
+	if err != nil {
+		s.log.Error("staff open tickets", "err", err)
+		return nil
+	}
+	return list
 }
 
 func (s *Server) staffSelected(ctx context.Context, rows []account.ListedAccount, raw, q string, includeBots bool) *account.ListedAccount {

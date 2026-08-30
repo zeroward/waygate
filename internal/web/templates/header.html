@@ -7,7 +7,7 @@
   <title>{{if .Title}}{{.Title}} — {{end}}{{.RealmName}}</title>
   <meta name="description" content="{{.RealmName}} — {{.CoreName}} account registration and realm status.">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/app.css?v=20">
+  <link rel="stylesheet" href="/static/css/app.css?v=21">
   {{if eq .CaptchaProv "turnstile"}}
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   {{end}}
@@ -52,7 +52,10 @@
       </nav>
 
       <div class="nav-util">
-        {{if .Staff}}<a href="/staff" class="nav-util-link{{if eq .Active "staff"}} is-active{{end}}">Admin panel</a>{{end}}
+        {{if .Staff}}
+        <a href="/staff" class="nav-util-link{{if eq .Active "staff"}} is-active{{end}}">Admin panel</a>
+        <a href="/staff/tickets" class="nav-util-link">Tickets</a>
+        {{end}}
         <a href="/contact" class="nav-util-link{{if eq .Active "contact"}} is-active{{end}}">Contact</a>
         <div class="nav-account">
         {{if .User}}
@@ -64,7 +67,8 @@
           </summary>
           <div class="user-menu-panel">
             <a href="/account">Account</a>
-            <a href="/tickets">Tickets</a>
+            <a href="/tickets">My tickets</a>
+            {{if .Staff}}<a href="/staff/tickets">Staff tickets</a>{{end}}
             <a href="/account#password">Change password</a>
             <form method="post" action="/account/logout">
               <input type="hidden" name="csrf_token" value="{{.CSRF}}">
