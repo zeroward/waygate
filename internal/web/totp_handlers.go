@@ -44,8 +44,15 @@ func (s *Server) totpStartPOST(w http.ResponseWriter, r *http.Request) {
 	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
 		return
 	}
-	secret, url, err := s.id.Store().StartTOTP(r.Context(), sess.User.ID, sess.User.Username, s.cfg.RealmName)
-	if err != nil {
+	if !s.loginRL.Allow(s.ip(r) + ":totp:setup:" + sess.User.Username) {
+		s.flashRedirect(w, r, "/account#totp", "error", "Too many attempts. Wait and try again.")
+		return
+	}
+	if _, err := s.id.Authenticate(r.Context(), sess.User.Username, r.FormValue("current_password")); err != nil {
+		s.flashRedirect(w, r, "/account#totp", "error", "Website password is incorrect.")
+		return
+	}
+	if _, _, err := s.id.Store().StartTOTP(r.Context(), sess.User.ID, sess.User.Username, s.cfg.RealmName); err != nil {
 		if errors.Is(err, identity.ErrTOTPEnabled) {
 			s.flashRedirect(w, r, "/account#totp", "error", "Disable the current authenticator before setting up a new one.")
 			return
@@ -54,15 +61,6 @@ func (s *Server) totpStartPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, "/account", "error", "Could not start authenticator setup.")
 		return
 	}
-	sess.TOTPSecret = secret
-	sess.TOTPURL = url
-	sess.TOTPQR = ""
-	if qr, err := identity.QRDataURI(url); err != nil {
-		s.log.Error("totp qr", "err", err)
-	} else {
-		sess.TOTPQR = qr
-	}
-	sess.TOTPCodes = nil
 	s.flashRedirect(w, r, "/account#totp", "info", "Scan the QR code with your authenticator app, then confirm with a code.")
 }
 
@@ -74,12 +72,15 @@ func (s *Server) totpConfirmPOST(w http.ResponseWriter, r *http.Request) {
 	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
 		return
 	}
+	if !s.loginRL.Allow(s.ip(r) + ":totp:setup:" + sess.User.Username) {
+		s.flashRedirect(w, r, "/account#totp", "error", "Too many attempts. Wait and try again.")
+		return
+	}
 	codes, err := s.id.Store().ConfirmTOTP(r.Context(), sess.User.ID, r.FormValue("code"))
 	if err != nil {
 		s.flashRedirect(w, r, "/account#totp", "error", err.Error())
 		return
 	}
-	sess.TOTPSecret, sess.TOTPURL, sess.TOTPQR = "", "", ""
 	sess.TOTPCodes = codes
 	s.flashRedirect(w, r, "/account#totp", "success", "Authenticator enabled. Store the recovery codes; they are shown once.")
 }
@@ -90,6 +91,10 @@ func (s *Server) totpDisablePOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
+		return
+	}
+	if !s.loginRL.Allow(s.ip(r) + ":totp:setup:" + sess.User.Username) {
+		s.flashRedirect(w, r, "/account#totp", "error", "Too many attempts. Wait and try again.")
 		return
 	}
 	if err := s.id.Store().ValidateTOTP(r.Context(), sess.User.ID, r.FormValue("code")); err != nil {

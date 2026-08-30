@@ -71,14 +71,15 @@ type Config struct {
 	ContactEmail string
 	DiscordURL   string
 
-	RateWindow   time.Duration
-	RateRegister int
-	RateLogin    int
-	RateContact  int
-	RateReset    int
-	RateKB       int
-	RateUnstuck  int
-	RateTickets  int
+	RateWindow    time.Duration
+	RateRegister  int
+	RateLogin     int
+	RateContact   int
+	RateReset     int
+	RateKB        int
+	RateUnstuck   int
+	RateTickets   int
+	RateDownloads int
 
 	WowCredentialsMax int
 	WebAuthnRPID      string
@@ -174,6 +175,7 @@ func Load() (Config, error) {
 		RateKB:             envInt("RATE_LIMIT_KB", 20),
 		RateUnstuck:        envInt("RATE_LIMIT_UNSTUCK", 5),
 		RateTickets:        envInt("RATE_LIMIT_TICKETS", 5),
+		RateDownloads:      envInt("RATE_LIMIT_DOWNLOADS", 8),
 		WowCredentialsMax:  envInt("WOW_CREDENTIALS_MAX", 5),
 		WebAuthnRPID:       strings.TrimSpace(env("WEBAUTHN_RP_ID", "")),
 		WGEnabled:          envBool("WG_ENABLED", false),
@@ -263,6 +265,9 @@ func (c *Config) validate() error {
 	}
 	if c.RateTickets < 1 {
 		c.RateTickets = 5
+	}
+	if c.RateDownloads < 1 {
+		c.RateDownloads = 8
 	}
 	if c.WowCredentialsMax < 1 {
 		c.WowCredentialsMax = 5

@@ -47,6 +47,7 @@ type Server struct {
 	kbRL      *ratelimit.Limiter
 	unstuckRL *ratelimit.Limiter
 	ticketRL  *ratelimit.Limiter
+	dlRL      *ratelimit.Limiter
 	kb        *kb.Store
 	id        *identity.Service
 	downloads *downloads.Store
@@ -93,6 +94,10 @@ func New(
 	ticketMax := cfg.RateTickets
 	if ticketMax < 1 {
 		ticketMax = 5
+	}
+	dlMax := cfg.RateDownloads
+	if dlMax < 1 {
+		dlMax = 8
 	}
 	kbStore, err := kb.Open(cfg.KBPath)
 	if err != nil {
@@ -145,6 +150,7 @@ func New(
 		kbRL:      ratelimit.New(cfg.RateWindow, kbMax),
 		unstuckRL: ratelimit.New(cfg.RateWindow, unstuckMax),
 		ticketRL:  ratelimit.New(cfg.RateWindow, ticketMax),
+		dlRL:      ratelimit.New(cfg.RateWindow, dlMax),
 		kb:        kbStore,
 		id:        idSvc,
 		downloads: downloads.New(cfg.DownloadsDir, cfg.DownloadsCatalog),
@@ -228,6 +234,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /staff/kb/{id}", s.staffKBUpdate)
 	mux.HandleFunc("POST /staff/kb/{id}/delete", s.staffKBDelete)
 	mux.HandleFunc("GET /account/verify/{token}", s.verifyGET)
+	mux.HandleFunc("POST /account/verify/{token}", s.verifyPOST)
 	mux.HandleFunc("GET /account/reset", s.resetGET)
 	mux.HandleFunc("POST /account/reset", s.resetPOST)
 	mux.HandleFunc("GET /account/reset/{token}", s.resetConfirmGET)

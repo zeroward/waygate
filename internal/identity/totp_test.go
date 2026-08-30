@@ -30,6 +30,9 @@ func TestTOTPEnrollAndValidate(t *testing.T) {
 	if err != nil || len(codes) != 8 {
 		t.Fatalf("%v %v", err, codes)
 	}
+	if len(codes[0]) != 20 {
+		t.Fatalf("recovery length %d", len(codes[0]))
+	}
 	if !id.TOTPEnabled(ctx, u.ID) {
 		t.Fatal("expected enabled")
 	}

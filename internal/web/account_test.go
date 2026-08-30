@@ -202,7 +202,7 @@ func TestTOTPSetupShowsQR(t *testing.T) {
 		t.Fatal("qr shown before setup")
 	}
 	csrf := extractCSRF(html)
-	res, err = client.PostForm(ts.URL+"/account/totp/start", url.Values{"csrf_token": {csrf}})
+	res, err = client.PostForm(ts.URL+"/account/totp/start", url.Values{"csrf_token": {csrf}, "current_password": {"Abcd1234"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,5 +220,32 @@ func TestTOTPSetupShowsQR(t *testing.T) {
 	}
 	if !strings.Contains(html, "otpauth://totp/") {
 		t.Fatal("missing otpauth fallback")
+	}
+}
+
+func TestTOTPStartRequiresPassword(t *testing.T) {
+	ts, srv := testWeb(t)
+	defer ts.Close()
+	if err := srv.accounts.Create(context.Background(), "HeroOne", "Abcd1234", "h@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	login(t, client, ts.URL, "HeroOne", "Abcd1234")
+	res, err := client.Get(ts.URL + "/account")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	csrf := extractCSRF(string(body))
+	res, err = client.PostForm(ts.URL+"/account/totp/start", url.Values{"csrf_token": {csrf}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if strings.Contains(string(page), `class="totp-qr"`) {
+		t.Fatal("qr without password")
 	}
 }

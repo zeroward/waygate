@@ -83,7 +83,7 @@ func (s *Store) PutPending(ctx context.Context, p PendingSignup) (string, error)
 	return plain, nil
 }
 
-func (s *Store) ConsumePending(ctx context.Context, token string) (PendingSignup, error) {
+func (s *Store) peekPending(ctx context.Context, token string, consume bool) (PendingSignup, error) {
 	s.prunePending(ctx)
 	token = strings.TrimSpace(token)
 	if token == "" {
@@ -108,10 +108,20 @@ func (s *Store) ConsumePending(ctx context.Context, token string) (PendingSignup
 		_, _ = s.db.ExecContext(ctx, `DELETE FROM pending_accounts WHERE token_hash = ?`, hash)
 		return PendingSignup{}, ErrPendingNotFound
 	}
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM pending_accounts WHERE token_hash = ?`, hash); err != nil {
-		return PendingSignup{}, err
+	if consume {
+		if _, err := s.db.ExecContext(ctx, `DELETE FROM pending_accounts WHERE token_hash = ?`, hash); err != nil {
+			return PendingSignup{}, err
+		}
 	}
 	return p, nil
+}
+
+func (s *Store) PeekPending(ctx context.Context, token string) (PendingSignup, error) {
+	return s.peekPending(ctx, token, false)
+}
+
+func (s *Store) ConsumePending(ctx context.Context, token string) (PendingSignup, error) {
+	return s.peekPending(ctx, token, true)
 }
 
 func (s *Store) DeletePendingToken(ctx context.Context, token string) {

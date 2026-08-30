@@ -104,6 +104,11 @@
       <label>Confirm new password
         <input type="password" name="new_password_confirm" required minlength="8" maxlength="16" autocomplete="new-password">
       </label>
+      {{if $d.TOTPOn}}
+      <label>Authenticator code
+        <input name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="16">
+      </label>
+      {{end}}
       <button type="submit" class="btn btn-gold">Update password</button>
     </form>
     <form method="post" action="/account/logout" class="form-inline">
@@ -142,8 +147,11 @@
       <button type="submit" class="btn btn-gold">Confirm</button>
     </form>
     {{else}}
-    <form method="post" action="/account/totp/start">
+    <form method="post" action="/account/totp/start" class="form">
       <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Website password
+        <input type="password" name="current_password" required maxlength="16" autocomplete="current-password">
+      </label>
       <button type="submit" class="btn btn-gold">Set up authenticator</button>
     </form>
     {{end}}

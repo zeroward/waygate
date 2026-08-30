@@ -1,0 +1,12 @@
+{{template "header" .}}
+{{$d := .Data}}
+<section class="panel narrow">
+  <p class="eyebrow">Mailbox of the Frozen Throne</p>
+  <h1>Confirm your email</h1>
+  <p class="lede">This activates the website account and the 3.3.5a client login.</p>
+  <form method="post" action="/account/verify/{{$d.Token}}" class="form">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <button type="submit" class="btn btn-gold">Confirm email</button>
+  </form>
+</section>
+{{template "footer" .}}

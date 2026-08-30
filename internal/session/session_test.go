@@ -71,6 +71,30 @@ func TestSessionPersistsAcrossStoreReopen(t *testing.T) {
 	}
 }
 
+func TestRevokeUserLeavesCurrent(t *testing.T) {
+	db := testDB(t)
+	s, err := NewStore(db, time.Hour, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec1 := httptest.NewRecorder()
+	a := s.GetOrCreate(rec1, httptest.NewRequest(http.MethodGet, "/", nil))
+	a.User = &User{ID: 9, Username: "HERO"}
+	s.SaveLatest(a)
+	rec2 := httptest.NewRecorder()
+	b := s.GetOrCreate(rec2, httptest.NewRequest(http.MethodGet, "/", nil))
+	b.User = &User{ID: 9, Username: "HERO"}
+	s.SaveLatest(b)
+	s.RevokeUser(9, a.ID)
+	if s.GetOrCreate(httptest.NewRecorder(), cookieReq(rec2, "/")).User != nil {
+		t.Fatal("other session still live")
+	}
+	keep := s.GetOrCreate(httptest.NewRecorder(), cookieReq(rec1, "/"))
+	if keep.User == nil || keep.User.ID != 9 {
+		t.Fatal("current session revoked")
+	}
+}
+
 func TestSessionRegenerateInvalidatesOldID(t *testing.T) {
 	db := testDB(t)
 	s, err := NewStore(db, time.Hour, false)

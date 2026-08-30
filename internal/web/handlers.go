@@ -87,7 +87,12 @@ func (s *Server) downloadsPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) downloadsFile(w http.ResponseWriter, r *http.Request) {
-	if s.requireLogin(w, r) == nil {
+	sess := s.requireLogin(w, r)
+	if sess == nil {
+		return
+	}
+	if s.dlRL != nil && !s.dlRL.Allow(s.ip(r)+":"+sess.User.Username) {
+		http.Error(w, "Too many downloads. Wait and try again.", http.StatusTooManyRequests)
 		return
 	}
 	id := r.PathValue("id")
@@ -660,6 +665,13 @@ func (s *Server) staffRankPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.syncWebsiteStaffLevel(r.Context(), target, level)
+	if level == account.RankPlayer {
+		if listed, err := s.accounts.GetListed(r.Context(), target); err == nil {
+			if ln, err := s.id.Store().LinkByAccount(r.Context(), listed.ID); err == nil {
+				s.sessions.RevokeUser(ln.UserID, "")
+			}
+		}
+	}
 	s.log.Info("staff rank", "actor", sess.User.Username, "target", strings.ToUpper(target), "rank", level)
 	s.logStaff(sess.User.Username, "rank", strings.ToUpper(target)+"="+account.RankName(level))
 	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Set "+target+" to "+account.RankName(level)+".")
@@ -785,10 +797,22 @@ func (s *Server) accountGET(w http.ResponseWriter, r *http.Request) {
 		links, _ = s.id.Links(r.Context(), sess.User.ID)
 	}
 	totpOn := false
+	totpSecret, totpURL, totpQR := "", "", ""
+	var totpCodes []string
 	var passkeys []identity.Passkey
 	var wgPeers []wgPeerView
 	if sess.User != nil {
 		totpOn = s.id.TOTPEnabled(r.Context(), sess.User.ID)
+		totpCodes = sess.TOTPCodes
+		sess.TOTPCodes = nil
+		if !totpOn {
+			if secret, otpURL, err := s.id.Store().PendingTOTP(r.Context(), sess.User.ID, sess.User.Username, s.cfg.RealmName); err == nil && secret != "" {
+				totpSecret, totpURL = secret, otpURL
+				if qr, err := identity.QRDataURI(otpURL); err == nil {
+					totpQR = qr
+				}
+			}
+		}
 		passkeys, _ = s.id.Store().ListPasskeys(r.Context(), sess.User.ID)
 		if s.wgOn() {
 			if list, err := s.id.Store().ListWGPeers(r.Context(), sess.User.ID); err == nil {
@@ -804,10 +828,10 @@ func (s *Server) accountGET(w http.ResponseWriter, r *http.Request) {
 		"WowMax":      s.cfg.WowCredentialsMax,
 		"TOTPOn":      totpOn,
 		"TOTPPending": sess.PendingUser != nil && sess.User == nil,
-		"TOTPSecret":  sess.TOTPSecret,
-		"TOTPURL":     template.URL(sess.TOTPURL),
-		"TOTPQR":      template.URL(sess.TOTPQR),
-		"TOTPCodes":   sess.TOTPCodes,
+		"TOTPSecret":  totpSecret,
+		"TOTPURL":     template.URL(totpURL),
+		"TOTPQR":      template.URL(totpQR),
+		"TOTPCodes":   totpCodes,
 		"Passkeys":    passkeys,
 		"PasskeysOK":  s.wa != nil,
 		"PasskeyMax":  identity.MaxPasskeys,
@@ -968,6 +992,12 @@ func (s *Server) passwordPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, "/account", "error", err.Error())
 		return
 	}
+	if s.id.TOTPEnabled(r.Context(), sess.User.ID) {
+		if err := s.id.Store().ValidateTOTP(r.Context(), sess.User.ID, r.FormValue("code")); err != nil {
+			s.flashRedirect(w, r, "/account#password", "error", "Authenticator code required to change password.")
+			return
+		}
+	}
 	cur, err := s.id.GetByID(r.Context(), sess.User.ID)
 	if err != nil {
 		s.flashRedirect(w, r, "/account", "error", "could not change password")
@@ -982,12 +1012,29 @@ func (s *Server) passwordPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, "/account", "error", "could not change password")
 		return
 	}
+	s.sessions.RevokeUser(sess.User.ID, sess.ID)
 	s.flashRedirect(w, r, "/account", "success", "Website password updated. Your WoW client password is unchanged.")
 }
 
 func (s *Server) verifyGET(w http.ResponseWriter, r *http.Request) {
 	if !s.mail.Enabled() {
 		http.NotFound(w, r)
+		return
+	}
+	token := strings.TrimSpace(r.PathValue("token"))
+	if _, err := s.kb.PeekPending(r.Context(), token); err != nil {
+		s.flashRedirect(w, r, "/account", "error", "That confirmation link is invalid or expired. Register again if you still need an account.")
+		return
+	}
+	s.view(w, r, "verify.html", "Confirm email", "account", map[string]any{"Token": token})
+}
+
+func (s *Server) verifyPOST(w http.ResponseWriter, r *http.Request) {
+	if !s.mail.Enabled() {
+		http.NotFound(w, r)
+		return
+	}
+	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
 		return
 	}
 	token := strings.TrimSpace(r.PathValue("token"))
@@ -1096,6 +1143,9 @@ func (s *Server) resetConfirmPOST(w http.ResponseWriter, r *http.Request) {
 	if err := s.id.SetPassword(r.Context(), user, nw); err != nil {
 		s.flashRedirect(w, r, r.URL.Path, "error", "reset link is invalid or expired")
 		return
+	}
+	if u, err := s.id.GetByUsername(r.Context(), user); err == nil {
+		s.sessions.RevokeUser(u.ID, "")
 	}
 	sess := s.sessions.GetOrCreate(w, r)
 	sess.SetFlash("success", "Password reset. You can log in.")

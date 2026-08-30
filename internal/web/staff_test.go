@@ -383,7 +383,7 @@ func TestStaffRankSyncsWebsitePrivilege(t *testing.T) {
 		t.Fatal(err)
 	}
 	res.Body.Close()
-	if res.StatusCode != http.StatusForbidden {
+	if res.StatusCode != http.StatusForbidden && res.StatusCode != http.StatusSeeOther {
 		t.Fatalf("demoted player staff %d", res.StatusCode)
 	}
 }
