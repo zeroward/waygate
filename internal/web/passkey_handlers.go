@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-webauthn/webauthn/protocol"
 	"github.com/go-webauthn/webauthn/webauthn"
+	"github.com/zeroward/waygate/internal/account"
 	"github.com/zeroward/waygate/internal/config"
 	"github.com/zeroward/waygate/internal/identity"
 	"github.com/zeroward/waygate/internal/session"
@@ -246,6 +247,14 @@ func (s *Server) passkeyLoginFinish(w http.ResponseWriter, r *http.Request) {
 	}, sd, r)
 	if err != nil || found.ID == 0 {
 		s.log.Error("passkey login finish", "err", err)
+		writeJSONError(w, http.StatusUnauthorized, "Passkey was not recognized.")
+		return
+	}
+	if err := s.id.RejectIfBanned(r.Context(), found.User); err != nil {
+		if errors.Is(err, account.ErrBanned) {
+			writeJSONError(w, http.StatusUnauthorized, "This account is suspended.")
+			return
+		}
 		writeJSONError(w, http.StatusUnauthorized, "Passkey was not recognized.")
 		return
 	}

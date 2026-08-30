@@ -1,6 +1,7 @@
 package wg
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -71,6 +72,40 @@ func TestClientConfAndZip(t *testing.T) {
 	}
 	if strings.Contains(string(z), "# set realmlist") {
 		t.Fatal("realmlist should only use wg0 IP")
+	}
+}
+
+func TestEnsureForwardRestrictsPorts(t *testing.T) {
+	var cmds []string
+	a := &Agent{
+		Iface: "wg0", AuthPort: 3724, WorldPort: 28085, SitePort: 3080,
+		run: func(name string, args ...string) error {
+			line := name + " " + strings.Join(args, " ")
+			cmds = append(cmds, line)
+			if strings.Contains(line, " -C ") || strings.Contains(line, " -D ") {
+				return fmt.Errorf("missing")
+			}
+			return nil
+		},
+	}
+	if err := a.ensureForward(); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(cmds, "\n")
+	if !strings.Contains(joined, "--dports 3724,28085,3080") {
+		t.Fatalf("missing dport allow: %s", joined)
+	}
+	if !strings.Contains(joined, "--state ESTABLISHED,RELATED") {
+		t.Fatal("missing established")
+	}
+	var addedCatchAll bool
+	for _, c := range cmds {
+		if strings.Contains(c, "-A FORWARD -i wg0 -j ACCEPT") || strings.Contains(c, "-A FORWARD -o wg0 -j ACCEPT") {
+			addedCatchAll = true
+		}
+	}
+	if addedCatchAll {
+		t.Fatal("must not re-add catch-all FORWARD ACCEPT")
 	}
 }
 

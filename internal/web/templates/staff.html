@@ -288,7 +288,7 @@
       <h2>Downloads</h2>
       <span class="mod-count">{{len $d.Downloads}}</span>
     </header>
-    <p class="staff-dl-lede">Published on the Downloads tab for logged-in players. Virus scanning is temporarily off.{{if $d.DownloadsMax}} Max {{$d.DownloadsMax}}.{{end}} Types: .zip, .7z, .rar, .mpq, .patch, .exe.</p>
+    <p class="staff-dl-lede">Published on the Downloads tab for logged-in players. {{if $d.DownloadsScanning}}Virus scanning is on.{{else}}Virus scanning is off.{{end}}{{if $d.DownloadsMax}} Max {{$d.DownloadsMax}}.{{end}} Types: .zip, .7z, .rar, .mpq, .patch.</p>
     {{if not $d.DownloadsWritable}}
     <p class="flash flash-error">The downloads folder is not writable. Mount it read-write and let the site process user write it.</p>
     {{end}}
@@ -302,7 +302,7 @@
         </select>
       </label>
       <label class="staff-dl-file">File
-        <input type="file" name="file" required accept=".zip,.7z,.rar,.mpq,.patch,.exe" {{if not $d.DownloadsWritable}}disabled{{end}}>
+        <input type="file" name="file" required accept=".zip,.7z,.rar,.mpq,.patch" {{if not $d.DownloadsWritable}}disabled{{end}}>
       </label>
       <div class="staff-dl-extra" data-dl-for="client" hidden>
         <label>Client name

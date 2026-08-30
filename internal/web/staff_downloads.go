@@ -123,9 +123,10 @@ func (s *Server) staffDownloadPOST(w http.ResponseWriter, r *http.Request) {
 }
 
 func downloadScanMax(s *Server) int64 {
-	// Scanning is off; keep the progress UI on "Saving…" after the bytes land.
-	_ = s
-	return 0
+	if s.cfg.ClamAVAddr == "" {
+		return 0
+	}
+	return s.cfg.ClamAVScanMaxBytes()
 }
 
 func wantsJSON(r *http.Request) bool {

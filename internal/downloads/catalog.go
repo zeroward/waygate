@@ -51,7 +51,7 @@ type Scanner interface {
 
 var (
 	idRe        = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,63}$`)
-	allowedExt  = map[string]bool{".zip": true, ".7z": true, ".rar": true, ".mpq": true, ".patch": true, ".exe": true}
+	allowedExt  = map[string]bool{".zip": true, ".7z": true, ".rar": true, ".mpq": true, ".patch": true}
 	scanFolders = []string{CatClient, CatPatches, CatMods}
 	slugClean   = regexp.MustCompile(`[^a-z0-9]+`)
 )
@@ -126,7 +126,15 @@ func New(root, catalogPath string) *Store {
 }
 
 func (s *Store) SetScanner(sc Scanner) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	s.scanner = sc
+}
+
+func (s *Store) Scanning() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.scanner != nil
 }
 
 func (s *Store) SetScanMax(n int64) {

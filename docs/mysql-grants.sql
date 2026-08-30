@@ -21,13 +21,22 @@ GRANT SELECT ON acore_characters.guild TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.guild_member TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.arena_team TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.arena_team_member TO 'webreg'@'%';
--- Account unstuck (hearth/homebind) when SOAP is down. Only UPDATE, never DELETE.
-GRANT UPDATE ON acore_characters.characters TO 'webreg'@'%';
+-- Account unstuck (hearth/homebind) when SOAP is down. Column-level UPDATE only.
+REVOKE UPDATE ON acore_characters.characters FROM 'webreg'@'%';
+GRANT UPDATE (`position_x`, `position_y`, `position_z`, `orientation`, `map`, `zone`,
+  `trans_x`, `trans_y`, `trans_z`, `transguid`, `taxi_path`, `cinematic`, `playerFlags`, `at_login`)
+  ON acore_characters.characters TO 'webreg'@'%';
 
 -- Optional world revision string on the home page.
 GRANT SELECT ON acore_world.version TO 'webreg'@'%';
 GRANT SELECT ON acore_world.module_string TO 'webreg'@'%';
 GRANT SELECT ON acore_world.item_template TO 'webreg'@'%';
+-- Companion quest tracker (apply on existing servers too).
+GRANT SELECT ON acore_characters.character_queststatus TO 'webreg'@'%';
+GRANT SELECT ON acore_characters.character_queststatus_rewarded TO 'webreg'@'%';
+GRANT SELECT ON acore_world.quest_template TO 'webreg'@'%';
+GRANT SELECT ON acore_world.quest_template_addon TO 'webreg'@'%';
+GRANT SELECT ON acore_world.quest_poi_points TO 'webreg'@'%';
 
 -- Required only for ACCOUNT_CREATE_MODE=sql or auto (SRP6 fallback),
 -- password change fallback, and filling email/expansion after SOAP create.

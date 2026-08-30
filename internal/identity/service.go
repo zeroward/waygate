@@ -39,6 +39,9 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 	if !CheckPassword(u.PasswordHash, password) {
 		return User{}, ErrBadPassword
 	}
+	if err := s.rejectIfBanned(ctx, u); err != nil {
+		return User{}, err
+	}
 	return u, nil
 }
 
@@ -207,6 +210,33 @@ func (s *Service) AddCredential(ctx context.Context, userID uint32, wowUser, wow
 		return Link{}, err
 	}
 	return Link{UserID: userID, AccountID: listed.ID, Username: wowUser}, nil
+}
+
+func (s *Service) rejectIfBanned(ctx context.Context, u User) error {
+	if s.ac == nil || u.ID == 0 {
+		return nil
+	}
+	links, err := s.store.Links(ctx, u.ID)
+	if err != nil {
+		return err
+	}
+	names := make([]string, 0, len(links)+1)
+	for _, l := range links {
+		names = append(names, l.Username)
+	}
+	if len(names) == 0 {
+		names = append(names, u.Username)
+	}
+	for _, n := range names {
+		if banned, _ := s.ac.IsBanned(ctx, n); banned {
+			return account.ErrBanned
+		}
+	}
+	return nil
+}
+
+func (s *Service) RejectIfBanned(ctx context.Context, u User) error {
+	return s.rejectIfBanned(ctx, u)
 }
 
 func (s *Service) AccountIDs(ctx context.Context, userID uint32) ([]uint32, error) {

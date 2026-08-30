@@ -312,6 +312,82 @@ func TestStaffSetRank(t *testing.T) {
 	}
 }
 
+func TestStaffRankSyncsWebsitePrivilege(t *testing.T) {
+	ts, acc := staffTestServer(t)
+	defer ts.Close()
+	ctx := context.Background()
+	if err := acc.Create(ctx, "Admin", "Abcd1234", "a@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	acc.GrantGM("Admin", 3)
+	if err := acc.Create(ctx, "PlayerA", "Abcd1234", "p@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+
+	pjar, _ := cookiejar.New(nil)
+	player := &http.Client{Jar: pjar, CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	login(t, player, ts.URL, "PlayerA", "Abcd1234")
+	res, err := player.Get(ts.URL + "/staff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("player staff %d", res.StatusCode)
+	}
+
+	ajar, _ := cookiejar.New(nil)
+	admin := &http.Client{Jar: ajar}
+	login(t, admin, ts.URL, "Admin", "Abcd1234")
+	res, err = admin.Get(ts.URL + "/staff?select=PLAYERA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	csrf := extractCSRF(string(body))
+	form := url.Values{"csrf_token": {csrf}, "username": {"PlayerA"}, "rank": {"2"}}
+	res, err = admin.PostForm(ts.URL+"/staff/rank", form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+
+	res, err = player.Get(ts.URL + "/staff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusOK && res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("promoted player staff %d", res.StatusCode)
+	}
+
+	res, err = admin.Get(ts.URL + "/staff?select=PLAYERA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	csrf = extractCSRF(string(body))
+	form = url.Values{"csrf_token": {csrf}, "username": {"PlayerA"}, "rank": {"0"}}
+	res, err = admin.PostForm(ts.URL+"/staff/rank", form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+
+	res, err = player.Get(ts.URL + "/staff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusForbidden && res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("demoted player staff %d", res.StatusCode)
+	}
+}
+
 func TestStaffBanAndUnban(t *testing.T) {
 	ts, acc := staffTestServer(t)
 	defer ts.Close()

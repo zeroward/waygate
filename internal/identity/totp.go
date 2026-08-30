@@ -4,10 +4,12 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/pquerna/otp/totp"
@@ -30,6 +32,9 @@ func (s *Store) TOTPStatus(ctx context.Context, userID uint32) (enabled bool, er
 }
 
 func (s *Store) StartTOTP(ctx context.Context, userID uint32, username, issuer string) (secret, url string, err error) {
+	if on, _ := s.TOTPStatus(ctx, userID); on {
+		return "", "", ErrTOTPEnabled
+	}
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      issuer,
 		AccountName: username,
@@ -44,6 +49,20 @@ func (s *Store) StartTOTP(ctx context.Context, userID uint32, username, issuer s
 		return "", "", err
 	}
 	return key.Secret(), key.URL(), nil
+}
+
+func (s *Store) PendingTOTP(ctx context.Context, userID uint32, username, issuer string) (secret, otpURL string, err error) {
+	var en int
+	err = s.db.QueryRowContext(ctx, `SELECT secret, enabled FROM user_totp WHERE user_id = ?`, userID).Scan(&secret, &en)
+	if err != nil || en != 0 || secret == "" {
+		return "", "", nil
+	}
+	return secret, totpAuthURL(issuer, username, secret), nil
+}
+
+func totpAuthURL(issuer, username, secret string) string {
+	iss := url.QueryEscape(issuer)
+	return "otpauth://totp/" + url.PathEscape(issuer) + ":" + url.PathEscape(username) + "?secret=" + secret + "&issuer=" + iss
 }
 
 // QRDataURI returns a PNG data URI for an otpauth URL (CSP allows img-src data:).
@@ -90,16 +109,21 @@ func (s *Store) ValidateTOTP(ctx context.Context, userID uint32, code string) er
 	_ = json.Unmarshal([]byte(recJSON), &hashes)
 	sum := sha256.Sum256([]byte(strings.ToUpper(code)))
 	want := hex.EncodeToString(sum[:])
+	wantb := []byte(want)
+	matched := -1
 	for i, h := range hashes {
-		if h == want {
-			hashes[i] = hashes[len(hashes)-1]
-			hashes = hashes[:len(hashes)-1]
-			b, _ := json.Marshal(hashes)
-			_, _ = s.db.ExecContext(ctx, `UPDATE user_totp SET recovery_hashes = ? WHERE user_id = ?`, string(b), userID)
-			return nil
+		hb := []byte(h)
+		if len(hb) == len(wantb) && subtle.ConstantTimeCompare(hb, wantb) == 1 {
+			matched = i
 		}
 	}
-	return fmt.Errorf("invalid authenticator code")
+	if matched < 0 {
+		return fmt.Errorf("invalid authenticator code")
+	}
+	hashes = append(hashes[:matched], hashes[matched+1:]...)
+	b, _ := json.Marshal(hashes)
+	_, _ = s.db.ExecContext(ctx, `UPDATE user_totp SET recovery_hashes = ? WHERE user_id = ?`, string(b), userID)
+	return nil
 }
 
 func (s *Store) DisableTOTP(ctx context.Context, userID uint32) error {
@@ -111,7 +135,7 @@ func newRecoveryCodes() (plain, hashes []string) {
 	plain = make([]string, 8)
 	hashes = make([]string, 8)
 	for i := 0; i < 8; i++ {
-		b := make([]byte, 5)
+		b := make([]byte, 10)
 		_, _ = rand.Read(b)
 		p := strings.ToUpper(hex.EncodeToString(b))
 		plain[i] = p

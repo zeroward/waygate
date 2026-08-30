@@ -39,10 +39,10 @@ type Session struct {
 	User         *User
 	PendingUser  *User
 	PendingNext  string
-	TOTPSecret   string
-	TOTPURL      string
-	TOTPQR       string
-	TOTPCodes    []string
+	TOTPSecret   string   `json:"-"`
+	TOTPURL      string   `json:"-"`
+	TOTPQR       string   `json:"-"`
+	TOTPCodes    []string `json:"-"`
 	WebAuthnJSON []byte
 	WebAuthnName string
 	WebAuthnNext string
@@ -95,7 +95,12 @@ CREATE TABLE IF NOT EXISTS http_sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_http_sessions_expiry ON http_sessions(expiry);
 `)
-	return err
+	if err != nil {
+		return err
+	}
+	_, _ = db.Exec(`ALTER TABLE http_sessions ADD COLUMN user_id INTEGER`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_http_sessions_user ON http_sessions(user_id)`)
+	return nil
 }
 
 func (s *Store) loop() {
@@ -209,9 +214,36 @@ func (s *Store) save(sess *Session) {
 	if err != nil {
 		return
 	}
-	_, _ = s.db.Exec(`INSERT INTO http_sessions (id, data, expiry, created_at) VALUES (?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET data = excluded.data, expiry = excluded.expiry`,
-		sess.ID, string(blob), sess.Expiry.UTC().Format(time.RFC3339), sess.Created.UTC().Format(time.RFC3339))
+	var uid any
+	if sess.User != nil {
+		uid = sess.User.ID
+	}
+	_, _ = s.db.Exec(`INSERT INTO http_sessions (id, data, expiry, created_at, user_id) VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET data = excluded.data, expiry = excluded.expiry, user_id = excluded.user_id`,
+		sess.ID, string(blob), sess.Expiry.UTC().Format(time.RFC3339), sess.Created.UTC().Format(time.RFC3339), uid)
+}
+
+func (s *Store) RevokeUser(userID uint32, except string) {
+	if userID == 0 {
+		return
+	}
+	s.mu.Lock()
+	for id, sess := range s.items {
+		if id == except || sess == nil || sess.User == nil || sess.User.ID != userID {
+			continue
+		}
+		sess.destroyed = true
+		delete(s.items, id)
+	}
+	s.mu.Unlock()
+	if s.db == nil {
+		return
+	}
+	if except == "" {
+		_, _ = s.db.Exec(`DELETE FROM http_sessions WHERE user_id = ?`, userID)
+		return
+	}
+	_, _ = s.db.Exec(`DELETE FROM http_sessions WHERE user_id = ? AND id != ?`, userID, except)
 }
 
 func (s *Store) deleteID(id string) {

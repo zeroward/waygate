@@ -43,6 +43,7 @@ func testWebKB(t *testing.T, kbPath string) (*httptest.Server, *Server) {
 		StatusCache:       20 * time.Second,
 		LeaderboardSize:   20,
 		BotPrefixes:       []string{"RNDBOT"},
+		GMMinLevel:        1,
 		RateWindow:        15 * time.Minute,
 		RateRegister:      50,
 		RateLogin:         50,
@@ -50,6 +51,7 @@ func testWebKB(t *testing.T, kbPath string) (*httptest.Server, *Server) {
 		RateReset:         50,
 		RateKB:            50,
 		RateTickets:       50,
+		RateDownloads:     50,
 		HowToConnectFile:  "",
 		AccountMode:       "sql",
 		DownloadsDir:      t.TempDir(),
@@ -424,9 +426,22 @@ func TestRegisterRequiresEmailVerifyWhenSMTP(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	vbody, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || !strings.Contains(string(vbody), "Confirm your email") {
+		t.Fatalf("verify GET %d %s", res.StatusCode, vbody)
+	}
+	csrf := extractCSRF(string(vbody))
+	if csrf == "" {
+		t.Fatal("verify form csrf")
+	}
+	res, err = client.PostForm(ts.URL+m[0], url.Values{"csrf_token": {csrf}})
+	if err != nil {
+		t.Fatal(err)
+	}
 	res.Body.Close()
 	if res.StatusCode != http.StatusSeeOther {
-		t.Fatalf("verify %d", res.StatusCode)
+		t.Fatalf("verify POST %d", res.StatusCode)
 	}
 
 	follow := &http.Client{Jar: jar}
@@ -474,7 +489,8 @@ func TestDownloadServesCatalogedZip(t *testing.T) {
 		DefaultExpansion: 2, PasswordMinLength: 8, CaptchaProvider: "none",
 		StatusCache: 20 * time.Second, LeaderboardSize: 20, BotPrefixes: []string{"RNDBOT"},
 		RateWindow: 15 * time.Minute, RateRegister: 50, RateLogin: 50, RateContact: 50, RateReset: 50,
-		DownloadsDir: root, DownloadsCatalog: filepath.Join(root, "catalog.json"),
+		RateDownloads: 50,
+		DownloadsDir:  root, DownloadsCatalog: filepath.Join(root, "catalog.json"),
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	acc := account.New(cfg, nil, nil)
@@ -534,5 +550,59 @@ func TestDownloadServesCatalogedZip(t *testing.T) {
 	res404.Body.Close()
 	if res404.StatusCode != 404 {
 		t.Fatalf("unknown id status %d", res404.StatusCode)
+	}
+}
+
+func TestDownloadRateLimit(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "mods"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "mods", "x.zip"), []byte("PK"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "catalog.json"), []byte(`{"items":[{"id":"mod-x","title":"X","category":"mods","file":"mods/x.zip"}]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg := config.Config{
+		DemoMode: true, RealmName: "Icecrown", CoreName: "AzerothCore WotLK 3.3.5a",
+		PublicHost: "127.0.0.1", PublicAuthPort: 3724, PublicWorldPort: 28085,
+		DefaultExpansion: 2, PasswordMinLength: 8, CaptchaProvider: "none",
+		StatusCache: 20 * time.Second, LeaderboardSize: 20, BotPrefixes: []string{"RNDBOT"},
+		RateWindow: 15 * time.Minute, RateRegister: 50, RateLogin: 50, RateContact: 50, RateReset: 50,
+		RateDownloads: 2,
+		DownloadsDir:  root, DownloadsCatalog: filepath.Join(root, "catalog.json"),
+	}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	acc := account.New(cfg, nil, nil)
+	if err := acc.Create(context.Background(), "HeroOne", "Abcd1234", "h@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	srv, err := New(cfg, log, acc, status.New(cfg, nil, nil), captcha.New(cfg), mail.New(cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	jar, _ := cookiejar.New(nil)
+	c := &http.Client{Jar: jar}
+	login(t, c, ts.URL, "HeroOne", "Abcd1234")
+	for i := 0; i < 2; i++ {
+		res, err := c.Get(ts.URL + "/downloads/mod-x")
+		if err != nil {
+			t.Fatal(err)
+		}
+		res.Body.Close()
+		if res.StatusCode != 200 {
+			t.Fatalf("hit %d status %d", i, res.StatusCode)
+		}
+	}
+	res, err := c.Get(ts.URL + "/downloads/mod-x")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusTooManyRequests {
+		t.Fatalf("want 429 got %d", res.StatusCode)
 	}
 }

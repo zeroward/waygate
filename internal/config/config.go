@@ -71,14 +71,15 @@ type Config struct {
 	ContactEmail string
 	DiscordURL   string
 
-	RateWindow   time.Duration
-	RateRegister int
-	RateLogin    int
-	RateContact  int
-	RateReset    int
-	RateKB       int
-	RateUnstuck  int
-	RateTickets  int
+	RateWindow    time.Duration
+	RateRegister  int
+	RateLogin     int
+	RateContact   int
+	RateReset     int
+	RateKB        int
+	RateUnstuck   int
+	RateTickets   int
+	RateDownloads int
 
 	WowCredentialsMax int
 	WebAuthnRPID      string
@@ -110,13 +111,16 @@ type Config struct {
 func Load() (Config, error) {
 	_ = LoadDotEnv(".env")
 
+	siteURL := strings.TrimRight(env("SITE_URL", "http://127.0.0.1:3080"), "/")
+	secureDefault := strings.HasPrefix(strings.ToLower(siteURL), "https://")
+
 	c := Config{
 		ListenAddr:         env("LISTEN_ADDR", ":3080"),
 		DemoMode:           envBool("DEMO_MODE", false),
 		LogLevel:           strings.ToLower(env("LOG_LEVEL", "info")),
 		TrustProxy:         envBool("TRUST_PROXY", false),
-		SiteURL:            strings.TrimRight(env("SITE_URL", "http://127.0.0.1:3080"), "/"),
-		SessionSecure:      envBool("SESSION_SECURE_COOKIE", false),
+		SiteURL:            siteURL,
+		SessionSecure:      envBool("SESSION_SECURE_COOKIE", secureDefault),
 		SessionTTL:         time.Duration(envInt("SESSION_TTL_HOURS", 24)) * time.Hour,
 		CoreName:           env("CORE_NAME", "AzerothCore WotLK 3.3.5a"),
 		RealmName:          env("REALM_NAME", "Icecrown"),
@@ -145,7 +149,7 @@ func Load() (Config, error) {
 		SOAPTimeout:        time.Duration(envInt("SOAP_TIMEOUT_SECONDS", 8)) * time.Second,
 		AccountMode:        strings.ToLower(env("ACCOUNT_CREATE_MODE", "auto")),
 		HideGM:             envBool("HIDE_GM", false),
-		GMMinLevel:         uint8(envInt("GM_MIN_LEVEL", 1)),
+		GMMinLevel:         uint8(envInt("GM_MIN_LEVEL", 3)),
 		StatusCache:        time.Duration(envInt("STATUS_CACHE_SECONDS", 20)) * time.Second,
 		LeaderboardSize:    envInt("LEADERBOARD_SIZE", 20),
 		RequireUniqueEmail: envBool("REQUIRE_UNIQUE_EMAIL", true),
@@ -171,6 +175,7 @@ func Load() (Config, error) {
 		RateKB:             envInt("RATE_LIMIT_KB", 20),
 		RateUnstuck:        envInt("RATE_LIMIT_UNSTUCK", 5),
 		RateTickets:        envInt("RATE_LIMIT_TICKETS", 5),
+		RateDownloads:      envInt("RATE_LIMIT_DOWNLOADS", 8),
 		WowCredentialsMax:  envInt("WOW_CREDENTIALS_MAX", 5),
 		WebAuthnRPID:       strings.TrimSpace(env("WEBAUTHN_RP_ID", "")),
 		WGEnabled:          envBool("WG_ENABLED", false),
@@ -247,7 +252,7 @@ func (c *Config) validate() error {
 		return fmt.Errorf("LEADERBOARD_SIZE must be 1–100")
 	}
 	if c.GMMinLevel == 0 {
-		c.GMMinLevel = 1
+		c.GMMinLevel = 3
 	}
 	if c.GMMinLevel > 4 {
 		return fmt.Errorf("GM_MIN_LEVEL must be 1–4")
@@ -260,6 +265,9 @@ func (c *Config) validate() error {
 	}
 	if c.RateTickets < 1 {
 		c.RateTickets = 5
+	}
+	if c.RateDownloads < 1 {
+		c.RateDownloads = 8
 	}
 	if c.WowCredentialsMax < 1 {
 		c.WowCredentialsMax = 5
