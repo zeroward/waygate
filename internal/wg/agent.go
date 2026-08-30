@@ -158,14 +158,15 @@ func (a *Agent) ensureLink() error {
 }
 
 func (a *Agent) ensureAddr() error {
-	if err := a.run("ip", "addr", "show", "dev", a.Iface); err == nil {
-		// add is idempotent-enough; ignore "File exists"
-		if err := a.run("ip", "addr", "add", a.ServerAddr, "dev", a.Iface); err != nil && !strings.Contains(err.Error(), "File exists") {
-			return err
-		}
+	err := a.run("ip", "addr", "add", a.ServerAddr, "dev", a.Iface)
+	if err == nil {
 		return nil
 	}
-	return a.run("ip", "addr", "add", a.ServerAddr, "dev", a.Iface)
+	msg := err.Error()
+	if strings.Contains(msg, "File exists") || strings.Contains(msg, "already assigned") {
+		return nil
+	}
+	return err
 }
 
 func (a *Agent) ensureForward() error {
