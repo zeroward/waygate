@@ -17,12 +17,14 @@ var ErrPendingNotFound = errors.New("verification link is invalid or expired")
 const pendingTTL = 24 * time.Hour
 
 type PendingSignup struct {
-	Username  string
-	Email     string
-	Salt      []byte
-	Verifier  []byte
-	Expansion uint8
-	ExpiresAt time.Time
+	Username     string
+	Email        string
+	Salt         []byte
+	Verifier     []byte
+	Expansion    uint8
+	ExpiresAt    time.Time
+	PasswordHash string
+	WowUsername  string
 }
 
 func (s *Store) migratePending() error {
@@ -40,7 +42,12 @@ CREATE TABLE IF NOT EXISTS pending_accounts (
 CREATE INDEX IF NOT EXISTS idx_pending_email ON pending_accounts(email);
 CREATE INDEX IF NOT EXISTS idx_pending_exp ON pending_accounts(expires_at);
 `)
-	return err
+	if err != nil {
+		return err
+	}
+	_, _ = s.db.Exec(`ALTER TABLE pending_accounts ADD COLUMN password_hash TEXT NOT NULL DEFAULT ''`)
+	_, _ = s.db.Exec(`ALTER TABLE pending_accounts ADD COLUMN wow_username TEXT NOT NULL DEFAULT ''`)
+	return nil
 }
 
 func (s *Store) prunePending(ctx context.Context) {
@@ -64,8 +71,12 @@ func (s *Store) PutPending(ctx context.Context, p PendingSignup) (string, error)
 	now := time.Now().UTC()
 	exp := now.Add(pendingTTL)
 	_, _ = s.db.ExecContext(ctx, `DELETE FROM pending_accounts WHERE username = ? OR LOWER(email) = LOWER(?)`, p.Username, p.Email)
-	_, err := s.db.ExecContext(ctx, `INSERT INTO pending_accounts (token_hash, username, email, salt, verifier, expansion, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		hash, p.Username, p.Email, p.Salt, p.Verifier, int(p.Expansion), now.Format(time.RFC3339), exp.Format(time.RFC3339))
+	wowUser := strings.ToUpper(strings.TrimSpace(p.WowUsername))
+	if wowUser == "" {
+		wowUser = p.Username
+	}
+	_, err := s.db.ExecContext(ctx, `INSERT INTO pending_accounts (token_hash, username, email, salt, verifier, expansion, created_at, expires_at, password_hash, wow_username) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		hash, p.Username, p.Email, p.Salt, p.Verifier, int(p.Expansion), now.Format(time.RFC3339), exp.Format(time.RFC3339), p.PasswordHash, wowUser)
 	if err != nil {
 		return "", err
 	}
@@ -80,11 +91,11 @@ func (s *Store) ConsumePending(ctx context.Context, token string) (PendingSignup
 	}
 	sum := sha256.Sum256([]byte(token))
 	hash := hex.EncodeToString(sum[:])
-	row := s.db.QueryRowContext(ctx, `SELECT username, email, salt, verifier, expansion, expires_at FROM pending_accounts WHERE token_hash = ?`, hash)
+	row := s.db.QueryRowContext(ctx, `SELECT username, email, salt, verifier, expansion, expires_at, password_hash, wow_username FROM pending_accounts WHERE token_hash = ?`, hash)
 	var p PendingSignup
 	var exp string
 	var expn int
-	err := row.Scan(&p.Username, &p.Email, &p.Salt, &p.Verifier, &expn, &exp)
+	err := row.Scan(&p.Username, &p.Email, &p.Salt, &p.Verifier, &expn, &exp, &p.PasswordHash, &p.WowUsername)
 	if errors.Is(err, sql.ErrNoRows) {
 		return PendingSignup{}, ErrPendingNotFound
 	}

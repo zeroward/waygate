@@ -80,6 +80,8 @@ type Config struct {
 	RateUnstuck  int
 	RateTickets  int
 
+	WowCredentialsMax int
+
 	HowToConnectFile string
 	KBPath           string
 	DownloadsDir     string
@@ -155,6 +157,7 @@ func Load() (Config, error) {
 		RateKB:             envInt("RATE_LIMIT_KB", 20),
 		RateUnstuck:        envInt("RATE_LIMIT_UNSTUCK", 5),
 		RateTickets:        envInt("RATE_LIMIT_TICKETS", 5),
+		WowCredentialsMax:  envInt("WOW_CREDENTIALS_MAX", 5),
 		HowToConnectFile:   env("HOW_TO_CONNECT_FILE", "content/how-to-connect.md"),
 		KBPath:             env("KB_PATH", "data/kb.sqlite"),
 		DownloadsDir:       env("DOWNLOADS_DIR", "downloads"),
@@ -217,6 +220,12 @@ func (c *Config) validate() error {
 	}
 	if c.RateTickets < 1 {
 		c.RateTickets = 5
+	}
+	if c.WowCredentialsMax < 1 {
+		c.WowCredentialsMax = 5
+	}
+	if c.WowCredentialsMax > 20 {
+		c.WowCredentialsMax = 20
 	}
 	return nil
 }

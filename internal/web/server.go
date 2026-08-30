@@ -17,6 +17,7 @@ import (
 	"github.com/zeroward/waygate/internal/captcha"
 	"github.com/zeroward/waygate/internal/config"
 	"github.com/zeroward/waygate/internal/downloads"
+	"github.com/zeroward/waygate/internal/identity"
 	"github.com/zeroward/waygate/internal/kb"
 	"github.com/zeroward/waygate/internal/mail"
 	"github.com/zeroward/waygate/internal/ratelimit"
@@ -42,6 +43,7 @@ type Server struct {
 	unstuckRL *ratelimit.Limiter
 	ticketRL  *ratelimit.Limiter
 	kb        *kb.Store
+	id        *identity.Service
 	downloads *downloads.Store
 	armory    *armory.Service
 }
@@ -88,6 +90,17 @@ func New(
 	if err != nil {
 		return nil, err
 	}
+	idStore, err := identity.NewStore(kbStore.SQL())
+	if err != nil {
+		_ = kbStore.Close()
+		return nil, err
+	}
+	idSvc := identity.New(idStore, accounts, cfg.WowCredentialsMax)
+	if !cfg.DemoMode {
+		if err := idSvc.MigrateFromAC(context.Background(), log); err != nil {
+			log.Error("identity migrate", "err", err)
+		}
+	}
 	s := &Server{
 		cfg:       cfg,
 		log:       log,
@@ -105,6 +118,7 @@ func New(
 		unstuckRL: ratelimit.New(cfg.RateWindow, unstuckMax),
 		ticketRL:  ratelimit.New(cfg.RateWindow, ticketMax),
 		kb:        kbStore,
+		id:        idSvc,
 		downloads: downloads.New(cfg.DownloadsDir, cfg.DownloadsCatalog),
 		armory:    armory.New(cfg, st.Database(), log),
 	}
@@ -139,9 +153,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /armory/{name}", s.armoryInspect)
 	mux.HandleFunc("GET /account", s.accountGET)
 	mux.HandleFunc("POST /account/login", s.loginPOST)
+	mux.HandleFunc("POST /account/login/totp", s.totpLoginPOST)
+	mux.HandleFunc("POST /account/totp/start", s.totpStartPOST)
+	mux.HandleFunc("POST /account/totp/confirm", s.totpConfirmPOST)
+	mux.HandleFunc("POST /account/totp/disable", s.totpDisablePOST)
 	mux.HandleFunc("POST /account/logout", s.logoutPOST)
 	mux.HandleFunc("POST /account/password", s.passwordPOST)
 	mux.HandleFunc("POST /account/unstuck", s.unstuckPOST)
+	mux.HandleFunc("POST /account/wow", s.wowCredentialPOST)
 	mux.HandleFunc("GET /tickets", s.ticketsList)
 	mux.HandleFunc("GET /tickets/new", s.ticketsNew)
 	mux.HandleFunc("POST /tickets", s.ticketsCreate)

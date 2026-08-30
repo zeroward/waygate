@@ -752,19 +752,25 @@ func (s *Service) IssueResetToken(username string) (plain string, err error) {
 }
 
 func (s *Service) ConsumeResetToken(token, newPassword string, ctx context.Context) error {
+	user, err := s.ConsumeResetTokenUser(token)
+	if err != nil {
+		return err
+	}
+	return s.ResetPassword(ctx, user, newPassword)
+}
+
+func (s *Service) ConsumeResetTokenUser(token string) (string, error) {
 	sum := sha256.Sum256([]byte(token))
 	key := hex.EncodeToString(sum[:])
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	rec, ok := s.reset[key]
 	if !ok || rec.Used || time.Now().After(rec.Expiry) {
-		s.mu.Unlock()
-		return ErrResetToken
+		return "", ErrResetToken
 	}
 	rec.Used = true
 	s.reset[key] = rec
-	user := rec.Username
-	s.mu.Unlock()
-	return s.ResetPassword(ctx, user, newPassword)
+	return rec.Username, nil
 }
 
 func (s *Service) updateEmailExpansion(ctx context.Context, username, email string, expansion uint8) error {

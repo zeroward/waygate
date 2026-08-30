@@ -29,7 +29,7 @@ func (s *Server) ticketsNew(w http.ResponseWriter, r *http.Request) {
 	if sess == nil {
 		return
 	}
-	chars, _ := s.status.AccountCharacters(r.Context(), sess.User.ID)
+	chars, _ := s.status.AccountCharactersMany(r.Context(), s.wowAccountIDs(r.Context(), sess.User.ID))
 	s.view(w, r, "ticket_new.html", "New ticket", "tickets", map[string]any{
 		"Categories": kb.TicketCategories,
 		"Characters": chars,
@@ -83,7 +83,7 @@ func (s *Server) ticketsCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ticketFormError(w http.ResponseWriter, r *http.Request, t kb.Ticket, body, msg string) {
-	chars, _ := s.status.AccountCharacters(r.Context(), t.AccountID)
+	chars, _ := s.status.AccountCharactersMany(r.Context(), s.wowAccountIDs(r.Context(), t.AccountID))
 	w.WriteHeader(http.StatusBadRequest)
 	s.view(w, r, "ticket_new.html", "New ticket", "tickets", map[string]any{
 		"Categories": kb.TicketCategories,
@@ -213,7 +213,7 @@ func (s *Server) loadOwnTicket(w http.ResponseWriter, r *http.Request, accountID
 }
 
 func (s *Server) ownedCharacter(r *http.Request, accountID, guid uint32) (status.Character, bool) {
-	list, err := s.status.AccountCharacters(r.Context(), accountID)
+	list, err := s.status.AccountCharactersMany(r.Context(), s.wowAccountIDs(r.Context(), accountID))
 	if err != nil {
 		return status.Character{}, false
 	}

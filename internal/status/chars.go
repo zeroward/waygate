@@ -3,6 +3,7 @@ package status
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/zeroward/waygate/internal/wow"
 )
@@ -24,22 +25,35 @@ type Character struct {
 }
 
 func (c *Cache) AccountCharacters(ctx context.Context, accountID uint32) ([]Character, error) {
+	if accountID == 0 {
+		return c.AccountCharactersMany(ctx, nil)
+	}
+	return c.AccountCharactersMany(ctx, []uint32{accountID})
+}
+
+func (c *Cache) AccountCharactersMany(ctx context.Context, accountIDs []uint32) ([]Character, error) {
 	if c.cfg.DemoMode || c.db == nil {
 		return demoCharacters(), nil
 	}
-	if accountID == 0 {
+	if len(accountIDs) == 0 {
 		return nil, nil
+	}
+	ph := make([]string, len(accountIDs))
+	args := make([]any, len(accountIDs))
+	for i, id := range accountIDs {
+		ph[i] = "?"
+		args[i] = id
 	}
 	q := fmt.Sprintf(`
 		SELECT c.`+"`guid`"+`, c.`+"`name`"+`, c.`+"`level`"+`, c.`+"`race`"+`, c.`+"`class`"+`,
 		       c.`+"`money`"+`, c.`+"`totaltime`"+`, c.`+"`logout_time`"+`,
 		       c.`+"`map`"+`, c.`+"`zone`"+`, c.`+"`online`"+`
 		FROM %s c
-		WHERE c.`+"`account`"+` = ? AND c.`+"`deleteDate`"+` IS NULL
+		WHERE c.`+"`account`"+` IN (%s) AND c.`+"`deleteDate`"+` IS NULL
 		ORDER BY c.`+"`online`"+` DESC, c.`+"`level`"+` DESC, c.`+"`name`"+` ASC`,
-		c.db.QChar("characters"),
+		c.db.QChar("characters"), strings.Join(ph, ","),
 	)
-	rows, err := c.db.SQL.QueryContext(ctx, q, accountID)
+	rows, err := c.db.SQL.QueryContext(ctx, q, args...)
 	if err != nil {
 		return nil, err
 	}

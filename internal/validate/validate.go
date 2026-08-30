@@ -9,10 +9,11 @@ import (
 )
 
 const (
-	UsernameMin = 3
-	UsernameMax = 16
-	PasswordMax = 16 // WoW 3.3.5a client limit
-	EmailMax    = 255
+	UsernameMin     = 3
+	UsernameMax     = 16
+	PasswordMax     = 16 // WoW 3.3.5a client limit
+	SitePasswordMax = 128
+	EmailMax        = 255
 )
 
 var usernameRe = regexp.MustCompile(`^[A-Za-z0-9]{3,16}$`)
@@ -42,6 +43,37 @@ func Password(s, username string, minLen int) error {
 	}
 	var letter, digit bool
 	for _, r := range s {
+		if unicode.IsLetter(r) {
+			letter = true
+		}
+		if unicode.IsDigit(r) {
+			digit = true
+		}
+	}
+	if !letter || !digit {
+		return fmt.Errorf("password must include at least one letter and one number")
+	}
+	if username != "" && strings.EqualFold(s, username) {
+		return fmt.Errorf("password must not match username")
+	}
+	return nil
+}
+
+func SitePassword(s, username string, minLen int) error {
+	if minLen < 8 {
+		minLen = 8
+	}
+	if len(s) < minLen || len(s) > SitePasswordMax {
+		return fmt.Errorf("password must be %d–%d characters", minLen, SitePasswordMax)
+	}
+	if strings.ContainsAny(s, "\"\\\x00\r\n") {
+		return fmt.Errorf("password contains disallowed characters")
+	}
+	var letter, digit bool
+	for _, r := range s {
+		if r < 32 || r > 126 {
+			return fmt.Errorf("password must be printable ASCII")
+		}
 		if unicode.IsLetter(r) {
 			letter = true
 		}

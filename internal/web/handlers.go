@@ -11,6 +11,7 @@ import (
 
 	"github.com/zeroward/waygate/internal/account"
 	"github.com/zeroward/waygate/internal/downloads"
+	"github.com/zeroward/waygate/internal/identity"
 	"github.com/zeroward/waygate/internal/kb"
 	"github.com/zeroward/waygate/internal/session"
 	"github.com/zeroward/waygate/internal/status"
@@ -169,18 +170,25 @@ func (s *Server) registerPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.mail.Enabled() {
+		if taken, err := s.id.UsernameTaken(r.Context(), form.Username); err != nil {
+			fail("could not create the account right now")
+			return
+		} else if taken {
+			fail(identity.ErrTaken.Error())
+			return
+		}
+		if et, err := s.id.EmailTaken(r.Context(), form.Email); err != nil {
+			fail("could not create the account right now")
+			return
+		} else if et {
+			fail(identity.ErrEmailTaken.Error())
+			return
+		}
 		if taken, err := s.accounts.UsernameTaken(r.Context(), form.Username); err != nil {
 			fail("could not create the account right now")
 			return
 		} else if taken {
 			fail(account.ErrTaken.Error())
-			return
-		}
-		if et, err := s.accounts.EmailTaken(r.Context(), form.Email); err != nil {
-			fail("could not create the account right now")
-			return
-		} else if et {
-			fail(account.ErrEmailTaken.Error())
 			return
 		}
 		if s.kb != nil && (s.kb.HasPendingUsername(r.Context(), form.Username) || s.kb.HasPendingEmail(r.Context(), form.Email)) {
@@ -191,6 +199,11 @@ func (s *Server) registerPOST(w http.ResponseWriter, r *http.Request) {
 			}
 			return
 		}
+		siteHash, err := identity.HashPassword(pass)
+		if err != nil {
+			fail("could not create the account right now")
+			return
+		}
 		salt, verifier, err := account.SignupVerifier(form.Username, pass)
 		if err != nil {
 			fail("could not create the account right now")
@@ -198,6 +211,7 @@ func (s *Server) registerPOST(w http.ResponseWriter, r *http.Request) {
 		}
 		token, err := s.kb.PutPending(r.Context(), kb.PendingSignup{
 			Username: form.Username, Email: form.Email, Salt: salt, Verifier: verifier, Expansion: wotlkExpansion,
+			PasswordHash: siteHash, WowUsername: form.Username,
 		})
 		if err != nil {
 			s.log.Error("register pending", "err", err, "user", form.Username)
@@ -218,30 +232,38 @@ func (s *Server) registerPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, "/account", "info", "Check your email to activate the account. It cannot log in in-game or here until you confirm.")
 		return
 	}
-	if err := s.accounts.Create(r.Context(), form.Username, pass, form.Email, wotlkExpansion); err != nil {
+	u, err := s.id.Register(r.Context(), form.Username, pass, form.Email, form.Username, pass, wotlkExpansion)
+	if err != nil {
 		switch {
-		case errors.Is(err, account.ErrTaken):
-			fail(err.Error())
-		case errors.Is(err, account.ErrEmailTaken):
-			fail(err.Error())
+		case errors.Is(err, identity.ErrTaken), errors.Is(err, account.ErrTaken):
+			fail(identity.ErrTaken.Error())
+		case errors.Is(err, identity.ErrEmailTaken), errors.Is(err, account.ErrEmailTaken):
+			fail(identity.ErrEmailTaken.Error())
 		default:
 			s.log.Error("register", "err", err, "user", form.Username)
 			fail("could not create the account right now")
 		}
 		return
 	}
-	acc, err := s.accounts.Authenticate(r.Context(), form.Username, pass)
-	sess := s.sessions.GetOrCreate(w, r)
-	if err == nil {
-		sess = s.sessions.Regenerate(w, sess)
-		sess.User = toUser(acc)
-	}
+	sess := s.sessions.Regenerate(w, s.sessions.GetOrCreate(w, r))
+	sess.User = toSiteUser(u)
 	sess.SetFlash("success", "Account created. Set your realmlist and enter Azeroth.")
 	http.Redirect(w, r, "/account", http.StatusSeeOther)
 }
 
-func toUser(a *account.Account) *session.User {
-	return &session.User{ID: a.ID, Username: a.Username, Email: a.Email, GMLevel: a.GMLevel}
+func toSiteUser(u identity.User) *session.User {
+	return &session.User{ID: u.ID, Username: u.Username, Email: u.Email, GMLevel: u.StaffLevel}
+}
+
+func (s *Server) wowAccountIDs(ctx context.Context, userID uint32) []uint32 {
+	if s.id == nil {
+		return nil
+	}
+	ids, err := s.id.AccountIDs(ctx, userID)
+	if err != nil {
+		return nil
+	}
+	return ids
 }
 
 func (s *Server) requireStaff(w http.ResponseWriter, r *http.Request) *session.Session {
@@ -450,9 +472,10 @@ func (s *Server) staffCreatePOST(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if err := s.accounts.Create(r.Context(), user, pass, email, wotlkExpansion); err != nil {
+	if _, err := s.id.Register(r.Context(), user, pass, email, user, pass, wotlkExpansion); err != nil {
 		switch {
-		case errors.Is(err, account.ErrTaken), errors.Is(err, account.ErrEmailTaken):
+		case errors.Is(err, identity.ErrTaken), errors.Is(err, account.ErrTaken),
+			errors.Is(err, identity.ErrEmailTaken), errors.Is(err, account.ErrEmailTaken):
 			s.flashRedirect(w, r, "/staff", "error", err.Error())
 		default:
 			s.log.Error("staff create", "err", err, "actor", s.sessions.GetOrCreate(w, r).User.Username, "target", user)
@@ -641,16 +664,68 @@ func (s *Server) accountGET(w http.ResponseWriter, r *http.Request) {
 	sess := s.sessions.GetOrCreate(w, r)
 	var chars []status.Character
 	if sess.User != nil {
-		list, err := s.status.AccountCharacters(r.Context(), sess.User.ID)
+		list, err := s.status.AccountCharactersMany(r.Context(), s.wowAccountIDs(r.Context(), sess.User.ID))
 		if err != nil {
-			s.log.Error("account characters", "err", err, "account", sess.User.ID)
+			s.log.Error("account characters", "err", err, "user", sess.User.ID)
 		} else {
 			chars = list
 		}
 	}
+	var links []identity.Link
+	if sess.User != nil && s.id != nil {
+		links, _ = s.id.Links(r.Context(), sess.User.ID)
+	}
+	totpOn := false
+	if sess.User != nil {
+		totpOn = s.id.TOTPEnabled(r.Context(), sess.User.ID)
+	}
 	s.view(w, r, "account.html", "Account", "account", map[string]any{
-		"Characters": chars,
+		"Characters":  chars,
+		"WowLogins":   links,
+		"WowMax":      s.cfg.WowCredentialsMax,
+		"TOTPOn":      totpOn,
+		"TOTPPending": sess.PendingUser != nil && sess.User == nil,
+		"TOTPSecret":  sess.TOTPSecret,
+		"TOTPURL":     sess.TOTPURL,
+		"TOTPCodes":   sess.TOTPCodes,
 	})
+}
+
+func (s *Server) wowCredentialPOST(w http.ResponseWriter, r *http.Request) {
+	sess := s.requireLogin(w, r)
+	if sess == nil {
+		return
+	}
+	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
+		return
+	}
+	user := strings.TrimSpace(r.FormValue("wow_username"))
+	pass := r.FormValue("wow_password")
+	if pass != r.FormValue("wow_password_confirm") {
+		s.flashRedirect(w, r, "/account", "error", "WoW passwords do not match")
+		return
+	}
+	if err := validate.Username(user); err != nil {
+		s.flashRedirect(w, r, "/account", "error", err.Error())
+		return
+	}
+	if err := validate.Password(pass, user, s.cfg.PasswordMinLength); err != nil {
+		s.flashRedirect(w, r, "/account", "error", err.Error())
+		return
+	}
+	if _, err := s.id.AddCredential(r.Context(), sess.User.ID, user, pass, "", wotlkExpansion); err != nil {
+		switch {
+		case errors.Is(err, identity.ErrTaken), errors.Is(err, account.ErrTaken):
+			s.flashRedirect(w, r, "/account", "error", "that client username is taken")
+		case errors.Is(err, identity.ErrTooMany):
+			s.flashRedirect(w, r, "/account", "error", "you already have the maximum number of WoW client logins")
+		default:
+			s.log.Error("wow credential", "err", err, "user", sess.User.Username)
+			s.flashRedirect(w, r, "/account", "error", "could not create the client login")
+		}
+		return
+	}
+	s.flashRedirect(w, r, "/account", "success", "Added WoW client login "+strings.ToUpper(user)+". Use it in the 3.3.5a client.")
 }
 
 func (s *Server) unstuckPOST(w http.ResponseWriter, r *http.Request) {
@@ -670,7 +745,7 @@ func (s *Server) unstuckPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, "/account", "error", "Character not found.")
 		return
 	}
-	res, err := s.status.Unstuck(r.Context(), sess.User.ID, uint32(guid))
+	res, err := s.status.UnstuckAny(r.Context(), s.wowAccountIDs(r.Context(), sess.User.ID), uint32(guid))
 	if err != nil {
 		switch {
 		case errors.Is(err, status.ErrCharOnline):
@@ -711,7 +786,7 @@ func (s *Server) loginPOST(w http.ResponseWriter, r *http.Request) {
 	}
 	user := strings.TrimSpace(r.FormValue("username"))
 	pass := r.FormValue("password")
-	acc, err := s.accounts.Authenticate(r.Context(), user, pass)
+	u, err := s.id.Authenticate(r.Context(), user, pass)
 	if err != nil {
 		if errors.Is(err, account.ErrBanned) {
 			s.flashRedirect(w, r, "/account", "error", "This account is suspended.")
@@ -724,9 +799,17 @@ func (s *Server) loginPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, "/account", "error", "Invalid username or password.")
 		return
 	}
-	sess := s.sessions.Regenerate(w, s.sessions.GetOrCreate(w, r))
-	sess.User = toUser(acc)
-	sess.SetFlash("success", "Welcome back, "+acc.Username+".")
+	sess := s.sessions.GetOrCreate(w, r)
+	if s.id.TOTPEnabled(r.Context(), u.ID) {
+		sess.PendingUser = toSiteUser(u)
+		sess.PendingNext = r.FormValue("next")
+		sess.User = nil
+		s.flashRedirect(w, r, "/account", "info", "Enter the code from your authenticator app.")
+		return
+	}
+	sess = s.sessions.Regenerate(w, sess)
+	sess.User = toSiteUser(u)
+	sess.SetFlash("success", "Welcome back, "+u.Username+".")
 	http.Redirect(w, r, safeNext(r.FormValue("next")), http.StatusSeeOther)
 }
 
@@ -759,8 +842,13 @@ func (s *Server) passwordPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, "/account", "error", err.Error())
 		return
 	}
-	if err := s.accounts.ChangePassword(r.Context(), sess.User.Username, old, nw); err != nil {
-		if errors.Is(err, account.ErrBadPassword) {
+	cur, err := s.id.GetByID(r.Context(), sess.User.ID)
+	if err != nil {
+		s.flashRedirect(w, r, "/account", "error", "could not change password")
+		return
+	}
+	if err := s.id.ChangePassword(r.Context(), cur, old, nw); err != nil {
+		if errors.Is(err, identity.ErrBadPassword) {
 			s.flashRedirect(w, r, "/account", "error", "current password is incorrect")
 			return
 		}
@@ -768,7 +856,7 @@ func (s *Server) passwordPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, "/account", "error", "could not change password")
 		return
 	}
-	s.flashRedirect(w, r, "/account", "success", "Password updated. Use it at the login screen.")
+	s.flashRedirect(w, r, "/account", "success", "Website password updated. Your WoW client password is unchanged.")
 }
 
 func (s *Server) verifyGET(w http.ResponseWriter, r *http.Request) {
@@ -782,10 +870,27 @@ func (s *Server) verifyGET(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, "/account", "error", "That confirmation link is invalid or expired. Register again if you still need an account.")
 		return
 	}
-	if err := s.accounts.CreatePrepared(r.Context(), pending.Username, pending.Email, pending.Expansion, pending.Salt, pending.Verifier); err != nil {
+	hash := pending.PasswordHash
+	if hash == "" {
+		hash = "!migrated"
+	}
+	wowUser := pending.WowUsername
+	if wowUser == "" {
+		wowUser = pending.Username
+	}
+	u, err := s.id.Store().CreateUser(r.Context(), pending.Username, pending.Email, hash, 0)
+	if err != nil {
+		s.log.Error("verify user", "err", err, "user", pending.Username)
+		s.flashRedirect(w, r, "/account", "error", "Could not activate the account. The username may already be taken.")
+		return
+	}
+	if err := s.accounts.CreatePrepared(r.Context(), wowUser, pending.Email, pending.Expansion, pending.Salt, pending.Verifier); err != nil {
 		s.log.Error("verify create", "err", err, "user", pending.Username)
 		s.flashRedirect(w, r, "/account", "error", "Could not activate the account. The username may already be taken.")
 		return
+	}
+	if listed, err := s.accounts.GetListed(r.Context(), wowUser); err == nil {
+		_ = s.id.Store().Link(r.Context(), u.ID, listed.ID, wowUser)
 	}
 	s.flashRedirect(w, r, "/account", "success", "Email confirmed. You can log in on the website and in the 3.3.5a client.")
 }
@@ -812,7 +917,7 @@ func (s *Server) resetPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	email := strings.TrimSpace(r.FormValue("email"))
-	acc, err := s.accounts.FindByEmail(r.Context(), email)
+	acc, err := s.id.GetByEmail(r.Context(), email)
 	if err == nil {
 		token, err := s.accounts.IssueResetToken(acc.Username)
 		if err == nil {
@@ -857,7 +962,12 @@ func (s *Server) resetConfirmPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, r.URL.Path, "error", err.Error())
 		return
 	}
-	if err := s.accounts.ConsumeResetToken(token, nw, r.Context()); err != nil {
+	user, err := s.accounts.ConsumeResetTokenUser(token)
+	if err != nil {
+		s.flashRedirect(w, r, r.URL.Path, "error", "reset link is invalid or expired")
+		return
+	}
+	if err := s.id.SetPassword(r.Context(), user, nw); err != nil {
 		s.flashRedirect(w, r, r.URL.Path, "error", "reset link is invalid or expired")
 		return
 	}

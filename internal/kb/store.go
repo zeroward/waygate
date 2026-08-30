@@ -130,6 +130,8 @@ CREATE INDEX IF NOT EXISTS idx_staff_events_at ON staff_events(at DESC);
 	return s.migratePending()
 }
 
+func (s *Store) SQL() *sql.DB { return s.db }
+
 const articleCols = `textid, slug, title, body_markdown, summary, category, sort_order, published, created_by, updated_by, created_at, updated_at`
 
 func scanArticle(row interface{ Scan(dest ...any) error }) (Article, error) {
