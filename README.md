@@ -28,8 +28,13 @@ browser  →  Gatehouse (waygate) :3080
 | `acore_auth.account` | Username (uppercase), `salt` BINARY(32), `verifier` BINARY(32), email, expansion |
 | `acore_auth.account_access` | Hide GMs when `HIDE_GM=true` |
 | `acore_auth.realmlist` | Unused for public address — **public host/port come from env** so this host can publish world as **28085**, not 8085 |
-| `acore_characters.characters` | Online list, leaderboards, account character list; **UPDATE** for unstuck (hearth/homebind) |
+| `acore_characters.characters` | Online list, leaderboards, account character list; **UPDATE** for unstuck (hearth/homebind); last-saved position for Companion |
+| `acore_characters.character_queststatus` | Companion quest log |
+| `acore_characters.character_queststatus_rewarded` | Companion “already done” filter |
 | `acore_characters.character_homebind` | Inn bind used by Account → Unstuck |
+| `acore_world.quest_template` | Companion quest titles, objectives, zone routes |
+| `acore_world.quest_template_addon` | Companion chain order (prev/next, exclusive groups) |
+| `acore_world.quest_poi_points` | Companion nearby-quest ordering |
 | SOAP `executeCommand` | Preferred write path so the **core** generates SRP6 data |
 
 Website login verifies the password with the same SRP6 verifier the authserver uses. Website sessions are **not** in-game sessions.
@@ -88,6 +93,8 @@ N  = 0x894B645E89E1535BBDAD5B8B290650530801B18EBFBF5E8FAB3C82872A3E9BB7
 The home page lists **installed AzerothCore modules** by scanning `MODULES_DIR` (the same `modules/` tree worldserver compiles). Compose bind-mounts `AC_MODULES_DIR` from the host. Names also merge with `acore_world.module_string` when that table exists.
 
 **Downloads** (including file URLs) and the **Knowledge Base** (`/kb`) require a logged-in account of any level. Anonymous requests redirect to login. `/connect` redirects to `/kb/how-to-connect`. Editing requires GM 3+.
+
+**Companion** (`/companion`) is a second-monitor quest helper for characters on linked WoW logins. Pick a region and it lists leftover quests in a recommended order from this realm’s `quest_template` / `quest_template_addon` chains (plus nearby POI when present). Dailies, dungeons, and raids are skipped. It also shows the last-saved quest log. Not live GPS — worldserver writes the row on its save interval and on logout. Optional Wowhead quest links are outbound only (no scrape). Not a Zygor/Joana copy.
 
 Logged-in accounts with `account_access.gmlevel` ≥ `GM_MIN_LEVEL` get an **Admin panel**: list registrations (bots hidden by default), create player accounts, reset passwords via SOAP/SRP6, upload or remove **Downloads**, and set rank to **GM** (2) or **Admin** (3). Knowledge Base create/edit is **Admin (GM 3+) only**. Super GM (4 / console) cannot be granted from the site. You can only assign a rank below your own, you cannot change your own rank, and you cannot modify an account whose GM level is higher than yours.
 
@@ -181,7 +188,7 @@ See `.env.example` for the full list. Important variables:
 | `ACCOUNT_CREATE_MODE` | `auto` / `soap` / `sql` |
 | `BOT_USERNAME_PREFIXES` | Comma list, default `rndbot` |
 | `HIDE_GM` | Hide GM characters from leaderboards (default `false`) |
-| `GM_MIN_LEVEL` | Minimum `account_access.gmlevel` for the Admin panel at `/staff` (default 1) |
+| `GM_MIN_LEVEL` | Minimum `account_access.gmlevel` for the Admin panel at `/staff` (default 3) |
 | `STATUS_CACHE_SECONDS` | 15–30 recommended |
 | `CAPTCHA_PROVIDER` | `none` / `turnstile` / `hcaptcha` |
 | `REGISTER_KEY` | Optional invite key for public registration (admins can override on the Admin panel) |

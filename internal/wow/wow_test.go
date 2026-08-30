@@ -20,6 +20,21 @@ func TestGold(t *testing.T) {
 	}
 }
 
+func TestRaceMask(t *testing.T) {
+	if RaceMask(1) != 1 || RaceMask(2) != 2 || RaceMask(10) != 512 || RaceMask(11) != 1024 {
+		t.Fatalf("masks %d %d %d %d", RaceMask(1), RaceMask(2), RaceMask(10), RaceMask(11))
+	}
+	if RaceMask(0) != 0 {
+		t.Fatal("zero")
+	}
+}
+
+func TestClassMask(t *testing.T) {
+	if ClassMask(1) != 1 || ClassMask(2) != 2 || ClassMask(6) != 32 {
+		t.Fatalf("masks %d %d %d", ClassMask(1), ClassMask(2), ClassMask(6))
+	}
+}
+
 func TestLocation(t *testing.T) {
 	if got := Location(571, 210); got != "Icecrown · Northrend" {
 		t.Fatalf("icecrown %q", got)

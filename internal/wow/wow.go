@@ -75,6 +75,22 @@ func Faction(race uint8) string {
 	}
 }
 
+// RaceMask is the AllowableRaces bit for a chr_races id (Human=1 → bit 0).
+func RaceMask(race uint8) uint32 {
+	if race == 0 || race > 31 {
+		return 0
+	}
+	return 1 << (race - 1)
+}
+
+// ClassMask is the AllowableClasses bit for a chr_classes id (Warrior=1 → bit 0).
+func ClassMask(class uint8) uint32 {
+	if class == 0 || class > 31 {
+		return 0
+	}
+	return 1 << (class - 1)
+}
+
 func ExpansionName(v uint8) string {
 	switch v {
 	case 0:
