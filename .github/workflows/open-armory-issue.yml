@@ -1,0 +1,88 @@
+# One-shot: open the Armory follow-up issue. Idempotent if the title already exists.
+name: open-armory-issue
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/open-armory-issue.yml"
+
+permissions:
+  issues: write
+
+jobs:
+  open:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const title = "Armory: login-gated full inspect";
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100,
+            });
+            const hit = open.find((i) => i.title === title);
+            if (hit) {
+              core.info("already open: " + hit.html_url);
+              return;
+            }
+            for (const l of [
+              { name: "enhancement", color: "a2eeef", description: "New feature" },
+              { name: "alpha", color: "fbca04", description: "Pre-1.0 / not security-reviewed" },
+            ]) {
+              try {
+                await github.rest.issues.createLabel({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ...l,
+                });
+              } catch (e) {
+                if (e.status !== 422) throw e;
+              }
+            }
+            const { data: issue } = await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              labels: ["enhancement", "alpha"],
+              body: `Follow-up for **Gatehouse** (this repo). Login-gated full inspect. Do **not** vendor azerothcore-armory / ChromieCraft, no 3D model viewer, keep CSP \`script-src 'self'\`.
+
+            ## Product
+            - Nav: Armory (after Leaderboards)
+            - \`GET /armory\` — search by name; exclude \`rndbot*\` and deleted
+            - \`GET /armory/{name}\` — inspect (unique names on 3.3.5a)
+            - Anonymous → Sign in with \`next=\` (same as Downloads / KB)
+            - Link names from Account, Online, Leaderboards
+
+            ## Inspect tabs (\`?tab=\`, no extra JS)
+            1. **Sheet** — level, race, class, faction, guild, location, played, gold, logout/online, honor/arena points, HK. Unstuck stays on Account.
+            2. **Gear** — equipped slots 0–18 only (\`character_inventory.bag = 0\`). Names/quality from \`item_template\`. Optional plain Wowhead WotLK item links. **No bags/bank.**
+            3. **Talents** — both specs + glyphs (\`character_talent\`, \`character_glyphs\`)
+            4. **Achievements** — \`character_achievement\` + static WotLK name map (no DBC at runtime)
+            5. **PvP** — \`arena_team\` / \`arena_team_member\` (2s/3s/5s)
+
+            ## Data (SELECT only)
+            Characters: inventory, item_instance, talent, glyphs, achievement, guild, guild_member, arena_team, arena_team_member.
+            World: \`item_template\`.
+            Static JSON/Go maps for talent/glyph/achievement names. Short TTL cache like status.
+
+            ## Checklist
+            - [ ] \`GET /armory\` search (login, no bots)
+            - [ ] \`GET /armory/{name}\` sheet (guild, location, played, gold, PvP numbers)
+            - [ ] Link names from Account, Online, Leaderboards
+            - [ ] Equipped gear slots 0–18 + item_template names/quality (no bags)
+            - [ ] Dual-spec talents + glyphs
+            - [ ] Achievements list (static name map)
+            - [ ] Arena teams 2s/3s/5s
+            - [ ] MySQL GRANTs documented and applied (\`webreg@%\` SELECT only)
+            - [ ] Demo data + tests; CSP stays \`script-src 'self'\`
+            - [ ] No 3D viewer / no second armory stack
+
+            ## Out of scope
+            3D model, mounts, bag/bank, Wowhead tooltip JS, guild roster app, search-by-item, computed sheet stats (spell power, etc.).
+            `,
+            });
+            core.info(issue.html_url);
