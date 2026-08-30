@@ -25,6 +25,12 @@
   const rankSelect = root.querySelector("[data-staff-rank-select]");
   const rankConfirm = root.querySelector("[data-staff-rank-confirm]");
   const rankConfirmText = root.querySelector("[data-staff-rank-confirm-text]");
+  const banForm = root.querySelector("[data-staff-ban]");
+  const unbanForm = root.querySelector("[data-staff-unban]");
+  const banConfirm = root.querySelector("[data-staff-ban-confirm]");
+  const banConfirmText = root.querySelector("[data-staff-ban-confirm-text]");
+  const unbanConfirm = root.querySelector("[data-staff-unban-confirm]");
+  const banMeta = root.querySelector("[data-staff-ban-meta]");
   const copyBtn = root.querySelector("[data-staff-copy]");
   const clearBtn = root.querySelector("[data-staff-clear]");
 
@@ -44,6 +50,9 @@
       email: tr.getAttribute("data-email") || "",
       gm: Number(tr.getAttribute("data-gm") || "0"),
       online: tr.getAttribute("data-online") === "1",
+      banned: tr.getAttribute("data-banned") === "1",
+      banreason: tr.getAttribute("data-ban-reason") || "",
+      banuntil: tr.getAttribute("data-ban-until") || "",
     };
   }
 
@@ -79,6 +88,17 @@
     delete rankForm.dataset.confirmed;
   }
 
+  function hideBanConfirm() {
+    if (banConfirm && banForm) {
+      banConfirm.hidden = true;
+      delete banForm.dataset.confirmed;
+    }
+    if (unbanConfirm && unbanForm) {
+      unbanConfirm.hidden = true;
+      delete unbanForm.dataset.confirmed;
+    }
+  }
+
   function rankName(gm) {
     switch (Number(gm)) {
       case 1: return "Moderator";
@@ -105,13 +125,28 @@
     if (go) go.disabled = on;
   }
 
+  function setBanDisabled(on) {
+    [banForm, unbanForm].forEach(function (form) {
+      if (!form) return;
+      form.setAttribute("aria-disabled", on ? "true" : "false");
+      form.querySelectorAll("input:not([type=hidden]), select, button[data-staff-ban-go], button[data-staff-unban-go]").forEach(function (el) {
+        el.disabled = on;
+      });
+    });
+  }
+
   function fillPanel(acc) {
     if (!acc) return;
     nameEl.textContent = acc.username;
     gmBadge.textContent = rankName(acc.gm);
     gmBadge.className = acc.gm > 0 ? "badge badge-gold" : "badge";
-    statusEl.textContent = acc.online ? "online" : "offline";
-    statusEl.className = acc.online ? "staff-status is-online" : "staff-status is-offline";
+    if (acc.banned) {
+      statusEl.textContent = "suspended";
+      statusEl.className = "staff-status is-banned";
+    } else {
+      statusEl.textContent = acc.online ? "online" : "offline";
+      statusEl.className = acc.online ? "staff-status is-online" : "staff-status is-offline";
+    }
     root.querySelectorAll("[data-staff-user-field]").forEach(function (el) {
       el.value = acc.username;
     });
@@ -127,6 +162,15 @@
     }
     setDisabled(blocked);
     setRankDisabled(blocked || self);
+    setBanDisabled(blocked || self);
+    if (banForm) banForm.hidden = !!acc.banned;
+    if (unbanForm) unbanForm.hidden = !acc.banned;
+    if (banMeta) {
+      const bits = [];
+      if (acc.banuntil) bits.push("Until " + acc.banuntil + ".");
+      if (acc.banreason) bits.push(acc.banreason);
+      banMeta.textContent = bits.join(" ");
+    }
     if (rankSelect) {
       Array.prototype.forEach.call(rankSelect.options, function (opt) {
         const v = Number(opt.value);
@@ -139,6 +183,7 @@
     if (confirmText) confirmText.textContent = "Set a new password for " + acc.username + "?";
     hideConfirm();
     hideRankConfirm();
+    hideBanConfirm();
   }
 
   function showFlash(kind, text) {
@@ -311,6 +356,51 @@
     rankNo.addEventListener("click", function () {
       hideRankConfirm();
     });
+  }
+
+  if (banForm) {
+    banForm.addEventListener("submit", function (e) {
+      if (banForm.dataset.confirmed === "1") return;
+      e.preventDefault();
+      const who = banForm.querySelector("[data-staff-user-field]") || userField;
+      const name = who ? who.value : "this account";
+      if (banConfirmText) banConfirmText.textContent = "Suspend " + name + "? They will not be able to log in.";
+      if (banConfirm) banConfirm.hidden = false;
+    });
+  }
+  const banYes = root.querySelector("[data-staff-ban-yes]");
+  const banNo = root.querySelector("[data-staff-ban-no]");
+  if (banYes) {
+    banYes.addEventListener("click", function () {
+      if (!banForm) return;
+      banForm.dataset.confirmed = "1";
+      if (banForm.requestSubmit) banForm.requestSubmit();
+      else banForm.submit();
+    });
+  }
+  if (banNo) {
+    banNo.addEventListener("click", function () { hideBanConfirm(); });
+  }
+
+  if (unbanForm) {
+    unbanForm.addEventListener("submit", function (e) {
+      if (unbanForm.dataset.confirmed === "1") return;
+      e.preventDefault();
+      if (unbanConfirm) unbanConfirm.hidden = false;
+    });
+  }
+  const unbanYes = root.querySelector("[data-staff-unban-yes]");
+  const unbanNo = root.querySelector("[data-staff-unban-no]");
+  if (unbanYes) {
+    unbanYes.addEventListener("click", function () {
+      if (!unbanForm) return;
+      unbanForm.dataset.confirmed = "1";
+      if (unbanForm.requestSubmit) unbanForm.requestSubmit();
+      else unbanForm.submit();
+    });
+  }
+  if (unbanNo) {
+    unbanNo.addEventListener("click", function () { hideBanConfirm(); });
   }
 
   const selected = tbody && tbody.querySelector("tr.is-selected");

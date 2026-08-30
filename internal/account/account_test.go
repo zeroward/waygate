@@ -35,6 +35,34 @@ func TestDemoCreateAndAuth(t *testing.T) {
 	}
 }
 
+func TestDemoBanAndAuth(t *testing.T) {
+	cfg := config.Config{DemoMode: true, AccountMode: "sql"}
+	s := New(cfg, nil, nil)
+	ctx := context.Background()
+	if err := s.Create(ctx, "HeroOne", "Abcd1234", "h@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Ban(ctx, 3, "ADMIN", "HeroOne", "perm", "botting"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Authenticate(ctx, "HeroOne", "Abcd1234"); err != ErrBanned {
+		t.Fatalf("want banned, got %v", err)
+	}
+	listed, err := s.GetListed(ctx, "HeroOne")
+	if err != nil || !listed.Banned || listed.StatusLabel() != "suspended" {
+		t.Fatalf("listed %+v %v", listed, err)
+	}
+	if err := s.Ban(ctx, 3, "HEROONE", "HeroOne", "perm", "nope"); err != ErrForbidden {
+		t.Fatalf("self ban %v", err)
+	}
+	if err := s.Unban(ctx, 3, "ADMIN", "HeroOne"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Authenticate(ctx, "HeroOne", "Abcd1234"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestGMListAndReset(t *testing.T) {
 	cfg := config.Config{DemoMode: true, AccountMode: "sql", BotPrefixes: []string{"RNDBOT"}}
 	s := New(cfg, nil, nil)

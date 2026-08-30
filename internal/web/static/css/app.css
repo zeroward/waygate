@@ -714,12 +714,13 @@ tr:hover td { background: rgba(255, 255, 255, 0.02); }
   color: #efb4b4;
   font-size: 13px;
 }
-.staff-reset, .staff-rank { display: flex; flex-direction: column; gap: 0.5rem; margin: 0 0 0.9rem; }
-.staff-reset h3, .staff-rank h3 { margin: 0; font-size: 0.82rem; color: var(--ice-2); font-weight: 600; }
-.staff-reset label, .staff-rank label { font-size: 13px; gap: 0.28rem; }
-.staff-reset input, .staff-rank input, .staff-rank select { font-size: 13px; padding: 0.45rem 0.55rem; }
-.staff-reset .btn, .staff-rank .btn { font-size: 13px; padding: 0.48rem 0.9rem; align-self: flex-start; }
-.staff-reset[aria-disabled="true"], .staff-rank[aria-disabled="true"] { opacity: 0.55; }
+.staff-reset, .staff-rank, .staff-ban, .staff-unban { display: flex; flex-direction: column; gap: 0.5rem; margin: 0 0 0.9rem; }
+.staff-reset h3, .staff-rank h3, .staff-ban h3, .staff-unban h3 { margin: 0; font-size: 0.82rem; color: var(--ice-2); font-weight: 600; }
+.staff-reset label, .staff-rank label, .staff-ban label { font-size: 13px; gap: 0.28rem; }
+.staff-reset input, .staff-rank input, .staff-rank select, .staff-ban input, .staff-ban select { font-size: 13px; padding: 0.45rem 0.55rem; }
+.staff-reset .btn, .staff-rank .btn, .staff-ban .btn, .staff-unban .btn { font-size: 13px; padding: 0.48rem 0.9rem; align-self: flex-start; }
+.staff-reset[aria-disabled="true"], .staff-rank[aria-disabled="true"], .staff-ban[aria-disabled="true"], .staff-unban[aria-disabled="true"] { opacity: 0.55; }
+.staff-status.is-banned { color: var(--down); }
 .staff-rank .hint { margin: 0; font-size: 12px; }
 .staff-confirm {
   margin-top: 0.15rem;

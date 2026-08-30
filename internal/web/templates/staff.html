@@ -5,7 +5,7 @@
   <section class="home-hero">
     <p class="home-kicker">{{rankName .User.GMLevel}}</p>
     <h1>Admin panel</h1>
-    <p class="lede">Create accounts, reset passwords, publish Downloads, and set GM or Admin. Super GM cannot be granted here.</p>
+    <p class="lede">Create accounts, reset passwords, suspend or unban, publish Downloads, and set GM or Admin. Super GM cannot be granted here.</p>
     {{if .CanEditKB}}<p class="home-cta-quiet"><a href="/staff/kb">Knowledge Base articles</a></p>{{end}}
   </section>
 
@@ -103,13 +103,16 @@
                 data-email="{{.Email}}"
                 data-gm="{{.GMLevel}}"
                 data-online="{{if .Online}}1{{else}}0{{end}}"
+                data-banned="{{if .Banned}}1{{else}}0{{end}}"
+                data-ban-reason="{{.BanReason}}"
+                data-ban-until="{{.BanUntil}}"
                 aria-selected="{{if and $sel (eq .Username $sel.Username)}}true{{else}}false{{end}}">
               <td class="name">{{.Username}}</td>
               <td>{{if .Email}}{{.Email}}{{else}}—{{end}}</td>
               <td>{{.JoinDate}}</td>
               <td>{{.LastLogin}}</td>
               <td>{{if .GMLevel}}{{rankName .GMLevel}}{{else}}—{{end}}</td>
-              <td>{{if .Online}}online{{else}}offline{{end}}</td>
+              <td>{{.StatusLabel}}</td>
             </tr>
             {{end}}
           </tbody>
@@ -137,7 +140,7 @@
           <h2 data-staff-name>{{if $sel}}{{$sel.Username}}{{end}}</h2>
           <div class="staff-drawer-meta">
             <span class="badge{{if and $sel $sel.GMLevel}} badge-gold{{end}}" data-staff-gm-badge>{{if $sel}}{{rankName $sel.GMLevel}}{{end}}</span>
-            <span class="staff-status{{if and $sel $sel.Online}} is-online{{else}} is-offline{{end}}" data-staff-status>{{if $sel}}{{if $sel.Online}}online{{else}}offline{{end}}{{end}}</span>
+            <span class="staff-status{{if and $sel $sel.Banned}} is-banned{{else if and $sel $sel.Online}} is-online{{else}} is-offline{{end}}" data-staff-status>{{if $sel}}{{$sel.StatusLabel}}{{end}}</span>
           </div>
         </header>
 
@@ -193,6 +196,54 @@
             <div class="staff-confirm-actions">
               <button type="button" class="btn btn-gold" data-staff-rank-yes>Confirm</button>
               <button type="button" class="btn btn-ghost" data-staff-rank-no>Cancel</button>
+            </div>
+          </div>
+        </form>
+
+        <form method="post" action="/staff/ban" class="staff-ban" data-staff-ban{{if or (not $d.CanModify) (and $sel $sel.Banned)}} aria-disabled="true"{{end}}{{if and $sel $sel.Banned}} hidden{{end}}>
+          <h3>Suspend account</h3>
+          <p class="hint">Blocks website and game login. SOAP kicks them if the world is up; otherwise they stay out on the next login.</p>
+          <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+          <input type="hidden" name="username" value="{{if $sel}}{{$sel.Username}}{{end}}" data-staff-user-field autocomplete="off">
+          {{if $d.Query}}<input type="hidden" name="q" value="{{$d.Query}}">{{end}}
+          {{if $d.IncludeBots}}<input type="hidden" name="bots" value="1">{{end}}
+          {{if gt $d.Page 1}}<input type="hidden" name="p" value="{{$d.Page}}">{{end}}
+          <label>Length
+            <select name="duration" data-staff-ban-duration {{if not $d.CanModify}}disabled{{end}}>
+              <option value="perm" selected>Permanent</option>
+              <option value="1h">1 hour</option>
+              <option value="1d">1 day</option>
+              <option value="7d">7 days</option>
+              <option value="30d">30 days</option>
+            </select>
+          </label>
+          <label>Reason
+            <input name="reason" maxlength="255" required minlength="3" autocomplete="off" {{if not $d.CanModify}}disabled{{end}}>
+          </label>
+          <button type="submit" class="btn btn-gold" data-staff-ban-go {{if not $d.CanModify}}disabled{{end}}>Suspend</button>
+          <div class="staff-confirm" data-staff-ban-confirm hidden>
+            <p data-staff-ban-confirm-text>Suspend this account?</p>
+            <div class="staff-confirm-actions">
+              <button type="button" class="btn btn-gold" data-staff-ban-yes>Confirm</button>
+              <button type="button" class="btn btn-ghost" data-staff-ban-no>Cancel</button>
+            </div>
+          </div>
+        </form>
+
+        <form method="post" action="/staff/unban" class="staff-unban" data-staff-unban{{if not $d.CanModify}} aria-disabled="true"{{end}}{{if not (and $sel $sel.Banned)}} hidden{{end}}>
+          <h3>Suspended</h3>
+          <p class="hint" data-staff-ban-meta>{{if and $sel $sel.Banned}}{{if $sel.BanUntil}}Until {{$sel.BanUntil}}. {{end}}{{if $sel.BanReason}}{{$sel.BanReason}}{{end}}{{end}}</p>
+          <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+          <input type="hidden" name="username" value="{{if $sel}}{{$sel.Username}}{{end}}" data-staff-user-field autocomplete="off">
+          {{if $d.Query}}<input type="hidden" name="q" value="{{$d.Query}}">{{end}}
+          {{if $d.IncludeBots}}<input type="hidden" name="bots" value="1">{{end}}
+          {{if gt $d.Page 1}}<input type="hidden" name="p" value="{{$d.Page}}">{{end}}
+          <button type="submit" class="btn btn-gold" data-staff-unban-go {{if not $d.CanModify}}disabled{{end}}>Lift suspension</button>
+          <div class="staff-confirm" data-staff-unban-confirm hidden>
+            <p>Lift the suspension for {{if $sel}}{{$sel.Username}}{{else}}this account{{end}}?</p>
+            <div class="staff-confirm-actions">
+              <button type="button" class="btn btn-gold" data-staff-unban-yes>Confirm</button>
+              <button type="button" class="btn btn-ghost" data-staff-unban-no>Cancel</button>
             </div>
           </div>
         </form>

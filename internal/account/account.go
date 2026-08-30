@@ -85,6 +85,9 @@ type ListedAccount struct {
 	Expansion uint8
 	GMLevel   uint8
 	Locked    bool
+	Banned    bool
+	BanReason string
+	BanUntil  string
 }
 
 type Service struct {
@@ -98,13 +101,16 @@ type Service struct {
 }
 
 type memAccount struct {
-	ID       uint32
-	Username string
-	Email    string
-	Salt     []byte
-	Verifier []byte
-	GMLevel  uint8
-	Joined   time.Time
+	ID        uint32
+	Username  string
+	Email     string
+	Salt      []byte
+	Verifier  []byte
+	GMLevel   uint8
+	Joined    time.Time
+	Banned    bool
+	BanReason string
+	BanUntil  time.Time
 }
 
 type resetRec struct {
@@ -271,6 +277,13 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 		if !ok || !srp6.CheckLogin(username, password, a.Salt, a.Verifier) {
 			return nil, ErrBadPassword
 		}
+		if a.Banned {
+			if !a.BanUntil.IsZero() && time.Now().UTC().After(a.BanUntil) {
+				a.Banned = false
+			} else {
+				return nil, ErrBanned
+			}
+		}
 		return &Account{ID: a.ID, Username: a.Username, Email: a.Email, GMLevel: a.GMLevel}, nil
 	}
 	q := fmt.Sprintf("SELECT `id`,`username`,`email`,`salt`,`verifier` FROM %s WHERE `username`=? LIMIT 1", s.db.QAuth("account"))
@@ -290,6 +303,9 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 	}
 	if !srp6.CheckLogin(user, password, salt, verifier) {
 		return nil, ErrBadPassword
+	}
+	if _, ok := s.activeBan(ctx, id); ok {
+		return nil, ErrBanned
 	}
 	return &Account{ID: id, Username: user, Email: email, GMLevel: s.lookupGMLevel(ctx, id)}, nil
 }
@@ -457,7 +473,8 @@ func (s *Service) listMem(f ListFilter) ([]ListedAccount, int, error) {
 		if q != "" && !strings.Contains(a.Username, q) && !strings.Contains(strings.ToUpper(a.Email), q) {
 			continue
 		}
-		all = append(all, ListedAccount{
+		banned := a.Banned && (a.BanUntil.IsZero() || !time.Now().UTC().After(a.BanUntil))
+		row := ListedAccount{
 			ID:        a.ID,
 			Username:  a.Username,
 			Email:     a.Email,
@@ -465,7 +482,13 @@ func (s *Service) listMem(f ListFilter) ([]ListedAccount, int, error) {
 			LastLogin: "—",
 			Expansion: 2,
 			GMLevel:   a.GMLevel,
-		})
+			Banned:    banned,
+			BanReason: a.BanReason,
+		}
+		if banned {
+			row.BanUntil = formatBanUntil(a.BanUntil)
+		}
+		all = append(all, row)
 	}
 	sortListed(all)
 	total := len(all)
@@ -558,7 +581,11 @@ func (s *Service) listSQL(ctx context.Context, f ListFilter) ([]ListedAccount, i
 		row.Locked = locked != 0
 		out = append(out, row)
 	}
-	return out, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	s.attachBans(ctx, out)
+	return out, total, nil
 }
 
 func sanitizeSearch(s string) string {

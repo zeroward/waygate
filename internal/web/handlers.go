@@ -549,6 +549,79 @@ func (s *Server) staffRankPOST(w http.ResponseWriter, r *http.Request) {
 	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Set "+target+" to "+account.RankName(level)+".")
 }
 
+func (s *Server) staffBanPOST(w http.ResponseWriter, r *http.Request) {
+	sess := s.requireStaff(w, r)
+	if sess == nil {
+		return
+	}
+	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
+		return
+	}
+	target := strings.TrimSpace(r.FormValue("username"))
+	dur := strings.TrimSpace(r.FormValue("duration"))
+	reason := r.FormValue("reason")
+	if err := validate.Username(target); err != nil {
+		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", err.Error())
+		return
+	}
+	_, _, label, ok := account.ParseBanDuration(dur)
+	if !ok {
+		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Pick a suspension length.")
+		return
+	}
+	if err := s.accounts.Ban(r.Context(), sess.User.GMLevel, sess.User.Username, target, dur, reason); err != nil {
+		switch {
+		case errors.Is(err, account.ErrForbidden):
+			if strings.EqualFold(target, sess.User.Username) {
+				s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "You cannot suspend your own account.")
+			} else {
+				s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Cannot modify "+account.RankName(s.accountsGM(r, target))+".")
+			}
+		case errors.Is(err, account.ErrInvalidBan):
+			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Give a reason (at least 3 characters).")
+		case errors.Is(err, account.ErrNotFound):
+			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "account not found")
+		default:
+			s.log.Error("staff ban", "err", err, "actor", sess.User.Username, "target", target)
+			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "could not suspend the account")
+		}
+		return
+	}
+	s.log.Info("staff ban", "actor", sess.User.Username, "target", strings.ToUpper(target), "duration", label)
+	s.logStaff(sess.User.Username, "ban", strings.ToUpper(target)+"="+label)
+	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Suspended "+target+" ("+label+").")
+}
+
+func (s *Server) staffUnbanPOST(w http.ResponseWriter, r *http.Request) {
+	sess := s.requireStaff(w, r)
+	if sess == nil {
+		return
+	}
+	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
+		return
+	}
+	target := strings.TrimSpace(r.FormValue("username"))
+	if err := validate.Username(target); err != nil {
+		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", err.Error())
+		return
+	}
+	if err := s.accounts.Unban(r.Context(), sess.User.GMLevel, sess.User.Username, target); err != nil {
+		switch {
+		case errors.Is(err, account.ErrForbidden):
+			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Cannot modify "+account.RankName(s.accountsGM(r, target))+".")
+		case errors.Is(err, account.ErrNotFound):
+			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "account not found")
+		default:
+			s.log.Error("staff unban", "err", err, "actor", sess.User.Username, "target", target)
+			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "could not lift the suspension")
+		}
+		return
+	}
+	s.log.Info("staff unban", "actor", sess.User.Username, "target", strings.ToUpper(target))
+	s.logStaff(sess.User.Username, "unban", strings.ToUpper(target))
+	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Lifted suspension for "+target+".")
+}
+
 func (s *Server) accountsGM(r *http.Request, username string) uint8 {
 	listed, err := s.accounts.GetListed(r.Context(), username)
 	if err != nil {
@@ -640,6 +713,10 @@ func (s *Server) loginPOST(w http.ResponseWriter, r *http.Request) {
 	pass := r.FormValue("password")
 	acc, err := s.accounts.Authenticate(r.Context(), user, pass)
 	if err != nil {
+		if errors.Is(err, account.ErrBanned) {
+			s.flashRedirect(w, r, "/account", "error", "This account is suspended.")
+			return
+		}
 		if s.mail.Enabled() && s.kb != nil && s.kb.HasPendingUsername(r.Context(), user) {
 			s.flashRedirect(w, r, "/account", "error", "Confirm the link we emailed before this account can log in.")
 			return

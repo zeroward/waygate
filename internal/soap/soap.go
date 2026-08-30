@@ -96,6 +96,30 @@ func (c *Client) Ping(ctx context.Context) error {
 	return err
 }
 
+func (c *Client) BanAccount(ctx context.Context, username, duration, reason string) error {
+	if err := rejectUnsafe(username, duration, reason); err != nil {
+		return err
+	}
+	_, err := c.Execute(ctx, BuildBanAccountCommand(username, duration, reason))
+	return err
+}
+
+func (c *Client) UnbanAccount(ctx context.Context, username string) error {
+	if err := rejectUnsafe(username); err != nil {
+		return err
+	}
+	_, err := c.Execute(ctx, BuildUnbanAccountCommand(username))
+	return err
+}
+
+func BuildBanAccountCommand(username, duration, reason string) string {
+	return "ban account " + quote(username) + " " + duration + " " + quote(reason)
+}
+
+func BuildUnbanAccountCommand(username string) string {
+	return "unban account " + quote(username)
+}
+
 func (c *Client) Unstuck(ctx context.Context, character string) error {
 	if err := rejectUnsafe(character); err != nil {
 		return err

@@ -309,6 +309,94 @@ func TestStaffSetRank(t *testing.T) {
 	}
 }
 
+func TestStaffBanAndUnban(t *testing.T) {
+	ts, acc := staffTestServer(t)
+	defer ts.Close()
+	ctx := context.Background()
+	if err := acc.Create(ctx, "Staffer", "Abcd1234", "s@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	acc.GrantGM("Staffer", 2)
+	if err := acc.Create(ctx, "PlayerA", "Abcd1234", "p@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	login(t, client, ts.URL, "Staffer", "Abcd1234")
+
+	res, err := client.Get(ts.URL + "/staff?select=PLAYERA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if !strings.Contains(string(body), "/staff/ban") || !strings.Contains(string(body), "Suspend") {
+		t.Fatal("missing suspend form")
+	}
+	csrf := extractCSRF(string(body))
+	res, err = client.PostForm(ts.URL+"/staff/ban", url.Values{
+		"csrf_token": {csrf}, "username": {"PlayerA"}, "duration": {"perm"}, "reason": {"botting"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+
+	listed, err := acc.GetListed(ctx, "PlayerA")
+	if err != nil || !listed.Banned {
+		t.Fatalf("want banned %+v %v", listed, err)
+	}
+
+	pjar, _ := cookiejar.New(nil)
+	player := &http.Client{Jar: pjar, CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	login(t, player, ts.URL, "PlayerA", "Abcd1234")
+	accPage, err := player.Get(ts.URL + "/account")
+	if err != nil {
+		t.Fatal(err)
+	}
+	accBody, _ := io.ReadAll(accPage.Body)
+	accPage.Body.Close()
+	if !strings.Contains(string(accBody), "suspended") {
+		t.Fatalf("player login should be blocked: %s", accBody)
+	}
+
+	res, err = client.Get(ts.URL + "/staff?select=PLAYERA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	if !strings.Contains(string(body), "suspended") || !strings.Contains(string(body), "/staff/unban") {
+		t.Fatalf("staff list should show suspended: %s", body)
+	}
+	csrf = extractCSRF(string(body))
+	res, err = client.PostForm(ts.URL+"/staff/unban", url.Values{
+		"csrf_token": {csrf}, "username": {"PlayerA"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	listed, err = acc.GetListed(ctx, "PlayerA")
+	if err != nil || listed.Banned {
+		t.Fatalf("want unbanned %+v %v", listed, err)
+	}
+
+	res, err = client.PostForm(ts.URL+"/staff/ban", url.Values{
+		"csrf_token": {csrf}, "username": {"Staffer"}, "duration": {"perm"}, "reason": {"nope"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if !strings.Contains(string(out), "your own") && !strings.Contains(string(out), "Cannot") {
+		t.Fatalf("self ban %s", out)
+	}
+}
+
 func TestStaffUploadKeepsCategoryWhenFileComesFirst(t *testing.T) {
 	ts, acc := staffTestServer(t)
 	defer ts.Close()

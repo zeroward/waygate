@@ -24,6 +24,16 @@ func TestBuildUnstuckCommand(t *testing.T) {
 	}
 }
 
+func TestBuildBanAccountCommand(t *testing.T) {
+	got := BuildBanAccountCommand("Hero", "-1", "botting")
+	if got != `ban account "Hero" -1 "botting"` {
+		t.Fatalf("got %q", got)
+	}
+	if BuildUnbanAccountCommand("Hero") != `unban account "Hero"` {
+		t.Fatal("unban")
+	}
+}
+
 func TestBuildSetGMLevelCommand(t *testing.T) {
 	got := BuildSetGMLevelCommand("Hero", 2)
 	if got != `account set gmlevel "Hero" 2 -1` {

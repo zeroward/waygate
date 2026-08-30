@@ -36,6 +36,9 @@ GRANT INSERT, UPDATE ON acore_auth.account TO 'webreg'@'%';
 -- Rank changes from the Admin panel when SOAP is down (Player / GM / Admin only; never Super GM).
 GRANT INSERT, UPDATE, DELETE ON acore_auth.account_access TO 'webreg'@'%';
 
+-- Account suspend/unban from the Admin panel (SOAP first; SQL fallback).
+GRANT SELECT, INSERT, UPDATE ON acore_auth.account_banned TO 'webreg'@'%';
+
 -- Never grant DROP, GRANT, FILE, PROCESS, SUPER, or DELETE on acore_auth.account.
 
 FLUSH PRIVILEGES;
