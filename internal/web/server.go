@@ -15,6 +15,8 @@ import (
 	"github.com/zeroward/waygate/internal/account"
 	"github.com/zeroward/waygate/internal/armory"
 	"github.com/zeroward/waygate/internal/captcha"
+	"github.com/zeroward/waygate/internal/clamav"
+	"github.com/zeroward/waygate/internal/companion"
 	"github.com/zeroward/waygate/internal/config"
 	"github.com/zeroward/waygate/internal/downloads"
 	"github.com/zeroward/waygate/internal/identity"
@@ -49,6 +51,7 @@ type Server struct {
 	id        *identity.Service
 	downloads *downloads.Store
 	armory    *armory.Service
+	companion *companion.Service
 	wa        *webauthn.WebAuthn
 	wgOK      bool
 }
@@ -146,6 +149,7 @@ func New(
 		id:        idSvc,
 		downloads: downloads.New(cfg.DownloadsDir, cfg.DownloadsCatalog),
 		armory:    armory.New(cfg, st.Database(), log),
+		companion: companion.New(cfg, st.Database(), log),
 		wa:        wa,
 		wgOK:      wgOK,
 	}
@@ -154,9 +158,9 @@ func New(
 		return nil, err
 	}
 	s.downloads.SetScanMax(cfg.ClamAVScanMaxBytes())
-	// ClamAV is installed but scanning is off until the upload/scan path is finished.
 	if cfg.ClamAVAddr != "" {
-		s.log.Info("clamav scanning disabled", "addr", cfg.ClamAVAddr)
+		s.downloads.SetScanner(clamav.New(cfg.ClamAVAddr, cfg.ClamAVTimeout))
+		s.log.Info("clamav scanning enabled", "addr", cfg.ClamAVAddr)
 	}
 	return s, nil
 }
@@ -178,6 +182,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /leaderboards", s.leaderboards)
 	mux.HandleFunc("GET /armory", s.armorySearch)
 	mux.HandleFunc("GET /armory/{name}", s.armoryInspect)
+	mux.HandleFunc("GET /companion", s.companionPage)
+	mux.HandleFunc("GET /companion/live", s.companionLive)
 	mux.HandleFunc("GET /account", s.accountGET)
 	mux.HandleFunc("POST /account/login", s.loginPOST)
 	mux.HandleFunc("POST /account/login/totp", s.totpLoginPOST)
@@ -312,13 +318,14 @@ type page struct {
 
 func (s *Server) view(w http.ResponseWriter, r *http.Request, name, title, active string, data any) {
 	sess := s.sessions.GetOrCreate(w, r)
+	s.applyStaffLevel(r.Context(), sess)
 	p := page{
 		Title:        title,
 		Active:       active,
 		CSRF:         sess.CSRF,
 		Flash:        sess.TakeFlash(),
 		User:         sess.User,
-		Staff:        sess.User.IsStaff(s.cfg.GMMinLevel),
+		Staff:        sess.User.IsStaff(s.staffMin()),
 		CanEditKB:    s.canEditKB(sess.User),
 		Demo:         s.cfg.DemoMode,
 		RealmName:    s.cfg.RealmName,

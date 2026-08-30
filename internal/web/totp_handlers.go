@@ -1,6 +1,7 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
@@ -45,6 +46,10 @@ func (s *Server) totpStartPOST(w http.ResponseWriter, r *http.Request) {
 	}
 	secret, url, err := s.id.Store().StartTOTP(r.Context(), sess.User.ID, sess.User.Username, s.cfg.RealmName)
 	if err != nil {
+		if errors.Is(err, identity.ErrTOTPEnabled) {
+			s.flashRedirect(w, r, "/account#totp", "error", "Disable the current authenticator before setting up a new one.")
+			return
+		}
 		s.log.Error("totp start", "err", err)
 		s.flashRedirect(w, r, "/account", "error", "Could not start authenticator setup.")
 		return

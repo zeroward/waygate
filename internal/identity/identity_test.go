@@ -2,6 +2,7 @@ package identity
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
 	"testing"
 
@@ -59,6 +60,28 @@ func TestLegacyClaim(t *testing.T) {
 	u2, err := id.Authenticate(ctx, "OldOne", "Abcd1234")
 	if err != nil || u2.ID != u.ID {
 		t.Fatalf("second %v %+v", err, u2)
+	}
+}
+
+func TestAuthRejectsBannedWowAccount(t *testing.T) {
+	id, ac := testID(t)
+	ctx := context.Background()
+	if err := ac.Create(ctx, "ADMIN", "Abcd1234", "a@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	ac.GrantGM("ADMIN", 3)
+	u, err := id.Register(ctx, "HeroOne", "Abcd1234", "h@example.com", "", "Abcd1234", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ac.Ban(ctx, 3, "ADMIN", "HEROONE", "perm", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := id.Authenticate(ctx, "HeroOne", "Abcd1234"); !errors.Is(err, account.ErrBanned) {
+		t.Fatalf("want banned, got %v", err)
+	}
+	if err := id.RejectIfBanned(ctx, u); !errors.Is(err, account.ErrBanned) {
+		t.Fatalf("reject %v", err)
 	}
 }
 

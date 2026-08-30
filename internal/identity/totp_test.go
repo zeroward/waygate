@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -41,6 +42,12 @@ func TestTOTPEnrollAndValidate(t *testing.T) {
 	}
 	if err := id.Store().ValidateTOTP(ctx, u.ID, codes[0]); err == nil {
 		t.Fatal("recovery reuse")
+	}
+	if _, _, err := id.Store().StartTOTP(ctx, u.ID, u.Username, "Icecrown"); !errors.Is(err, ErrTOTPEnabled) {
+		t.Fatalf("start while enabled %v", err)
+	}
+	if !id.TOTPEnabled(ctx, u.ID) {
+		t.Fatal("start must not disable live TOTP")
 	}
 }
 

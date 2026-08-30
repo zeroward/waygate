@@ -30,6 +30,9 @@ func (s *Store) TOTPStatus(ctx context.Context, userID uint32) (enabled bool, er
 }
 
 func (s *Store) StartTOTP(ctx context.Context, userID uint32, username, issuer string) (secret, url string, err error) {
+	if on, _ := s.TOTPStatus(ctx, userID); on {
+		return "", "", ErrTOTPEnabled
+	}
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      issuer,
 		AccountName: username,

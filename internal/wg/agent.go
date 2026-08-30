@@ -171,17 +171,29 @@ func (a *Agent) ensureAddr() error {
 
 func (a *Agent) ensureForward() error {
 	_ = a.run("sysctl", "-w", "net.ipv4.ip_forward=1")
-	rules := [][]string{
-		{"iptables", "-C", "FORWARD", "-i", a.Iface, "-j", "ACCEPT"},
-		{"iptables", "-C", "FORWARD", "-o", a.Iface, "-j", "ACCEPT"},
+	// Remove the old catch-all ACCEPT (pre-S5) so VPN peers cannot hop the LAN.
+	for {
+		if err := a.run("iptables", "-D", "FORWARD", "-i", a.Iface, "-j", "ACCEPT"); err != nil {
+			break
+		}
 	}
-	adds := [][]string{
-		{"iptables", "-A", "FORWARD", "-i", a.Iface, "-j", "ACCEPT"},
-		{"iptables", "-A", "FORWARD", "-o", a.Iface, "-j", "ACCEPT"},
+	for {
+		if err := a.run("iptables", "-D", "FORWARD", "-o", a.Iface, "-j", "ACCEPT"); err != nil {
+			break
+		}
 	}
-	for i, check := range rules {
-		if err := a.run(check[0], check[1:]...); err != nil {
-			if err := a.run(adds[i][0], adds[i][1:]...); err != nil {
+	ports := fmt.Sprintf("%d,%d,%d", a.AuthPort, a.WorldPort, a.SitePort)
+	specs := [][]string{
+		{"FORWARD", "-i", a.Iface, "-p", "tcp", "-m", "multiport", "--dports", ports, "-j", "ACCEPT"},
+		{"FORWARD", "-o", a.Iface, "-m", "state", "--state", "ESTABLISHED,RELATED", "-j", "ACCEPT"},
+		{"FORWARD", "-i", a.Iface, "-j", "DROP"},
+		{"FORWARD", "-o", a.Iface, "-j", "DROP"},
+	}
+	for _, spec := range specs {
+		check := append([]string{"-C"}, spec...)
+		if err := a.run("iptables", check...); err != nil {
+			add := append([]string{"-A"}, spec...)
+			if err := a.run("iptables", add...); err != nil {
 				return err
 			}
 		}

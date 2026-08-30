@@ -41,6 +41,9 @@ func main() {
 	if !cfg.DemoMode && cfg.CaptchaProvider == "none" {
 		log.Warn("CAPTCHA_PROVIDER=none; registration is easier to abuse. Set turnstile or hcaptcha for production.")
 	}
+	if !cfg.DemoMode && strings.HasPrefix(strings.ToLower(cfg.SiteURL), "https://") && !cfg.SessionSecure {
+		log.Warn("SITE_URL is https but SESSION_SECURE_COOKIE is false; the session cookie can leak on HTTP")
+	}
 
 	var database *db.DB
 	if !cfg.DemoMode {

@@ -43,6 +43,7 @@ func testWebKB(t *testing.T, kbPath string) (*httptest.Server, *Server) {
 		StatusCache:       20 * time.Second,
 		LeaderboardSize:   20,
 		BotPrefixes:       []string{"RNDBOT"},
+		GMMinLevel:        1,
 		RateWindow:        15 * time.Minute,
 		RateRegister:      50,
 		RateLogin:         50,

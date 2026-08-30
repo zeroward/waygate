@@ -307,13 +307,32 @@ func (s *Server) wowAccountIDs(ctx context.Context, userID uint32) []uint32 {
 	return ids
 }
 
+func (s *Server) staffMin() uint8 {
+	if s.cfg.GMMinLevel < 1 {
+		return 3
+	}
+	return s.cfg.GMMinLevel
+}
+
+func (s *Server) applyStaffLevel(ctx context.Context, sess *session.Session) {
+	if s.id == nil || sess == nil || sess.User == nil {
+		return
+	}
+	u, err := s.id.GetByID(ctx, sess.User.ID)
+	if err != nil {
+		return
+	}
+	sess.User.GMLevel = u.StaffLevel
+}
+
 func (s *Server) requireStaff(w http.ResponseWriter, r *http.Request) *session.Session {
 	sess := s.sessions.GetOrCreate(w, r)
 	if sess.User == nil {
 		s.flashRedirect(w, r, "/account", "error", "Log in first.")
 		return nil
 	}
-	if !sess.User.IsStaff(s.cfg.GMMinLevel) {
+	s.applyStaffLevel(r.Context(), sess)
+	if !sess.User.IsStaff(s.staffMin()) {
 		http.Error(w, "Admin panel only.", http.StatusForbidden)
 		return nil
 	}
@@ -380,6 +399,7 @@ func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
 		"DownloadsWritable": s.downloads.Writable(),
 		"DownloadsMax":      downloads.HumanSize(s.cfg.DownloadsMaxBytes()),
 		"DownloadsScanMax":  downloadScanMax(s),
+		"DownloadsScanning": s.downloads.Scanning(),
 		"Events":            s.recentStaffEvents(r.Context()),
 		"OpenTickets":       s.openTickets(r.Context()),
 		"WGOn":              s.cfg.WGEnabled,
@@ -639,9 +659,26 @@ func (s *Server) staffRankPOST(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	s.syncWebsiteStaffLevel(r.Context(), target, level)
 	s.log.Info("staff rank", "actor", sess.User.Username, "target", strings.ToUpper(target), "rank", level)
 	s.logStaff(sess.User.Username, "rank", strings.ToUpper(target)+"="+account.RankName(level))
 	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Set "+target+" to "+account.RankName(level)+".")
+}
+
+func (s *Server) syncWebsiteStaffLevel(ctx context.Context, wowUsername string, level uint8) {
+	if s.id == nil {
+		return
+	}
+	listed, err := s.accounts.GetListed(ctx, wowUsername)
+	if err == nil {
+		if ln, err := s.id.Store().LinkByAccount(ctx, listed.ID); err == nil {
+			_ = s.id.Store().SetStaffLevel(ctx, ln.UserID, level)
+			return
+		}
+	}
+	if u, err := s.id.GetByUsername(ctx, wowUsername); err == nil {
+		_ = s.id.Store().SetStaffLevel(ctx, u.ID, level)
+	}
 }
 
 func (s *Server) staffBanPOST(w http.ResponseWriter, r *http.Request) {

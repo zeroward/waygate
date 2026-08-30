@@ -20,6 +20,7 @@ var (
 	ErrTooMany         = errors.New("too many WoW client logins")
 	ErrTooManyPasskeys = errors.New("too many passkeys")
 	ErrTooManyWG       = errors.New("too many VPN configs")
+	ErrTOTPEnabled     = errors.New("authenticator is already enabled")
 )
 
 type User struct {
