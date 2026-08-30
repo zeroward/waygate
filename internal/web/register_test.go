@@ -179,8 +179,11 @@ func TestLeaderboardsGoldTab(t *testing.T) {
 	if !strings.Contains(html, "g") || !strings.Contains(html, "1234g") {
 		t.Fatal("missing gold formatting")
 	}
-	if strings.Contains(html, "RNDBOT") || strings.Contains(html, "/armory") {
-		t.Fatal("bots or armory links on gold board")
+	if strings.Contains(html, "RNDBOT") {
+		t.Fatal("bots on gold board")
+	}
+	if !strings.Contains(html, "/armory/Frostwarden") {
+		t.Fatal("gold board should link names to Armory")
 	}
 }
 

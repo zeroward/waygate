@@ -76,6 +76,8 @@ func New(cfg config.Config, database *db.DB, soapc *soap.Client) *Cache {
 	return &Cache{cfg: cfg, db: database, soap: soapc}
 }
 
+func (c *Cache) Database() *db.DB { return c.db }
+
 func (c *Cache) Get(ctx context.Context) Snapshot {
 	c.mu.Lock()
 	if time.Now().Before(c.until) && !c.snap.GeneratedAt.IsZero() {

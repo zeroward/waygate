@@ -11,12 +11,22 @@ GRANT SELECT ON acore_auth.account_access TO 'webreg'@'%';
 GRANT SELECT ON acore_auth.realmlist TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.characters TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.character_homebind TO 'webreg'@'%';
+GRANT SELECT ON acore_characters.character_inventory TO 'webreg'@'%';
+GRANT SELECT ON acore_characters.item_instance TO 'webreg'@'%';
+GRANT SELECT ON acore_characters.character_talent TO 'webreg'@'%';
+GRANT SELECT ON acore_characters.character_glyphs TO 'webreg'@'%';
+GRANT SELECT ON acore_characters.character_achievement TO 'webreg'@'%';
+GRANT SELECT ON acore_characters.guild TO 'webreg'@'%';
+GRANT SELECT ON acore_characters.guild_member TO 'webreg'@'%';
+GRANT SELECT ON acore_characters.arena_team TO 'webreg'@'%';
+GRANT SELECT ON acore_characters.arena_team_member TO 'webreg'@'%';
 -- Account unstuck (hearth/homebind) when SOAP is down. Only UPDATE, never DELETE.
 GRANT UPDATE ON acore_characters.characters TO 'webreg'@'%';
 
 -- Optional world revision string on the home page.
 GRANT SELECT ON acore_world.version TO 'webreg'@'%';
 GRANT SELECT ON acore_world.module_string TO 'webreg'@'%';
+GRANT SELECT ON acore_world.item_template TO 'webreg'@'%';
 
 -- Required only for ACCOUNT_CREATE_MODE=sql or auto (SRP6 fallback),
 -- password change fallback, and filling email/expansion after SOAP create.

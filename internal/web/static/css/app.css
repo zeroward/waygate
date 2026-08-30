@@ -1073,3 +1073,51 @@ tr:hover td { background: rgba(255, 255, 255, 0.02); }
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+.armory-gear {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 0.35rem 1.2rem;
+}
+.armory-gear li {
+  display: flex;
+  gap: 0.65rem;
+  align-items: baseline;
+  border-bottom: 1px solid var(--line);
+  padding: 0.35rem 0;
+}
+.armory-slot {
+  flex: 0 0 6.5rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.armory-gear a { text-decoration: none; font-weight: 600; }
+.armory-gear a:hover { text-decoration: underline; }
+.q0 { color: #9d9d9d; }
+.q1 { color: var(--ice-2); }
+.q2 { color: #1eff00; }
+.q3 { color: #0070dd; }
+.q4 { color: #a335ee; }
+.q5 { color: #ff8000; }
+.q6, .q7 { color: #e6cc80; }
+.armory-specs {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+  gap: 1rem;
+}
+.armory-spec h2 { margin: 0 0 0.55rem; font-size: 1.05rem; }
+.armory-spec h3 { margin: 1rem 0 0.35rem; font-size: 0.9rem; color: var(--ice); }
+.armory-talents, .armory-glyphs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.92rem;
+}
+.table-wrap .name a { color: var(--ice-2); text-decoration: none; }
+.table-wrap .name a:hover { color: #fff; }

@@ -7,7 +7,7 @@
   <title>{{if .Title}}{{.Title}} — {{end}}{{.RealmName}}</title>
   <meta name="description" content="{{.RealmName}} — {{.CoreName}} account registration and realm status.">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/app.css?v=19">
+  <link rel="stylesheet" href="/static/css/app.css?v=20">
   {{if eq .CaptchaProv "turnstile"}}
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   {{end}}
@@ -48,6 +48,7 @@
         <a href="/downloads" {{if eq .Active "downloads"}}class="is-active"{{end}}>Downloads</a>
         <a href="/online" {{if eq .Active "online"}}class="is-active"{{end}}>Online</a>
         <a href="/leaderboards" {{if eq .Active "leaderboards"}}class="is-active"{{end}}>Leaderboards</a>
+        <a href="/armory" {{if eq .Active "armory"}}class="is-active"{{end}}>Armory</a>
       </nav>
 
       <div class="nav-util">

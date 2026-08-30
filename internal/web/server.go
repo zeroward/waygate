@@ -13,6 +13,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/zeroward/waygate/internal/account"
+	"github.com/zeroward/waygate/internal/armory"
 	"github.com/zeroward/waygate/internal/captcha"
 	"github.com/zeroward/waygate/internal/config"
 	"github.com/zeroward/waygate/internal/downloads"
@@ -42,6 +43,7 @@ type Server struct {
 	ticketRL  *ratelimit.Limiter
 	kb        *kb.Store
 	downloads *downloads.Store
+	armory    *armory.Service
 }
 
 func New(
@@ -104,6 +106,7 @@ func New(
 		ticketRL:  ratelimit.New(cfg.RateWindow, ticketMax),
 		kb:        kbStore,
 		downloads: downloads.New(cfg.DownloadsDir, cfg.DownloadsCatalog),
+		armory:    armory.New(cfg, st.Database()),
 	}
 	if err := s.seedHowToConnect(); err != nil {
 		_ = kbStore.Close()
@@ -132,6 +135,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /downloads/{id}", s.downloadsFile)
 	mux.HandleFunc("GET /online", s.online)
 	mux.HandleFunc("GET /leaderboards", s.leaderboards)
+	mux.HandleFunc("GET /armory", s.armorySearch)
+	mux.HandleFunc("GET /armory/{name}", s.armoryInspect)
 	mux.HandleFunc("GET /account", s.accountGET)
 	mux.HandleFunc("POST /account/login", s.loginPOST)
 	mux.HandleFunc("POST /account/logout", s.logoutPOST)

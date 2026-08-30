@@ -40,3 +40,13 @@
 
 **Leftover:** Staff can still open a ticket by ID after it is Done/Closed. No attachments.
 
+## #1 Armory (login-gated inspect)
+
+**Shipped:** Login-gated Armory. `GET /armory` searches by name (no `rndbot*` accounts, no deleted). `GET /armory/{name}` inspects with `?tab=` Sheet / Gear / Talents / Achievements / PvP. Gear is equipped slots 0–18 (`bag=0`) with `item_template` names/quality and plain Wowhead WotLK item links. Talents are both specs plus glyphs. Achievements use a static 3.3.5a name map (no DBC at runtime). Arena teams are 2s/3s/5s. Nav Armory sits after Leaderboards. Account, Online, and Leaderboards names link in. Demo Frostwarden has full inspect data. CSP stays `script-src 'self'`. SELECT-only grants documented. No 3D viewer.
+
+**Files:** `internal/armory/*`, `internal/status/status.go`, `internal/web/armory_handlers.go`, `internal/web/armory_test.go`, `internal/web/server.go`, `internal/web/templates/armory.html`, `internal/web/templates/armory_char.html`, `internal/web/templates/header.html`, `internal/web/templates/account.html`, `internal/web/templates/online.html`, `internal/web/templates/leaderboards.html`, `internal/web/static/css/app.css`, `internal/web/register_test.go`, `docs/mysql-grants.sql`
+
+**Verify:** Anon `/armory` and `/armory/Frostwarden` redirect to login with `next=`. Logged-in `/armory/Frostwarden` is 200 (sheet, gear with Wowhead, talents, Level 80 achievement, 2v2/3v3). CSP includes `script-src 'self'`.
+
+**Leftover:** Talent/glyph name maps are a subset; unknown IDs print `Talent N` / `Glyph N`. Live MySQL GRANTs still need to be applied on the server (`docs/mysql-grants.sql`).
+
