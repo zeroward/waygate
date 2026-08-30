@@ -4,6 +4,7 @@
 /data/*.sqlite-shm
 /data/*.db
 *.exe
+*.exe~
 /webreg
 /waygate
 /bin/
@@ -16,7 +17,10 @@ vendor/
 cover.out
 coverage.html
 *.out
+coverage.*
 .DS_Store
+go.work
+go.work.sum
 downloads/**/*.zip
 downloads/**/*.7z
 downloads/**/*.rar
