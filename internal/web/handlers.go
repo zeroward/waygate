@@ -105,7 +105,7 @@ func (s *Server) online(w http.ResponseWriter, r *http.Request) {
 func (s *Server) leaderboards(w http.ResponseWriter, r *http.Request) {
 	tab := r.URL.Query().Get("tab")
 	switch tab {
-	case "kills", "honor", "arena", "playtime":
+	case "kills", "honor", "arena", "playtime", "gold":
 	default:
 		tab = "playtime"
 	}

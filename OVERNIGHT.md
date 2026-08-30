@@ -10,3 +10,13 @@
 
 **Leftover:** None for this issue.
 
+## #3 Leaderboards: gold tab
+
+**Shipped:** `/leaderboards?tab=gold` ranks real player characters by `characters.money`, formatted with `wow.Gold`. Bots (`rndbot*`) stay off the board. Character name **Auctioneer** is also excluded (AH bot). Demo snapshot includes a gold board. No Armory links.
+
+**Files:** `internal/status/status.go`, `internal/status/status_test.go`, `internal/web/handlers.go`, `internal/web/templates/leaderboards.html`, `internal/web/register_test.go`
+
+**Verify:** `GET /leaderboards?tab=gold` is 200, shows Frostwarden and `1234g`, no `RNDBOT` or `/armory`.
+
+**Leftover:** Other AH-bot names can be added to `boardSkipNames` if they show up.
+

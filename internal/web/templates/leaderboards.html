@@ -10,11 +10,13 @@
     <a href="/leaderboards?tab=kills" {{if eq $d.Tab "kills"}}class="is-active"{{end}}>Honorable kills</a>
     <a href="/leaderboards?tab=honor" {{if eq $d.Tab "honor"}}class="is-active"{{end}}>Honor</a>
     <a href="/leaderboards?tab=arena" {{if eq $d.Tab "arena"}}class="is-active"{{end}}>Arena points</a>
+    <a href="/leaderboards?tab=gold" {{if eq $d.Tab "gold"}}class="is-active"{{end}}>Gold</a>
   </nav>
   {{$rows := $s.Playtime}}
   {{if eq $d.Tab "kills"}}{{$rows = $s.Kills}}{{end}}
   {{if eq $d.Tab "honor"}}{{$rows = $s.Honor}}{{end}}
   {{if eq $d.Tab "arena"}}{{$rows = $s.Arena}}{{end}}
+  {{if eq $d.Tab "gold"}}{{$rows = $s.Gold}}{{end}}
   {{if $rows}}
   <div class="table-wrap">
     <table>

@@ -159,6 +159,30 @@ func TestHomeOKWithoutPublishedKB(t *testing.T) {
 	}
 }
 
+func TestLeaderboardsGoldTab(t *testing.T) {
+	ts := testServer(t)
+	defer ts.Close()
+	res, err := http.Get(ts.URL + "/leaderboards?tab=gold")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("status %d", res.StatusCode)
+	}
+	html := string(body)
+	if !strings.Contains(html, `tab=gold`) || !strings.Contains(html, "Frostwarden") {
+		t.Fatal("missing gold tab or demo row")
+	}
+	if !strings.Contains(html, "g") || !strings.Contains(html, "1234g") {
+		t.Fatal("missing gold formatting")
+	}
+	if strings.Contains(html, "RNDBOT") || strings.Contains(html, "/armory") {
+		t.Fatal("bots or armory links on gold board")
+	}
+}
+
 func TestRegisterRejectsBadUsername(t *testing.T) {
 	ts := testServer(t)
 	defer ts.Close()
