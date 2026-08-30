@@ -24,6 +24,24 @@ func (s *Server) wgAllowedIPs() []string {
 	return wg.NormalizeAllowed(append(append([]string{wg.VPNNet}, hosts...), s.cfg.WGExtraNets...))
 }
 
+func (s *Server) wgEndpoint() string {
+	raw := ""
+	if s.id != nil {
+		raw = s.id.Store().WGEndpoint()
+	}
+	if raw == "" {
+		raw = strings.TrimSpace(s.cfg.WGEndpoint)
+	}
+	if raw == "" {
+		raw = strings.TrimSpace(s.cfg.PublicHost)
+	}
+	ep, err := wg.NormalizeEndpoint(raw, s.cfg.WGPort)
+	if err != nil {
+		return s.cfg.WGEndpointHost()
+	}
+	return ep
+}
+
 func (s *Server) wgClientOpts(p identity.WGPeer, serverPub string) wg.ClientOpts {
 	return wg.ClientOpts{
 		Name:       p.Name,
@@ -31,9 +49,45 @@ func (s *Server) wgClientOpts(p identity.WGPeer, serverPub string) wg.ClientOpts
 		PrivateKey: p.PrivateKey,
 		Address:    p.Address,
 		ServerPub:  serverPub,
-		Endpoint:   s.cfg.WGEndpointHost(),
+		Endpoint:   s.wgEndpoint(),
 		AllowedIPs: s.wgAllowedIPs(),
+		RealmIP:    wg.TunnelIP(s.cfg.WGServerAddr),
 	}
+}
+
+func (s *Server) wgEndpointPOST(w http.ResponseWriter, r *http.Request) {
+	sess := s.requireStaff(w, r)
+	if sess == nil {
+		return
+	}
+	if !s.cfg.WGEnabled {
+		s.flashRedirect(w, r, "/staff", "error", "VPN is not enabled.")
+		return
+	}
+	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
+		return
+	}
+	raw := strings.TrimSpace(r.FormValue("endpoint"))
+	if raw == "" {
+		if err := s.id.Store().SetWGEndpoint(r.Context(), ""); err != nil {
+			s.flashRedirect(w, r, "/staff#vpn", "error", "Could not clear the VPN endpoint.")
+			return
+		}
+		s.logStaff(sess.User.Username, "wg-endpoint", "(default)")
+		s.flashRedirect(w, r, "/staff#vpn", "success", "VPN endpoint reset to "+s.wgEndpoint()+".")
+		return
+	}
+	ep, err := wg.NormalizeEndpoint(raw, s.cfg.WGPort)
+	if err != nil {
+		s.flashRedirect(w, r, "/staff#vpn", "error", err.Error())
+		return
+	}
+	if err := s.id.Store().SetWGEndpoint(r.Context(), ep); err != nil {
+		s.flashRedirect(w, r, "/staff#vpn", "error", "Could not save the VPN endpoint.")
+		return
+	}
+	s.logStaff(sess.User.Username, "wg-endpoint", ep)
+	s.flashRedirect(w, r, "/staff#vpn", "success", "VPN endpoint set to "+ep+". New and re-downloaded configs use this.")
 }
 
 func (s *Server) wgPeerViews(peers []identity.WGPeer, serverPub string) []wgPeerView {

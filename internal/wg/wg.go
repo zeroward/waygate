@@ -148,6 +148,14 @@ type ClientOpts struct {
 	ServerPub  string
 	Endpoint   string
 	AllowedIPs []string
+	RealmIP    string
+}
+
+func (o ClientOpts) realmIP() string {
+	if ip := strings.TrimSpace(o.RealmIP); ip != "" {
+		return ip
+	}
+	return ServerIP
 }
 
 func ClientConf(o ClientOpts) string {
@@ -159,6 +167,73 @@ func ClientConf(o ClientOpts) string {
 	return b.String()
 }
 
+func TunnelIP(serverAddr string) string {
+	serverAddr = strings.TrimSpace(serverAddr)
+	if serverAddr == "" {
+		return ServerIP
+	}
+	if ip, _, err := net.ParseCIDR(serverAddr); err == nil {
+		return ip.String()
+	}
+	if ip := net.ParseIP(serverAddr); ip != nil {
+		return ip.String()
+	}
+	return ServerIP
+}
+
+func NormalizeEndpoint(raw string, defaultPort int) (string, error) {
+	raw = strings.TrimSpace(raw)
+	raw = strings.TrimPrefix(raw, "https://")
+	raw = strings.TrimPrefix(raw, "http://")
+	if i := strings.Index(raw, "/"); i >= 0 {
+		raw = raw[:i]
+	}
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", fmt.Errorf("VPN endpoint is empty")
+	}
+	if defaultPort < 1 || defaultPort > 65535 {
+		defaultPort = 51820
+	}
+	host, port := raw, defaultPort
+	if h, p, err := net.SplitHostPort(raw); err == nil {
+		host = h
+		n, err := strconv.Atoi(p)
+		if err != nil || n < 1 || n > 65535 {
+			return "", fmt.Errorf("invalid VPN port")
+		}
+		port = n
+	} else if strings.Count(raw, ":") > 0 && net.ParseIP(raw) == nil {
+		return "", fmt.Errorf("invalid VPN endpoint (use host:port or a hostname/IP)")
+	}
+	host = strings.TrimSpace(host)
+	if ip := net.ParseIP(host); ip != nil {
+		return net.JoinHostPort(ip.String(), strconv.Itoa(port)), nil
+	}
+	if !validEndpointHost(host) {
+		return "", fmt.Errorf("invalid VPN hostname")
+	}
+	return net.JoinHostPort(host, strconv.Itoa(port)), nil
+}
+
+func validEndpointHost(host string) bool {
+	if host == "" || len(host) > 253 || strings.Contains(host, "..") {
+		return false
+	}
+	for _, part := range strings.Split(host, ".") {
+		if part == "" || len(part) > 63 {
+			return false
+		}
+		for i, r := range part {
+			ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || (r == '-' && i > 0 && i < len(part)-1)
+			if !ok {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 func Realmlist(host string) string {
 	host = strings.TrimSpace(host)
 	if host == "" {
@@ -167,25 +242,19 @@ func Realmlist(host string) string {
 	return "set realmlist " + host + "\n"
 }
 
-func Readme(realm, endpoint string) string {
+func Readme(realm, endpoint, realmIP string) string {
+	if realmIP == "" {
+		realmIP = ServerIP
+	}
 	return fmt.Sprintf(`%s VPN (WireGuard)
 
 1. Install the official WireGuard app: https://www.wireguard.com/install/
 2. Import the .conf file, or scan the QR on your Account page.
 3. Activate the tunnel. This is a split tunnel: only this realm and website, not all internet.
-4. For Wow.exe, you can use the realmlist.wtf in this zip (set realmlist %s)
-   or keep set realmlist %s while the tunnel is up.
+4. For Wow.exe, copy realmlist.wtf from this zip (set realmlist %s). That is the VPN server address on wg0.
 
-Endpoint: %s
-`, realm, ServerIP, realmHostFromEndpoint(endpoint), endpoint)
-}
-
-func realmHostFromEndpoint(ep string) string {
-	host, _, err := net.SplitHostPort(ep)
-	if err != nil {
-		return ep
-	}
-	return host
+WireGuard endpoint (public): %s
+`, realm, realmIP, endpoint)
 }
 
 func BundleZip(o ClientOpts) ([]byte, error) {
@@ -195,8 +264,8 @@ func BundleZip(o ClientOpts) ([]byte, error) {
 	name := fileStem(o.Name)
 	files := map[string]string{
 		name + ".conf":  conf,
-		"realmlist.wtf": Realmlist(ServerIP) + "# while the tunnel is up you can also use:\n# set realmlist " + realmHostFromEndpoint(o.Endpoint) + "\n",
-		"README.txt":    Readme(o.Realm, o.Endpoint),
+		"realmlist.wtf": Realmlist(o.realmIP()),
+		"README.txt":    Readme(o.Realm, o.Endpoint, o.realmIP()),
 	}
 	for n, body := range files {
 		h := &zip.FileHeader{Name: n, Method: zip.Store}

@@ -343,6 +343,10 @@ func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
 		"DownloadsScanMax":  downloadScanMax(s),
 		"Events":            s.recentStaffEvents(r.Context()),
 		"OpenTickets":       s.openTickets(r.Context()),
+		"WGOn":              s.cfg.WGEnabled,
+		"WGEndpoint":        s.wgEndpoint(),
+		"WGPort":            s.cfg.WGPort,
+		"WGRealmIP":         wg.TunnelIP(s.cfg.WGServerAddr),
 	})
 }
 

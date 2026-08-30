@@ -285,6 +285,21 @@ func (s *Store) ListUsers(ctx context.Context, q string, limit, offset int) ([]U
 	return out, total, rows.Err()
 }
 
+const metaWGEndpoint = "wg_endpoint"
+
+func (s *Store) WGEndpoint() string {
+	return s.meta(context.Background(), metaWGEndpoint)
+}
+
+func (s *Store) SetWGEndpoint(ctx context.Context, v string) error {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		_, err := s.db.ExecContext(ctx, `DELETE FROM identity_meta WHERE k = ?`, metaWGEndpoint)
+		return err
+	}
+	return s.setMeta(ctx, metaWGEndpoint, v)
+}
+
 func (s *Store) meta(ctx context.Context, k string) string {
 	var v string
 	_ = s.db.QueryRowContext(ctx, `SELECT v FROM identity_meta WHERE k = ?`, k).Scan(&v)

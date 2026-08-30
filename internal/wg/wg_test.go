@@ -69,6 +69,26 @@ func TestClientConfAndZip(t *testing.T) {
 	if !strings.Contains(string(z), "set realmlist 10.8.0.1") {
 		t.Fatal("realmlist missing")
 	}
+	if strings.Contains(string(z), "# set realmlist") {
+		t.Fatal("realmlist should only use wg0 IP")
+	}
+}
+
+func TestNormalizeEndpoint(t *testing.T) {
+	got, err := NormalizeEndpoint("vpn.example.com", 51820)
+	if err != nil || got != "vpn.example.com:51820" {
+		t.Fatalf("%v %s", err, got)
+	}
+	got, err = NormalizeEndpoint("203.0.113.9:1234", 51820)
+	if err != nil || got != "203.0.113.9:1234" {
+		t.Fatalf("%v %s", err, got)
+	}
+	if _, err := NormalizeEndpoint("not a host", 51820); err == nil {
+		t.Fatal("expected invalid")
+	}
+	if TunnelIP("10.8.0.1/24") != "10.8.0.1" {
+		t.Fatal(TunnelIP("10.8.0.1/24"))
+	}
 }
 
 func TestPeerFiles(t *testing.T) {

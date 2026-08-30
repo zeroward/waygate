@@ -286,14 +286,25 @@ func (c *Config) validate() error {
 }
 
 func (c Config) WGEndpointHost() string {
-	if ep := strings.TrimSpace(c.WGEndpoint); ep != "" {
-		return ep
+	raw := strings.TrimSpace(c.WGEndpoint)
+	if raw == "" {
+		raw = strings.TrimSpace(c.PublicHost)
 	}
-	host := strings.TrimSpace(c.PublicHost)
-	if host == "" {
-		host = "127.0.0.1"
+	if raw == "" {
+		raw = "127.0.0.1"
 	}
-	return fmt.Sprintf("%s:%d", host, c.WGPort)
+	if _, _, err := splitHostPort(raw); err == nil {
+		return raw
+	}
+	return fmt.Sprintf("%s:%d", raw, c.WGPort)
+}
+
+func splitHostPort(hostport string) (host, port string, err error) {
+	i := strings.LastIndex(hostport, ":")
+	if i < 0 || strings.Contains(hostport[i+1:], "]") {
+		return "", "", fmt.Errorf("no port")
+	}
+	return hostport[:i], hostport[i+1:], nil
 }
 
 func (c Config) SMTPConfigured() bool {

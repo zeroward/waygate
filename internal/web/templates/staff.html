@@ -256,6 +256,21 @@
     </aside>
   </div>
 
+  {{if $d.WGOn}}
+  <section class="panel account-pass" id="vpn">
+    <h2>VPN endpoint</h2>
+    <p class="hint">Public hostname or IP players use to reach WireGuard (UDP {{$d.WGPort}}). This is the <code>Endpoint</code> in each client config. Realmlist.wtf always uses the wg0 address <code>{{$d.WGRealmIP}}</code>.</p>
+    <form method="post" action="/staff/wg" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Hostname or IP
+        <input name="endpoint" value="{{$d.WGEndpoint}}" maxlength="253" placeholder="vpn.example.com or 203.0.113.10" autocomplete="off">
+      </label>
+      <p class="hint">Port is optional (default {{$d.WGPort}}). Leave blank and save to restore PUBLIC_HOST.</p>
+      <button type="submit" class="btn btn-gold">Save VPN endpoint</button>
+    </form>
+  </section>
+  {{end}}
+
   <section class="panel staff-dl" id="downloads">
     <header class="home-mods-head">
       <h2>Downloads</h2>

@@ -170,7 +170,7 @@ See `.env.example` for the full list. Important variables:
 | `SITE_URL` | Public origin for mail links and passkeys (RP ID is the hostname) |
 | `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGINS` | Optional passkey overrides; default from `SITE_URL` |
 | `WG_ENABLED` | Show Account VPN panel; requires the compose `wireguard` service |
-| `WG_ENDPOINT` / `WG_PORT` / `WG_PEER_MAX` | Client endpoint (default `PUBLIC_HOST:51820`), listen port, 5 configs per user |
+| `WG_ENDPOINT` / `WG_PORT` / `WG_PEER_MAX` | Default client endpoint (admins can override on the Admin panel), listen port, 5 configs per user |
 | `REALM_NAME` / `SITE_BLURB` / `CORE_NAME` | Home page |
 | `PUBLIC_HOST` | `realmlist.wtf` hostname |
 | `PUBLIC_AUTH_PORT` | Usually 3724 |
