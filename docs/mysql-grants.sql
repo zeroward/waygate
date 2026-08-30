@@ -19,6 +19,7 @@ GRANT SELECT ON acore_characters.character_glyphs TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.character_achievement TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.guild TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.guild_member TO 'webreg'@'%';
+GRANT SELECT ON acore_characters.guild_rank TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.arena_team TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.arena_team_member TO 'webreg'@'%';
 -- Account unstuck (hearth/homebind) when SOAP is down. Column-level UPDATE only.

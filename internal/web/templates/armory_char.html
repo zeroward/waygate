@@ -4,13 +4,14 @@
 <section class="panel armory-char">
   <p class="eyebrow">{{$p.Faction}} · {{$p.Race}} {{$p.Class}}</p>
   <h1>{{$p.Name}}</h1>
-  <p class="lede">Level {{$p.Level}}{{if $p.Guild}} · {{$p.Guild}}{{end}} · {{if $p.Online}}Online{{else}}{{$p.Logout}}{{end}}</p>
+  <p class="lede">Level {{$p.Level}}{{if $p.Guild}} · <a href="/armory/{{$p.Name}}?tab=guild">{{$p.Guild}}</a>{{end}} · {{if $p.Online}}Online{{else}}{{$p.Logout}}{{end}}</p>
   <nav class="tabs">
     <a href="/armory/{{$p.Name}}?tab=sheet" {{if eq $d.Tab "sheet"}}class="is-active"{{end}}>Sheet</a>
     <a href="/armory/{{$p.Name}}?tab=gear" {{if eq $d.Tab "gear"}}class="is-active"{{end}}>Gear</a>
     <a href="/armory/{{$p.Name}}?tab=talents" {{if eq $d.Tab "talents"}}class="is-active"{{end}}>Talents</a>
     <a href="/armory/{{$p.Name}}?tab=achievements" {{if eq $d.Tab "achievements"}}class="is-active"{{end}}>Achievements</a>
     <a href="/armory/{{$p.Name}}?tab=pvp" {{if eq $d.Tab "pvp"}}class="is-active"{{end}}>PvP</a>
+    {{if $p.Guild}}<a href="/armory/{{$p.Name}}?tab=guild" {{if eq $d.Tab "guild"}}class="is-active"{{end}}>Guild</a>{{end}}
   </nav>
 
   {{if eq $d.Tab "sheet"}}
@@ -20,7 +21,7 @@
     <dt>Class</dt><dd class="class-{{classSlug $p.ClassID}}">{{$p.Class}}</dd>
     <dt>Gender</dt><dd>{{$p.Gender}}</dd>
     <dt>Faction</dt><dd class="faction-{{$p.Faction}}">{{$p.Faction}}</dd>
-    <dt>Guild</dt><dd>{{if $p.Guild}}{{$p.Guild}}{{else}}—{{end}}</dd>
+    <dt>Guild</dt><dd>{{if $p.Guild}}<a href="/armory/{{$p.Name}}?tab=guild">{{$p.Guild}}</a>{{else}}—{{end}}</dd>
     <dt>Location</dt><dd>{{$p.Location}}</dd>
     <dt>Played</dt><dd>{{$p.Played}}</dd>
     <dt>Gold</dt><dd class="money">{{$p.Gold}}</dd>
@@ -56,7 +57,7 @@
       <h2>{{.Label}}{{if .Active}} <span class="badge badge-gold">Active</span>{{end}}</h2>
       {{if .Talents}}
       <ul class="armory-talents">
-        {{range .Talents}}<li>{{.Name}}</li>{{end}}
+        {{range .Talents}}<li>{{if .Wowhead}}<a href="{{.Wowhead}}" rel="noopener noreferrer">{{.Name}}</a>{{else}}{{.Name}}{{end}}</li>{{end}}
       </ul>
       {{else}}
       <p class="empty">No talents recorded.</p>
@@ -126,6 +127,37 @@
   </div>
   {{else}}
   <p class="empty">No arena teams.</p>
+  {{end}}
+  {{end}}
+
+  {{if eq $d.Tab "guild"}}
+  {{if $p.Guild}}
+  <h2>{{$p.Guild}}</h2>
+  {{if $p.GuildMOTD}}<p class="lede">{{$p.GuildMOTD}}</p>{{end}}
+  {{if $p.GuildRoster}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Level</th><th>Class</th><th>Rank</th><th></th></tr>
+      </thead>
+      <tbody>
+        {{range $p.GuildRoster}}
+        <tr>
+          <td class="name"><a href="/armory/{{.Name}}">{{.Name}}</a>{{if .Online}} <span class="char-online">Online</span>{{end}}</td>
+          <td>{{.Level}}</td>
+          <td class="class-{{classSlug .ClassID}}">{{.Class}}</td>
+          <td>{{if .Rank}}{{.Rank}}{{else}}—{{end}}</td>
+          <td></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">No members listed.</p>
+  {{end}}
+  {{else}}
+  <p class="empty">Not in a guild.</p>
   {{end}}
   {{end}}
 </section>

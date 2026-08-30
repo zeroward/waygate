@@ -127,6 +127,26 @@ func TestArmoryRequiresLoginAndDemoInspect(t *testing.T) {
 	if !strings.Contains(string(tal), "Crusader Strike") || !strings.Contains(string(tal), "Glyph of") {
 		t.Fatal("talents/glyphs")
 	}
+	if strings.Contains(string(tal), "Talent 12292") || strings.Contains(string(tal), "Talent 35395") {
+		t.Fatal("unmapped talent id")
+	}
+	if !strings.Contains(string(tal), "wowhead.com/wotlk/spell=35395") {
+		t.Fatal("missing talent wowhead link")
+	}
+
+	res, err = client.Get(ts.URL + "/armory/Frostwarden?tab=guild")
+	if err != nil {
+		t.Fatal(err)
+	}
+	guild, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	gpage := string(guild)
+	if res.StatusCode != 200 || !strings.Contains(gpage, "Ashen Verdict") || !strings.Contains(gpage, "NorthrendScout") {
+		t.Fatalf("guild tab %d %s", res.StatusCode, gpage)
+	}
+	if strings.Contains(strings.ToLower(gpage), "rndbot") {
+		t.Fatal("bot on guild roster")
+	}
 
 	res, err = client.Get(ts.URL + "/armory/Frostwarden?tab=achievements")
 	if err != nil {

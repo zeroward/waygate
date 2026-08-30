@@ -51,6 +51,7 @@ type Config struct {
 	BotPrefixes        []string
 	HideGM             bool
 	GMMinLevel         uint8
+	GMModLevel         uint8
 	StatusCache        time.Duration
 	LeaderboardSize    int
 	RequireUniqueEmail bool
@@ -62,14 +63,15 @@ type Config struct {
 	HCaptchaSiteKey  string
 	HCaptchaSecret   string
 
-	SMTPHost     string
-	SMTPPort     int
-	SMTPUser     string
-	SMTPPassword string
-	SMTPFrom     string
-	SMTPTLS      bool
-	ContactEmail string
-	DiscordURL   string
+	SMTPHost         string
+	SMTPPort         int
+	SMTPUser         string
+	SMTPPassword     string
+	SMTPFrom         string
+	SMTPTLS          bool
+	ContactEmail     string
+	DiscordURL       string
+	TicketWebhookURL string
 
 	RateWindow    time.Duration
 	RateRegister  int
@@ -150,6 +152,7 @@ func Load() (Config, error) {
 		AccountMode:        strings.ToLower(env("ACCOUNT_CREATE_MODE", "auto")),
 		HideGM:             envBool("HIDE_GM", false),
 		GMMinLevel:         uint8(envInt("GM_MIN_LEVEL", 3)),
+		GMModLevel:         uint8(envInt("GM_MOD_LEVEL", 1)),
 		StatusCache:        time.Duration(envInt("STATUS_CACHE_SECONDS", 20)) * time.Second,
 		LeaderboardSize:    envInt("LEADERBOARD_SIZE", 20),
 		RequireUniqueEmail: envBool("REQUIRE_UNIQUE_EMAIL", true),
@@ -167,6 +170,7 @@ func Load() (Config, error) {
 		SMTPTLS:            envBool("SMTP_TLS", true),
 		ContactEmail:       env("CONTACT_EMAIL", ""),
 		DiscordURL:         env("DISCORD_URL", ""),
+		TicketWebhookURL:   strings.TrimSpace(env("TICKET_WEBHOOK_URL", "")),
 		RateWindow:         time.Duration(envInt("RATE_LIMIT_WINDOW_MINUTES", 15)) * time.Minute,
 		RateRegister:       envInt("RATE_LIMIT_REGISTER", 5),
 		RateLogin:          envInt("RATE_LIMIT_LOGIN", 10),
@@ -256,6 +260,15 @@ func (c *Config) validate() error {
 	}
 	if c.GMMinLevel > 4 {
 		return fmt.Errorf("GM_MIN_LEVEL must be 1–4")
+	}
+	if c.GMModLevel == 0 {
+		c.GMModLevel = 1
+	}
+	if c.GMModLevel > 4 {
+		return fmt.Errorf("GM_MOD_LEVEL must be 1–4")
+	}
+	if c.GMModLevel > c.GMMinLevel {
+		return fmt.Errorf("GM_MOD_LEVEL must be <= GM_MIN_LEVEL")
 	}
 	if c.RateKB < 1 {
 		c.RateKB = 20

@@ -7,7 +7,7 @@
   <title>{{if .Title}}{{.Title}} — {{end}}{{.RealmName}}</title>
   <meta name="description" content="{{.RealmName}} — {{.CoreName}} account registration and realm status.">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/app.css?v=27">
+  <link rel="stylesheet" href="/static/css/app.css?v=28">
   {{if eq .CaptchaProv "turnstile"}}
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   {{end}}
@@ -32,6 +32,9 @@
   <div class="frost" aria-hidden="true"></div>
   {{if .Demo}}
   <div class="demo-banner">Demo mode — no AzerothCore databases. Status and accounts are simulated.</div>
+  {{end}}
+  {{if .Banner}}
+  <div class="maint-banner">{{.Banner}}</div>
   {{end}}
   <header class="mast">
     <div class="mast-inner">
@@ -59,6 +62,8 @@
       <div class="nav-util">
         {{if .Staff}}
         <a href="/staff" class="nav-util-link{{if eq .Active "staff"}} is-active{{end}}">Admin panel</a>
+        {{end}}
+        {{if .Mod}}
         <a href="/staff/tickets" class="nav-util-link">Tickets</a>
         {{end}}
         <a href="/contact" class="nav-util-link{{if eq .Active "contact"}} is-active{{end}}">Contact</a>
@@ -73,7 +78,7 @@
           <div class="user-menu-panel">
             <a href="/account">Account</a>
             <a href="/tickets">My tickets</a>
-            {{if .Staff}}<a href="/staff/tickets">Staff tickets</a>{{end}}
+            {{if .Mod}}<a href="/staff/tickets">Staff tickets</a>{{end}}
             <a href="/account#password">Change password</a>
             <form method="post" action="/account/logout">
               <input type="hidden" name="csrf_token" value="{{.CSRF}}">

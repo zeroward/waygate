@@ -384,6 +384,224 @@ func TestTicketOpenRateLimit(t *testing.T) {
 	}
 }
 
+func TestModTicketsNotAdmin(t *testing.T) {
+	cfg := config.Config{
+		DemoMode: true, RealmName: "Icecrown", CoreName: "AzerothCore WotLK 3.3.5a",
+		PublicHost: "127.0.0.1", PublicAuthPort: 3724, PublicWorldPort: 28085,
+		DefaultExpansion: 2, PasswordMinLength: 8, CaptchaProvider: "none",
+		StatusCache: 20 * time.Second, LeaderboardSize: 20,
+		BotPrefixes: []string{"RNDBOT"}, GMMinLevel: 3, GMModLevel: 1,
+		RateWindow: 15 * time.Minute, RateRegister: 50, RateLogin: 50, RateContact: 50, RateReset: 50,
+		RateKB: 50, RateTickets: 50, DownloadsDir: t.TempDir(), AccountMode: "sql",
+		SiteURL: "http://localhost",
+	}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	acc := account.New(cfg, nil, nil)
+	srv, err := New(cfg, log, acc, status.New(cfg, nil, nil), captcha.New(cfg), mail.New(cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	ctx := context.Background()
+	if err := acc.Create(ctx, "ModOne", "Abcd1234", "m@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	if err := acc.Create(ctx, "AdminOne", "Abcd1234", "a@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	acc.GrantGM("ModOne", 2)
+	acc.GrantGM("AdminOne", 3)
+
+	noRedir := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	mjar, _ := cookiejar.New(nil)
+	mod := &http.Client{Jar: mjar, CheckRedirect: noRedir.CheckRedirect}
+	login(t, mod, ts.URL, "ModOne", "Abcd1234")
+
+	res, err := mod.Get(ts.URL + "/staff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("mod /staff %d", res.StatusCode)
+	}
+	if loc := res.Header.Get("Location"); loc != "/staff/tickets" {
+		t.Fatalf("mod redirect %s", loc)
+	}
+
+	follow := &http.Client{Jar: mjar}
+	res, err = follow.Get(ts.URL + "/staff/tickets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	queue, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || !strings.Contains(string(queue), "Tickets") {
+		t.Fatalf("mod tickets %d %s", res.StatusCode, queue)
+	}
+
+	res, err = follow.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if strings.Contains(string(home), "Admin panel") {
+		t.Fatal("mod should not see Admin panel")
+	}
+	if !strings.Contains(string(home), `href="/staff/tickets"`) {
+		t.Fatal("mod should see staff tickets")
+	}
+
+	res, err = mod.PostForm(ts.URL+"/staff/create", url.Values{
+		"csrf_token": {"x"}, "username": {"Newacct"}, "password": {"Abcd1234"}, "password_confirm": {"Abcd1234"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("mod create %d", res.StatusCode)
+	}
+
+	ajar, _ := cookiejar.New(nil)
+	admin := &http.Client{Jar: ajar}
+	login(t, admin, ts.URL, "AdminOne", "Abcd1234")
+	res, err = admin.Get(ts.URL + "/staff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adminHome, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || !strings.Contains(string(adminHome), "Admin panel") {
+		t.Fatalf("admin panel %d", res.StatusCode)
+	}
+}
+
+func TestTicketNotifyWebhookAndMail(t *testing.T) {
+	var gotHook string
+	hook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		gotHook = string(b)
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer hook.Close()
+
+	var mails []string
+	cfg := config.Config{
+		DemoMode: true, RealmName: "Icecrown", CoreName: "AzerothCore WotLK 3.3.5a",
+		PublicHost: "127.0.0.1", PublicAuthPort: 3724, PublicWorldPort: 28085,
+		DefaultExpansion: 2, PasswordMinLength: 8, CaptchaProvider: "none",
+		StatusCache: 20 * time.Second, LeaderboardSize: 20,
+		BotPrefixes: []string{"RNDBOT"}, GMMinLevel: 1,
+		RateWindow: 15 * time.Minute, RateRegister: 50, RateLogin: 50, RateContact: 50, RateReset: 50,
+		RateKB: 50, RateTickets: 50, DownloadsDir: t.TempDir(), AccountMode: "sql",
+		SiteURL: "http://portal.example", TicketWebhookURL: hook.URL,
+	}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	acc := account.New(cfg, nil, nil)
+	ml := mail.New(cfg)
+	ml.Intercept = func(to, subject, body string) error {
+		mails = append(mails, to+"|"+subject+"|"+body)
+		return nil
+	}
+	srv, err := New(cfg, log, acc, status.New(cfg, nil, nil), captcha.New(cfg), ml)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	ctx := context.Background()
+	if err := acc.Create(ctx, "HeroOne", "Abcd1234", "h@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	if err := acc.Create(ctx, "Staffer", "Abcd1234", "s@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	acc.GrantGM("Staffer", 2)
+
+	pjar, _ := cookiejar.New(nil)
+	player := &http.Client{Jar: pjar}
+	login(t, player, ts.URL, "HeroOne", "Abcd1234")
+	res, err := player.Get(ts.URL + "/tickets/new")
+	if err != nil {
+		t.Fatal(err)
+	}
+	nb, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	res, err = player.PostForm(ts.URL+"/tickets", url.Values{
+		"csrf_token": {extractCSRF(string(nb))},
+		"category":   {"Items"},
+		"title":      {"Missing sword"},
+		"body":       {"It vanished after a crash."},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if !strings.Contains(gotHook, "Missing sword") || !strings.Contains(gotHook, "HEROONE") {
+		t.Fatalf("webhook %s", gotHook)
+	}
+	if len(mails) != 0 {
+		t.Fatalf("player open should not mail %v", mails)
+	}
+
+	res, err = player.Get(ts.URL + "/tickets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	id := ticketIDFromHTML(string(mine))
+	if id == "" {
+		t.Fatal("missing ticket id")
+	}
+
+	sjar, _ := cookiejar.New(nil)
+	staff := &http.Client{Jar: sjar}
+	login(t, staff, ts.URL, "Staffer", "Abcd1234")
+	res, err = staff.Get(ts.URL + "/staff/tickets/" + id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	res, err = staff.PostForm(ts.URL+"/staff/tickets/"+id, url.Values{
+		"csrf_token": {extractCSRF(string(page))},
+		"status":     {"in-progress"},
+		"body":       {"Looking into it."},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if len(mails) != 1 || !strings.Contains(mails[0], "h@example.com") || !strings.Contains(mails[0], "Staff replied") {
+		t.Fatalf("staff mail %v", mails)
+	}
+
+	res, err = player.Get(ts.URL + "/tickets/" + id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	nMail := len(mails)
+	res, err = player.PostForm(ts.URL+"/tickets/"+id+"/comment", url.Values{
+		"csrf_token": {extractCSRF(string(view))},
+		"body":       {"Thanks"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if len(mails) != nMail {
+		t.Fatalf("player comment mailed %v", mails)
+	}
+}
+
 func ticketIDFromHTML(html string) string {
 	const needle = `href="/tickets/`
 	i := strings.Index(html, needle)

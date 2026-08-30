@@ -96,7 +96,7 @@ The home page lists **installed AzerothCore modules** by scanning `MODULES_DIR` 
 
 **Companion** (`/companion`) is a second-monitor quest helper for characters on linked WoW logins. Pick a region and it lists leftover quests in a recommended order from this realm’s `quest_template` / `quest_template_addon` chains (plus nearby POI when present). Dailies, dungeons, and raids are skipped. It also shows the last-saved quest log. Not live GPS — worldserver writes the row on its save interval and on logout. Optional Wowhead quest links are outbound only (no scrape). Not a Zygor/Joana copy.
 
-Logged-in accounts with `account_access.gmlevel` ≥ `GM_MIN_LEVEL` get an **Admin panel**: list registrations (bots hidden by default), create player accounts, reset passwords via SOAP/SRP6, upload or remove **Downloads**, and set rank to **GM** (2) or **Admin** (3). Knowledge Base create/edit is **Admin (GM 3+) only**. Super GM (4 / console) cannot be granted from the site. You can only assign a rank below your own, you cannot change your own rank, and you cannot modify an account whose GM level is higher than yours.
+Logged-in accounts with `gmlevel` ≥ `GM_MOD_LEVEL` (default 1) can answer **staff tickets**. The **Admin panel** (`/staff`) needs `gmlevel` ≥ `GM_MIN_LEVEL` (default 3): list registrations (bots hidden by default), create player accounts, reset passwords via SOAP/SRP6, upload or remove **Downloads**, set a maintenance banner, and set rank to **GM** (2) or **Admin** (3). Knowledge Base create/edit is **Admin (GM 3+) only**. Super GM (4 / console) cannot be granted from the site. You can only assign a rank below your own, you cannot change your own rank, and you cannot modify an account whose GM level is higher than yours. Mods who open `/staff` are sent to the ticket queue.
 
 ## Quick start (offline UI)
 
@@ -174,12 +174,12 @@ See `.env.example` for the full list. Important variables:
 | `WEBREG_PORT` | Host port published by compose (default 3080) |
 | `DEMO_MODE` | Skip MySQL/SOAP; fake status |
 | `LISTEN_ADDR` | Bind address (`:3080`) |
-| `SITE_URL` | Public origin for mail links and passkeys (RP ID is the hostname) |
-| `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGINS` | Optional passkey overrides; default from `SITE_URL` |
+| `SITE_URL` | Website origin (Cloudflare): mail links and passkeys. RP ID is this hostname. Not the realm host. |
+| `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGINS` | Optional passkey overrides; default from `SITE_URL`. RP ID must match the `SITE_URL` host — do not use `PUBLIC_HOST`. |
 | `WG_ENABLED` | Show Account VPN panel; requires the compose `wireguard` service |
 | `WG_ENDPOINT` / `WG_PORT` / `WG_PEER_MAX` | Default client endpoint (admins can override on the Admin panel), listen port, 5 configs per user |
 | `REALM_NAME` / `SITE_BLURB` / `CORE_NAME` | Home page |
-| `PUBLIC_HOST` | `realmlist.wtf` hostname |
+| `PUBLIC_HOST` | Realmlist / VPN game hostname. Separate from `SITE_URL`. |
 | `PUBLIC_AUTH_PORT` | Usually 3724 |
 | `PUBLIC_WORLD_PORT` | Public world port (**28085** on this host, not 8085) |
 | `MYSQL_*` / `AUTH_DB` / `CHARACTERS_DB` / `WORLD_DB` | AC databases |
@@ -188,7 +188,9 @@ See `.env.example` for the full list. Important variables:
 | `ACCOUNT_CREATE_MODE` | `auto` / `soap` / `sql` |
 | `BOT_USERNAME_PREFIXES` | Comma list, default `rndbot` |
 | `HIDE_GM` | Hide GM characters from leaderboards (default `false`) |
-| `GM_MIN_LEVEL` | Minimum `account_access.gmlevel` for the Admin panel at `/staff` (default 3) |
+| `GM_MIN_LEVEL` | Minimum gmlevel for the Admin panel at `/staff` (default 3) |
+| `GM_MOD_LEVEL` | Minimum gmlevel for `/staff/tickets` (default 1, must be ≤ `GM_MIN_LEVEL`) |
+| `TICKET_WEBHOOK_URL` | Optional Discord webhook for new tickets |
 | `STATUS_CACHE_SECONDS` | 15–30 recommended |
 | `CAPTCHA_PROVIDER` | `none` / `turnstile` / `hcaptcha` |
 | `REGISTER_KEY` | Optional invite key for public registration (admins can override on the Admin panel) |
@@ -212,7 +214,7 @@ Never commit `.env`. SOAP passwords and MySQL passwords stay server-side.
 - Rate limits on register, login, contact, reset.
 - Captcha on register when configured. **Production should not use `CAPTCHA_PROVIDER=none`.**
 - **TODO:** vote-for-points (not in v1).
-- Website login supports TOTP and passkeys. Neither applies to the 3.3.5a client.
+- Website login supports TOTP and passkeys. Neither applies to the 3.3.5a client. Passkeys follow `SITE_URL` (the website), not `PUBLIC_HOST` (the realm).
 - Email uniqueness is enforced with a `SELECT` then `INSERT`. AzerothCore has no unique index on `account.email`. Do not treat that as a security boundary.
 
 Versioning is SemVer. This tree is **0.x alpha** (`v0.1.0-alpha.1`) until it has had in-depth security testing. Pre-releases are GitHub prereleases; `latest` on GHCR tracks `main`, not alphas.

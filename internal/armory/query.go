@@ -89,6 +89,9 @@ func (s *Service) inspectSQL(ctx context.Context, name string) (Profile, bool) {
 	p.ActiveSpec = activeSpec
 	fillSheet(&p, race, class, gender, money, played, logout, mapID, zone)
 	p.Guild = s.guildName(ctx, p.GUID)
+	if p.Guild != "" {
+		p.GuildMOTD, p.GuildRoster = s.guildRoster(ctx, p.Guild)
+	}
 	p.Gear = s.gear(ctx, p.GUID)
 	p.Specs = s.talents(ctx, p.GUID, activeSpec, specCount)
 	p.Achievements = s.achievements(ctx, p.GUID)
@@ -104,6 +107,56 @@ func (s *Service) guildName(ctx context.Context, guid uint32) string {
 		return ""
 	}
 	return name
+}
+
+const guildRosterCap = 200
+
+func (s *Service) guildRoster(ctx context.Context, guildName string) (string, []GuildMember) {
+	motdQ := fmt.Sprintf(`SELECT COALESCE(g.`+"`motd`"+`, '') FROM %s g WHERE g.`+"`name`"+` = ?`, s.db.QChar("guild"))
+	var motd string
+	_ = s.db.SQL.QueryRowContext(ctx, motdQ, guildName).Scan(&motd)
+
+	botSQL, botArgs := s.botWhere()
+	q := fmt.Sprintf(`
+		SELECT c.`+"`name`"+`, c.`+"`level`"+`, c.`+"`class`"+`, c.`+"`online`"+`,
+		       COALESCE(gr.`+"`rname`"+`, ''), gm.`+"`rank`"+`
+		FROM %s gm
+		INNER JOIN %s g ON g.`+"`guildid`"+` = gm.`+"`guildid`"+`
+		INNER JOIN %s c ON c.`+"`guid`"+` = gm.`+"`guid`"+`
+		INNER JOIN %s a ON a.`+"`id`"+` = c.`+"`account`"+`
+		LEFT JOIN %s gr ON gr.`+"`guildid`"+` = gm.`+"`guildid`"+` AND gr.`+"`rid`"+` = gm.`+"`rank`"+`
+		WHERE g.`+"`name`"+` = ? AND c.`+"`deleteDate`"+` IS NULL%s
+		ORDER BY gm.`+"`rank`"+` ASC, c.`+"`name`"+` ASC
+		LIMIT ?`,
+		s.db.QChar("guild_member"), s.db.QChar("guild"), s.db.QChar("characters"),
+		s.db.QAuth("account"), s.db.QChar("guild_rank"), botSQL)
+	args := append([]any{guildName}, botArgs...)
+	args = append(args, guildRosterCap)
+	rows, err := s.db.SQL.QueryContext(ctx, q, args...)
+	if err != nil {
+		s.log.Error("armory guild roster", "err", err, "guild", guildName)
+		return strings.TrimSpace(motd), nil
+	}
+	defer rows.Close()
+	var out []GuildMember
+	for rows.Next() {
+		var name, rank string
+		var level, class, rankSort uint8
+		var online int
+		if err := rows.Scan(&name, &level, &class, &online, &rank, &rankSort); err != nil {
+			return strings.TrimSpace(motd), out
+		}
+		out = append(out, GuildMember{
+			Name:     name,
+			Level:    level,
+			Class:    wow.ClassName(class),
+			ClassID:  class,
+			Rank:     rank,
+			Online:   online != 0,
+			RankSort: rankSort,
+		})
+	}
+	return strings.TrimSpace(motd), out
 }
 
 func (s *Service) gear(ctx context.Context, guid uint32) []GearItem {

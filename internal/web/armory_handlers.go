@@ -51,7 +51,7 @@ func (s *Server) armoryInspect(w http.ResponseWriter, r *http.Request) {
 	}
 	tab := r.URL.Query().Get("tab")
 	switch tab {
-	case "gear", "talents", "achievements", "pvp":
+	case "gear", "talents", "achievements", "pvp", "guild":
 	default:
 		tab = "sheet"
 	}

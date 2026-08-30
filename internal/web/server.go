@@ -118,7 +118,7 @@ func New(
 	if waErr != nil {
 		log.Error("webauthn disabled", "err", waErr)
 	} else if wa != nil {
-		log.Info("webauthn", "rp", wa.Config.RPID, "origins", wa.Config.RPOrigins)
+		log.Info("webauthn", "rp", wa.Config.RPID, "origins", wa.Config.RPOrigins, "realm", cfg.PublicHost)
 	}
 	wgOK := false
 	if cfg.WGEnabled {
@@ -217,6 +217,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /staff/tickets/{id}", s.staffTicketView)
 	mux.HandleFunc("POST /staff/tickets/{id}", s.staffTicketUpdate)
 	mux.HandleFunc("GET /staff", s.staffGET)
+	mux.HandleFunc("POST /staff/banner", s.staffBannerPOST)
 	mux.HandleFunc("POST /staff/create", s.staffCreatePOST)
 	mux.HandleFunc("POST /staff/reset", s.staffResetPOST)
 	mux.HandleFunc("POST /staff/rank", s.staffRankPOST)
@@ -306,6 +307,8 @@ type page struct {
 	Flash        *session.Flash
 	User         *session.User
 	Staff        bool
+	Mod          bool
+	Banner       string
 	Demo         bool
 	RealmName    string
 	CoreName     string
@@ -333,6 +336,8 @@ func (s *Server) view(w http.ResponseWriter, r *http.Request, name, title, activ
 		Flash:        sess.TakeFlash(),
 		User:         sess.User,
 		Staff:        sess.User.IsStaff(s.staffMin()),
+		Mod:          sess.User.IsStaff(s.modMin()),
+		Banner:       s.maintenanceBanner(r.Context()),
 		CanEditKB:    s.canEditKB(sess.User),
 		Demo:         s.cfg.DemoMode,
 		RealmName:    s.cfg.RealmName,

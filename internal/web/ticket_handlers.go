@@ -79,6 +79,7 @@ func (s *Server) ticketsCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.logStaff(sess.User.Username, "ticket-open", saved.PublicRef)
+	s.notifyNewTicket(saved)
 	s.flashRedirect(w, r, "/tickets/"+strconv.FormatInt(saved.ID, 10), "success", "Ticket "+saved.PublicRef+" opened.")
 }
 
@@ -131,7 +132,7 @@ func (s *Server) ticketsComment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) staffTickets(w http.ResponseWriter, r *http.Request) {
-	if s.requireStaff(w, r) == nil {
+	if s.requireMod(w, r) == nil {
 		return
 	}
 	list, err := s.kb.ListOpenTickets(r.Context())
@@ -144,7 +145,7 @@ func (s *Server) staffTickets(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) staffTicketView(w http.ResponseWriter, r *http.Request) {
-	if s.requireStaff(w, r) == nil {
+	if s.requireMod(w, r) == nil {
 		return
 	}
 	t, ok := s.loadTicketByPath(w, r)
@@ -159,7 +160,7 @@ func (s *Server) staffTicketView(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) staffTicketUpdate(w http.ResponseWriter, r *http.Request) {
-	sess := s.requireStaff(w, r)
+	sess := s.requireMod(w, r)
 	if sess == nil {
 		return
 	}
@@ -170,18 +171,27 @@ func (s *Server) staffTicketUpdate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	var notes []string
 	if st := strings.TrimSpace(r.FormValue("status")); st != "" && st != t.Status {
 		if err := s.kb.SetTicketStatus(r.Context(), t.ID, st, sess.User.Username); err != nil {
 			s.flashRedirect(w, r, "/staff/tickets/"+strconv.FormatInt(t.ID, 10), "error", "Could not update status.")
 			return
 		}
 		s.logStaff(sess.User.Username, "ticket-status", t.PublicRef+"="+st)
+		notes = append(notes, "Staff changed the status.")
 	}
 	if body := strings.TrimSpace(r.FormValue("body")); body != "" {
 		if err := s.kb.AddTicketMessage(r.Context(), t.ID, sess.User.Username, true, body); err != nil {
 			s.flashRedirect(w, r, "/staff/tickets/"+strconv.FormatInt(t.ID, 10), "error", "Could not add comment.")
 			return
 		}
+		notes = append(notes, "Staff replied.")
+	}
+	if len(notes) > 0 {
+		if fresh, err := s.kb.GetTicket(r.Context(), t.ID); err == nil {
+			t = fresh
+		}
+		s.notifyTicketPlayer(t, strings.Join(notes, " "))
 	}
 	s.flashRedirect(w, r, "/staff/tickets/"+strconv.FormatInt(t.ID, 10), "success", "Ticket updated.")
 }

@@ -44,6 +44,7 @@ func main() {
 	if !cfg.DemoMode && strings.HasPrefix(strings.ToLower(cfg.SiteURL), "https://") && !cfg.SessionSecure {
 		log.Warn("SITE_URL is https but SESSION_SECURE_COOKIE is false; the session cookie can leak on HTTP")
 	}
+	log.Info("hosts", "site", cfg.SiteURL, "realm", cfg.PublicHost)
 
 	var database *db.DB
 	if !cfg.DemoMode {

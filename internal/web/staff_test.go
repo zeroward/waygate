@@ -41,6 +41,137 @@ func staffTestServer(t *testing.T) (*httptest.Server, *account.Service) {
 	return httptest.NewServer(srv.Handler()), acc
 }
 
+func TestMaintenanceBannerAdminOnly(t *testing.T) {
+	cfg := config.Config{
+		DemoMode: true, RealmName: "Icecrown", CoreName: "AzerothCore WotLK 3.3.5a",
+		PublicHost: "127.0.0.1", PublicAuthPort: 3724, PublicWorldPort: 28085,
+		DefaultExpansion: 2, PasswordMinLength: 8, CaptchaProvider: "none",
+		StatusCache: 20 * time.Second, LeaderboardSize: 20,
+		BotPrefixes: []string{"RNDBOT"}, GMMinLevel: 3, GMModLevel: 1,
+		RateWindow: 15 * time.Minute, RateRegister: 50, RateLogin: 50, RateContact: 50, RateReset: 50, RateKB: 50, RateTickets: 50,
+		DownloadsDir: t.TempDir(), AccountMode: "sql",
+	}
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	acc := account.New(cfg, nil, nil)
+	srv, err := New(cfg, log, acc, status.New(cfg, nil, nil), captcha.New(cfg), mail.New(cfg))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+	ctx := context.Background()
+	if err := acc.Create(ctx, "ModOne", "Abcd1234", "m@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	if err := acc.Create(ctx, "AdminOne", "Abcd1234", "a@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	acc.GrantGM("ModOne", 2)
+	acc.GrantGM("AdminOne", 3)
+
+	mjar, _ := cookiejar.New(nil)
+	mod := &http.Client{Jar: mjar, CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	login(t, mod, ts.URL, "ModOne", "Abcd1234")
+	res, err := mod.Get(ts.URL + "/staff/tickets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	modPage, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	res, err = mod.PostForm(ts.URL+"/staff/banner", url.Values{
+		"csrf_token": {extractCSRF(string(modPage))},
+		"message":    {"restart soon"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusForbidden {
+		t.Fatalf("mod banner %d", res.StatusCode)
+	}
+
+	ajar, _ := cookiejar.New(nil)
+	admin := &http.Client{Jar: ajar}
+	login(t, admin, ts.URL, "AdminOne", "Abcd1234")
+	res, err = admin.Get(ts.URL + "/staff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	staffPage, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	csrf := extractCSRF(string(staffPage))
+	res, err = admin.PostForm(ts.URL+"/staff/banner", url.Values{
+		"csrf_token": {csrf},
+		"message":    {"Realm restart at 20:00 UTC"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+
+	res, err = admin.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if !strings.Contains(string(home), "Realm restart at 20:00 UTC") {
+		t.Fatalf("banner missing %s", home)
+	}
+
+	until := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	res, err = admin.Get(ts.URL + "/staff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	staffPage, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	res, err = admin.PostForm(ts.URL+"/staff/banner", url.Values{
+		"csrf_token": {extractCSRF(string(staffPage))},
+		"message":    {"expired note"},
+		"until":      {until},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	res, err = admin.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	if strings.Contains(string(home), "expired note") {
+		t.Fatal("expired banner still showing")
+	}
+
+	res, err = admin.Get(ts.URL + "/staff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	staffPage, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	res, err = admin.PostForm(ts.URL+"/staff/banner", url.Values{
+		"csrf_token": {extractCSRF(string(staffPage))},
+		"message":    {""},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	res, err = admin.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	if strings.Contains(string(home), "Realm restart") {
+		t.Fatal("cleared banner still showing")
+	}
+}
+
 func TestStaffForbiddenForPlayers(t *testing.T) {
 	ts, acc := staffTestServer(t)
 	defer ts.Close()

@@ -12,8 +12,34 @@ import (
 	"testing"
 
 	"github.com/descope/virtualwebauthn"
+	"github.com/zeroward/waygate/internal/config"
 	"github.com/zeroward/waygate/internal/identity"
 )
+
+func TestWebAuthnRPUsesSiteURLNotRealmHost(t *testing.T) {
+	id, origins, err := webAuthnRP(config.Config{
+		SiteURL:    "https://portal.example",
+		PublicHost: "realm.example",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if id != "portal.example" {
+		t.Fatalf("rp %q", id)
+	}
+	if len(origins) != 1 || origins[0] != "https://portal.example" {
+		t.Fatalf("origins %v", origins)
+	}
+
+	_, _, err = webAuthnRP(config.Config{
+		SiteURL:      "https://portal.example",
+		PublicHost:   "realm.example",
+		WebAuthnRPID: "realm.example",
+	})
+	if err == nil {
+		t.Fatal("expected RP ID mismatch to disable webauthn")
+	}
+}
 
 func TestPasskeyRegisterBeginRequiresLogin(t *testing.T) {
 	ts := testServer(t)

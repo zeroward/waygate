@@ -319,6 +319,17 @@ func (s *Server) staffMin() uint8 {
 	return s.cfg.GMMinLevel
 }
 
+func (s *Server) modMin() uint8 {
+	m := s.cfg.GMModLevel
+	if m < 1 {
+		m = 1
+	}
+	if m > s.staffMin() {
+		m = s.staffMin()
+	}
+	return m
+}
+
 func (s *Server) applyStaffLevel(ctx context.Context, sess *session.Session) {
 	if s.id == nil || sess == nil || sess.User == nil {
 		return
@@ -344,9 +355,33 @@ func (s *Server) requireStaff(w http.ResponseWriter, r *http.Request) *session.S
 	return sess
 }
 
+func (s *Server) requireMod(w http.ResponseWriter, r *http.Request) *session.Session {
+	sess := s.sessions.GetOrCreate(w, r)
+	if sess.User == nil {
+		s.flashRedirect(w, r, "/account", "error", "Log in first.")
+		return nil
+	}
+	s.applyStaffLevel(r.Context(), sess)
+	if !sess.User.IsStaff(s.modMin()) {
+		http.Error(w, "Staff tickets only.", http.StatusForbidden)
+		return nil
+	}
+	return sess
+}
+
 func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
-	sess := s.requireStaff(w, r)
-	if sess == nil {
+	sess := s.sessions.GetOrCreate(w, r)
+	if sess.User == nil {
+		s.flashRedirect(w, r, "/account", "error", "Log in first.")
+		return
+	}
+	s.applyStaffLevel(r.Context(), sess)
+	if !sess.User.IsStaff(s.staffMin()) {
+		if sess.User.IsStaff(s.modMin()) {
+			http.Redirect(w, r, "/staff/tickets", http.StatusSeeOther)
+			return
+		}
+		http.Error(w, "Admin panel only.", http.StatusForbidden)
 		return
 	}
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
@@ -412,6 +447,8 @@ func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
 		"WGPort":            s.cfg.WGPort,
 		"WGRealmIP":         wg.TunnelIP(s.cfg.WGServerAddr),
 		"RegisterKey":       s.registerKey(),
+		"BannerMessage":     s.bannerMessage(r.Context()),
+		"BannerUntil":       s.bannerUntilLocal(r.Context()),
 	})
 }
 

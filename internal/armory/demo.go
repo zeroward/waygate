@@ -25,7 +25,7 @@ func demoRoster() []demoChar {
 		{name: "Icemourn", race: "Orc", class: "Death Knight", gender: "Female", guild: "Warsong Offensive",
 			raceID: 2, classID: 6, genderID: 1, level: 80, money: 8_800_000, played: 1_200_000,
 			mapID: 631, zone: 4812, online: true, honor: 72000, arena: 1420, hk: 4200},
-		{name: "NorthrendScout", race: "Night Elf", class: "Hunter", gender: "Female", guild: "",
+		{name: "NorthrendScout", race: "Night Elf", class: "Hunter", gender: "Female", guild: "Ashen Verdict",
 			raceID: 4, classID: 3, genderID: 1, level: 77, money: 881200, played: 410_000,
 			mapID: 571, zone: 3537, online: false, logout: 1_704_067_200, honor: 14000, arena: 1420, hk: 800},
 		{name: "Plaguebloom", race: "Undead", class: "Warlock", gender: "Male", guild: "Hand of Vengeance",
@@ -106,7 +106,34 @@ func demoInspect(name string) (Profile, bool) {
 			{Name: "Northrend Knights", Bracket: "3v3", Type: 3, Rating: 1650, SeasonGames: 40, SeasonWins: 22, PersonalRating: 1610},
 		}
 	}
+	if c.guild != "" {
+		p.GuildMOTD, p.GuildRoster = demoGuildRoster(c.guild)
+	}
 	return p, true
+}
+
+func demoGuildRoster(guild string) (string, []GuildMember) {
+	var out []GuildMember
+	for _, c := range demoRoster() {
+		if c.guild != guild {
+			continue
+		}
+		out = append(out, GuildMember{
+			Name:    c.name,
+			Level:   c.level,
+			Class:   c.class,
+			ClassID: c.classID,
+			Rank:    "Member",
+			Online:  c.online,
+		})
+	}
+	if strings.EqualFold(guild, "Ashen Verdict") {
+		if len(out) > 0 {
+			out[0].Rank = "Guild Master"
+		}
+		return "Icecrown awaits.", out
+	}
+	return "", out
 }
 
 func frostwardenGear() []GearItem {

@@ -59,6 +59,8 @@ type Profile struct {
 	Gender         string
 	Faction        string
 	Guild          string
+	GuildMOTD      string
+	GuildRoster    []GuildMember
 	Location       string
 	Played         string
 	Gold           string
@@ -102,9 +104,26 @@ type TalentSpec struct {
 	Glyphs  []Glyph
 }
 
+type GuildMember struct {
+	Name     string
+	Level    uint8
+	Class    string
+	ClassID  uint8
+	Rank     string
+	Online   bool
+	RankSort uint8
+}
+
 type Talent struct {
 	Spell uint32
 	Name  string
+}
+
+func (t Talent) Wowhead() string {
+	if t.Spell == 0 {
+		return ""
+	}
+	return fmt.Sprintf("https://www.wowhead.com/wotlk/spell=%d", t.Spell)
 }
 
 type Glyph struct {

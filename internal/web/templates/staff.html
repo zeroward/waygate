@@ -9,6 +9,21 @@
     {{if .CanEditKB}}<p class="home-cta-quiet"><a href="/staff/kb">Knowledge Base articles</a></p>{{end}}
   </section>
 
+  <section class="panel" id="banner">
+    <h2>Maintenance banner</h2>
+    <p class="hint">Shown on every page. Leave the message empty to clear. Until is optional (UTC).</p>
+    <form method="post" action="/staff/banner" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Message
+        <input name="message" maxlength="280" value="{{$d.BannerMessage}}" placeholder="Realm restart at 20:00 UTC">
+      </label>
+      <label>Until (optional)
+        <input type="datetime-local" name="until" value="{{$d.BannerUntil}}">
+      </label>
+      <button type="submit" class="btn btn-gold">Save banner</button>
+    </form>
+  </section>
+
   <section class="panel staff-tickets" id="tickets">
     <header class="home-mods-head">
       <h2>Open tickets</h2>

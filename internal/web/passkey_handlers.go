@@ -3,6 +3,7 @@ package web
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -37,19 +38,26 @@ func newWebAuthn(cfg config.Config) (*webauthn.WebAuthn, error) {
 }
 
 func webAuthnRP(cfg config.Config) (id string, origins []string, err error) {
-	id = strings.TrimSpace(cfg.WebAuthnRPID)
+	var siteHost string
 	origins = append([]string(nil), cfg.WebAuthnOrigins...)
 	if cfg.SiteURL != "" {
 		u, perr := url.Parse(cfg.SiteURL)
 		if perr != nil {
 			return "", nil, perr
 		}
-		if id == "" {
-			id = u.Hostname()
-		}
+		siteHost = u.Hostname()
 		if len(origins) == 0 && u.Scheme != "" && u.Host != "" {
 			origins = []string{u.Scheme + "://" + u.Host}
 		}
+	}
+	override := strings.TrimSpace(cfg.WebAuthnRPID)
+	if override != "" {
+		if siteHost == "" || !strings.EqualFold(override, siteHost) {
+			return "", nil, fmt.Errorf("WEBAUTHN_RP_ID %q must match SITE_URL host %q (do not use PUBLIC_HOST)", override, siteHost)
+		}
+		id = override
+	} else {
+		id = siteHost
 	}
 	if id == "" || len(origins) == 0 {
 		return "", nil, nil

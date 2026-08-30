@@ -42,11 +42,47 @@ func TestDemoSearchAndInspect(t *testing.T) {
 	if len(p.Arena) != 2 || p.Arena[0].Bracket != "2v2" || p.Arena[1].Bracket != "3v3" {
 		t.Fatalf("arena %+v", p.Arena)
 	}
+	if p.Guild != "Ashen Verdict" || len(p.GuildRoster) < 2 {
+		t.Fatalf("guild roster %+v", p.GuildRoster)
+	}
+	foundScout := false
+	for _, m := range p.GuildRoster {
+		if m.Name == "NorthrendScout" {
+			foundScout = true
+		}
+		if strings.EqualFold(m.Name, "rndbot") {
+			t.Fatal("bot on roster")
+		}
+	}
+	if !foundScout {
+		t.Fatal("NorthrendScout should be in Ashen Verdict")
+	}
 	if _, ok := s.Inspect(context.Background(), "NoSuchHero"); ok {
 		t.Fatal("missing char should 404")
 	}
 	if s.Search(context.Background(), "rndbot") != nil {
 		t.Fatal("prefix that is not a demo name")
+	}
+}
+
+func TestTalentAndGlyphNames(t *testing.T) {
+	if TalentName(12292) != "Death Wish" {
+		t.Fatalf("warrior %q", TalentName(12292))
+	}
+	if TalentName(35395) != "Crusader Strike" {
+		t.Fatalf("paladin %q", TalentName(35395))
+	}
+	if strings.HasPrefix(TalentName(12292), "Talent ") {
+		t.Fatal("mapped talent should not fall back")
+	}
+	if TalentName(9_999_999) != "Talent 9999999" {
+		t.Fatalf("fallback %q", TalentName(9_999_999))
+	}
+	if GlyphName(183) != "Glyph of Judgement" {
+		t.Fatalf("glyph 183 %q", GlyphName(183))
+	}
+	if GlyphName(9_999_999) != "Glyph 9999999" {
+		t.Fatalf("glyph fallback %q", GlyphName(9_999_999))
 	}
 }
 
