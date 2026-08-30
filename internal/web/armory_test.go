@@ -67,6 +67,9 @@ func TestArmoryRequiresLoginAndDemoInspect(t *testing.T) {
 	if res.StatusCode != 200 || !strings.Contains(string(idx), `action="/armory"`) {
 		t.Fatalf("search page %d", res.StatusCode)
 	}
+	if !strings.Contains(string(idx), "Your characters") || !strings.Contains(string(idx), "/armory/Frostwarden") || !strings.Contains(string(idx), "NorthrendScout") {
+		t.Fatal("armory should list the account's characters by default")
+	}
 	if !strings.Contains(string(idx), "script-src 'self'") && !strings.Contains(res.Header.Get("Content-Security-Policy"), "script-src 'self'") {
 		// CSP is a response header
 	}

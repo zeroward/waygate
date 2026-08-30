@@ -3,7 +3,7 @@
 <section class="panel">
   <p class="eyebrow">Who walks Icecrown</p>
   <h1>Armory</h1>
-  <p class="lede">Search a character by name. Random playerbots are omitted. There is no 3D model viewer.</p>
+  <p class="lede">Your characters are listed below. Search the realm by name to inspect someone else. Random playerbots are omitted.</p>
   <form method="get" action="/armory" class="dl-search" role="search">
     <input name="q" value="{{$d.Query}}" placeholder="Character name" maxlength="12" autocomplete="off">
     <button type="submit" class="btn btn-gold">Search</button>
@@ -31,8 +31,34 @@
     {{else}}
     <p class="empty">No characters match “{{$d.Query}}”.</p>
     {{end}}
+    <p class="hint"><a href="/armory">Back to your characters</a></p>
   {{else}}
-  <p class="hint">Type the start of a name. Names are unique on this realm.</p>
+    {{if $d.Mine}}
+    <header class="home-mods-head">
+      <h2>Your characters</h2>
+      <span class="mod-count">{{len $d.Mine}}</span>
+    </header>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Name</th><th>Level</th><th>Race</th><th>Class</th><th>Faction</th></tr>
+        </thead>
+        <tbody>
+          {{range $d.Mine}}
+          <tr>
+            <td class="name"><a href="/armory/{{.Name}}">{{.Name}}</a></td>
+            <td>{{.Level}}</td>
+            <td>{{.Race}}</td>
+            <td class="class-{{classSlug .ClassID}}">{{.Class}}</td>
+            <td class="faction-{{.Faction}}">{{.Faction}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="empty">No characters on this account yet. Search the realm by name above, or log into the realm to create one.</p>
+    {{end}}
   {{end}}
 </section>
 {{template "footer" .}}

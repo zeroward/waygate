@@ -8,17 +8,34 @@ import (
 )
 
 func (s *Server) armorySearch(w http.ResponseWriter, r *http.Request) {
-	if s.requireLogin(w, r) == nil {
+	sess := s.requireLogin(w, r)
+	if sess == nil {
 		return
 	}
 	q := strings.TrimSpace(r.URL.Query().Get("q"))
-	var hits []armory.SearchHit
+	var hits, mine []armory.SearchHit
 	if q != "" {
 		hits = s.armory.Search(r.Context(), q)
+	} else {
+		chars, err := s.status.AccountCharacters(r.Context(), sess.User.ID)
+		if err != nil {
+			s.log.Error("armory account characters", "err", err, "account", sess.User.ID)
+		}
+		for _, ch := range chars {
+			mine = append(mine, armory.SearchHit{
+				Name:    ch.Name,
+				Level:   ch.Level,
+				Race:    ch.Race,
+				Class:   ch.Class,
+				ClassID: ch.ClassID,
+				Faction: ch.Faction,
+			})
+		}
 	}
 	s.view(w, r, "armory.html", "Armory", "armory", map[string]any{
 		"Query": q,
 		"Hits":  hits,
+		"Mine":  mine,
 	})
 }
 
