@@ -17,6 +17,7 @@ import (
 	"github.com/zeroward/waygate/internal/session"
 	"github.com/zeroward/waygate/internal/status"
 	"github.com/zeroward/waygate/internal/validate"
+	"github.com/zeroward/waygate/internal/wg"
 )
 
 type homeView struct {
@@ -678,9 +679,17 @@ func (s *Server) accountGET(w http.ResponseWriter, r *http.Request) {
 	}
 	totpOn := false
 	var passkeys []identity.Passkey
+	var wgPeers []wgPeerView
 	if sess.User != nil {
 		totpOn = s.id.TOTPEnabled(r.Context(), sess.User.ID)
 		passkeys, _ = s.id.Store().ListPasskeys(r.Context(), sess.User.ID)
+		if s.wgOn() {
+			if list, err := s.id.Store().ListWGPeers(r.Context(), sess.User.ID); err == nil {
+				if keys, err := wg.EnsureServerKeys(s.cfg.WGDir); err == nil {
+					wgPeers = s.wgPeerViews(list, keys.Public)
+				}
+			}
+		}
 	}
 	s.view(w, r, "account.html", "Account", "account", map[string]any{
 		"Characters":  chars,
@@ -695,6 +704,9 @@ func (s *Server) accountGET(w http.ResponseWriter, r *http.Request) {
 		"Passkeys":    passkeys,
 		"PasskeysOK":  s.wa != nil,
 		"PasskeyMax":  identity.MaxPasskeys,
+		"WGOn":        s.wgOn(),
+		"WGPeers":     wgPeers,
+		"WGMax":       s.cfg.WGPeerMax,
 	})
 }
 

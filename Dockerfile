@@ -6,7 +6,13 @@ COPY go.mod go.sum ./
 COPY . .
 RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /out/waygate ./cmd/waygate
 
-FROM alpine:3.21
+FROM alpine:3.21 AS wireguard
+RUN apk add --no-cache wireguard-tools iptables iproute2 ca-certificates
+WORKDIR /app
+COPY --from=build /out/waygate /usr/local/bin/waygate
+ENTRYPOINT ["/usr/local/bin/waygate", "wg-agent"]
+
+FROM alpine:3.21 AS waygate
 RUN apk add --no-cache ca-certificates tzdata wget \
     && adduser -D -H -u 65532 app
 WORKDIR /app

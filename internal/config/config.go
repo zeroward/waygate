@@ -84,6 +84,16 @@ type Config struct {
 	WebAuthnRPID      string
 	WebAuthnOrigins   []string
 
+	WGEnabled     bool
+	WGDir         string
+	WGEndpoint    string
+	WGPort        int
+	WGPeerMax     int
+	WGExtraNets   []string
+	WGInterface   string
+	WGServerAddr  string
+	WGAgentListen string
+
 	HowToConnectFile string
 	KBPath           string
 	DownloadsDir     string
@@ -161,6 +171,14 @@ func Load() (Config, error) {
 		RateTickets:        envInt("RATE_LIMIT_TICKETS", 5),
 		WowCredentialsMax:  envInt("WOW_CREDENTIALS_MAX", 5),
 		WebAuthnRPID:       strings.TrimSpace(env("WEBAUTHN_RP_ID", "")),
+		WGEnabled:          envBool("WG_ENABLED", false),
+		WGDir:              env("WG_DIR", "data/wg"),
+		WGEndpoint:         strings.TrimSpace(env("WG_ENDPOINT", "")),
+		WGPort:             envInt("WG_PORT", 51820),
+		WGPeerMax:          envInt("WG_PEER_MAX", 5),
+		WGInterface:        env("WG_INTERFACE", "wg0"),
+		WGServerAddr:       env("WG_SERVER_ADDR", "10.8.0.1/24"),
+		WGAgentListen:      env("WG_AGENT_LISTEN", "127.0.0.1:9180"),
 		HowToConnectFile:   env("HOW_TO_CONNECT_FILE", "content/how-to-connect.md"),
 		KBPath:             env("KB_PATH", "data/kb.sqlite"),
 		DownloadsDir:       env("DOWNLOADS_DIR", "downloads"),
@@ -178,6 +196,14 @@ func Load() (Config, error) {
 			p = strings.TrimSpace(strings.TrimRight(p, "/"))
 			if p != "" {
 				c.WebAuthnOrigins = append(c.WebAuthnOrigins, p)
+			}
+		}
+	}
+	if raw := env("WG_EXTRA_NETS", ""); raw != "" {
+		for _, p := range strings.Split(raw, ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				c.WGExtraNets = append(c.WGExtraNets, p)
 			}
 		}
 	}
@@ -238,7 +264,36 @@ func (c *Config) validate() error {
 	if c.WowCredentialsMax > 20 {
 		c.WowCredentialsMax = 20
 	}
+	if c.WGPort < 1 || c.WGPort > 65535 {
+		c.WGPort = 51820
+	}
+	if c.WGPeerMax < 1 {
+		c.WGPeerMax = 5
+	}
+	if c.WGPeerMax > 20 {
+		c.WGPeerMax = 20
+	}
+	if strings.TrimSpace(c.WGInterface) == "" {
+		c.WGInterface = "wg0"
+	}
+	if strings.TrimSpace(c.WGServerAddr) == "" {
+		c.WGServerAddr = "10.8.0.1/24"
+	}
+	if strings.TrimSpace(c.WGDir) == "" {
+		c.WGDir = "data/wg"
+	}
 	return nil
+}
+
+func (c Config) WGEndpointHost() string {
+	if ep := strings.TrimSpace(c.WGEndpoint); ep != "" {
+		return ep
+	}
+	host := strings.TrimSpace(c.PublicHost)
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	return fmt.Sprintf("%s:%d", host, c.WGPort)
 }
 
 func (c Config) SMTPConfigured() bool {

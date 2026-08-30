@@ -7,4 +7,11 @@
       }
     });
   });
+  document.querySelectorAll("[data-wg-revoke]").forEach(function (form) {
+    form.addEventListener("submit", function (e) {
+      if (!window.confirm("Revoke this VPN config? The old file and QR will stop working.")) {
+        e.preventDefault();
+      }
+    });
+  });
 })();

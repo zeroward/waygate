@@ -149,6 +149,44 @@
     {{end}}
   </section>
 
+  {{if $d.WGOn}}
+  <section class="panel account-pass" id="vpn">
+    <h2>VPN (WireGuard)</h2>
+    <p class="hint">Up to {{$d.WGMax}} device configs. Split tunnel to this realm and website only — not a general internet VPN. Scan the QR with the WireGuard app, or download the bundle (config + realmlist.wtf).</p>
+    {{if $d.WGPeers}}
+    <ul class="passkey-list">
+      {{range $d.WGPeers}}
+      <li class="wg-peer">
+        <div class="passkey-row">
+          <span><strong>{{.Name}}</strong> <code>{{.Address}}</code>{{if .Created}} <span class="muted">{{.Created}}</span>{{end}}</span>
+          <span class="wg-peer-actions">
+            <a class="btn" href="/account/wg/{{.ID}}/zip">Download bundle</a>
+            <a class="btn" href="/account/wg/{{.ID}}/conf">.conf</a>
+            <form method="post" action="/account/wg/{{.ID}}/delete" data-wg-revoke>
+              <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+              <button type="submit" class="btn">Revoke</button>
+            </form>
+          </span>
+        </div>
+        {{if .QR}}
+        <p class="totp-qr-wrap"><img src="{{.QR}}" alt="WireGuard QR for {{.Name}}" width="180" height="180" class="totp-qr"></p>
+        {{end}}
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="empty">No VPN configs yet.</p>
+    {{end}}
+    <form method="post" action="/account/wg" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Device name
+        <input name="name" maxlength="40" placeholder="Laptop, phone, …" autocomplete="off">
+      </label>
+      <button type="submit" class="btn btn-gold">Create VPN config</button>
+    </form>
+  </section>
+  {{end}}
+
   {{if $d.PasskeysOK}}
   <section class="panel account-pass" id="passkeys" data-csrf="{{.CSRF}}">
     <h2>Passkeys</h2>

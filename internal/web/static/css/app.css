@@ -1054,6 +1054,9 @@ tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .passkey-row form { margin: 0; }
 .passkey-add { margin-top: 0.75rem; }
 .passkey-or { text-align: center; margin: 0.85rem 0; }
+.wg-peer { padding: 0.65rem 0 1rem; border-bottom: 1px solid var(--line); }
+.wg-peer-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.wg-peer-actions form { margin: 0; }
 
 .account { display: flex; flex-direction: column; gap: 1rem; }
 .account-pass { max-width: 34rem; }

@@ -19,6 +19,7 @@ var (
 	ErrLinkTaken       = errors.New("that client login is already linked")
 	ErrTooMany         = errors.New("too many WoW client logins")
 	ErrTooManyPasskeys = errors.New("too many passkeys")
+	ErrTooManyWG       = errors.New("too many VPN configs")
 )
 
 type User struct {
@@ -87,12 +88,22 @@ CREATE TABLE IF NOT EXISTS identity_meta (
   k TEXT PRIMARY KEY,
   v TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS wg_peers (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  public_key TEXT NOT NULL UNIQUE,
+  private_key TEXT NOT NULL,
+  address TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
+);
 `)
 	if err != nil {
 		return err
 	}
 	_, _ = db.Exec(`ALTER TABLE webauthn_credentials ADD COLUMN cred_json TEXT NOT NULL DEFAULT ''`)
-	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_webauthn_user ON webauthn_credentials(user_id)`)
+	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_webauthn_user ON webauthn_credentials(user_id)`)
+	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_wg_peers_user ON wg_peers(user_id)`)
 	return err
 }
 

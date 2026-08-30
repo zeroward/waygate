@@ -1,4 +1,7 @@
 .env
+/data/wg/
+/*.key
+/*.pub
 /data/*.sqlite
 /data/*.sqlite-wal
 /data/*.sqlite-shm

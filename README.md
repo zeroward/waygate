@@ -148,6 +148,15 @@ Download URLs are `/downloads/{id}` (catalog `id`), never raw filesystem paths.
 
 6. Put a reverse proxy in front for HTTPS, then set `SESSION_SECURE_COOKIE=true` and `SITE_URL=https://…`.
 
+7. **Player VPN (WireGuard)** is optional. It runs as the compose `wireguard` service (`network_mode: host`, UDP **51820**) and **replaces** host `wg-quick@wg0`:
+
+   ```bash
+   sudo systemctl disable --now wg-quick@wg0
+   # leave /etc/wireguard/wg0.conf as a backup
+   ```
+
+   Then set `WG_ENABLED=true` in `.env` and `docker compose up -d --build`. Registered users mint up to 5 device configs on Account (QR + zip bundle). Split tunnel only — not a general internet exit. Recreate any old `10.10.10.x` peer from the website (`10.8.0.0/24`). Do not start `wg-quick@wg0` again.
+
 ## Environment
 
 See `.env.example` for the full list. Important variables:
@@ -160,6 +169,8 @@ See `.env.example` for the full list. Important variables:
 | `LISTEN_ADDR` | Bind address (`:3080`) |
 | `SITE_URL` | Public origin for mail links and passkeys (RP ID is the hostname) |
 | `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGINS` | Optional passkey overrides; default from `SITE_URL` |
+| `WG_ENABLED` | Show Account VPN panel; requires the compose `wireguard` service |
+| `WG_ENDPOINT` / `WG_PORT` / `WG_PEER_MAX` | Client endpoint (default `PUBLIC_HOST:51820`), listen port, 5 configs per user |
 | `REALM_NAME` / `SITE_BLURB` / `CORE_NAME` | Home page |
 | `PUBLIC_HOST` | `realmlist.wtf` hostname |
 | `PUBLIC_AUTH_PORT` | Usually 3724 |

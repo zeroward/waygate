@@ -23,6 +23,7 @@ import (
 	"github.com/zeroward/waygate/internal/ratelimit"
 	"github.com/zeroward/waygate/internal/session"
 	"github.com/zeroward/waygate/internal/status"
+	"github.com/zeroward/waygate/internal/wg"
 	"github.com/zeroward/waygate/internal/wow"
 
 	"github.com/go-webauthn/webauthn/webauthn"
@@ -49,6 +50,7 @@ type Server struct {
 	downloads *downloads.Store
 	armory    *armory.Service
 	wa        *webauthn.WebAuthn
+	wgOK      bool
 }
 
 func New(
@@ -110,6 +112,15 @@ func New(
 	} else if wa != nil {
 		log.Info("webauthn", "rp", wa.Config.RPID, "origins", wa.Config.RPOrigins)
 	}
+	wgOK := false
+	if cfg.WGEnabled {
+		if _, err := wg.EnsureServerKeys(cfg.WGDir); err != nil {
+			log.Error("wireguard keys", "err", err)
+		} else {
+			wgOK = true
+			log.Info("wireguard", "dir", cfg.WGDir, "endpoint", cfg.WGEndpointHost())
+		}
+	}
 	s := &Server{
 		cfg:       cfg,
 		log:       log,
@@ -131,6 +142,7 @@ func New(
 		downloads: downloads.New(cfg.DownloadsDir, cfg.DownloadsCatalog),
 		armory:    armory.New(cfg, st.Database(), log),
 		wa:        wa,
+		wgOK:      wgOK,
 	}
 	if err := s.seedHowToConnect(); err != nil {
 		_ = kbStore.Close()
@@ -176,6 +188,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /account/password", s.passwordPOST)
 	mux.HandleFunc("POST /account/unstuck", s.unstuckPOST)
 	mux.HandleFunc("POST /account/wow", s.wowCredentialPOST)
+	mux.HandleFunc("POST /account/wg", s.wgCreatePOST)
+	mux.HandleFunc("POST /account/wg/{id}/delete", s.wgDeletePOST)
+	mux.HandleFunc("GET /account/wg/{id}/{kind}", s.wgDownload)
 	mux.HandleFunc("GET /tickets", s.ticketsList)
 	mux.HandleFunc("GET /tickets/new", s.ticketsNew)
 	mux.HandleFunc("POST /tickets", s.ticketsCreate)

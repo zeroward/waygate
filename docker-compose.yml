@@ -12,7 +12,9 @@
 
 services:
   waygate:
-    build: .
+    build:
+      context: .
+      target: waygate
     image: ghcr.io/zeroward/waygate:local
     container_name: waygate
     restart: unless-stopped
@@ -37,6 +39,31 @@ services:
       - clamav
     networks:
       - ac-network
+
+  # Player WireGuard. Replaces host wg-quick@wg0 (disable that unit first).
+  # host netns so game traffic can return via the docker bridge on this CoreOS box.
+  wireguard:
+    build:
+      context: .
+      target: wireguard
+    image: ghcr.io/zeroward/waygate:wg
+    container_name: waygate-wg
+    restart: unless-stopped
+    network_mode: host
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun
+    env_file:
+      - .env
+    environment:
+      WG_DIR: /app/data/wg
+      WG_INTERFACE: wg0
+      WG_SERVER_ADDR: 10.8.0.1/24
+      WG_PORT: "51820"
+      WG_AGENT_LISTEN: "127.0.0.1:9180"
+    volumes:
+      - ./data/wg:/app/data/wg:z
 
   clamav:
     image: clamav/clamav:1.4
