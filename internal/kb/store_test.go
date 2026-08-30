@@ -88,6 +88,30 @@ func TestSeedOnceAndCRUD(t *testing.T) {
 	}
 }
 
+func TestPendingSignup(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	token, err := s.PutPending(ctx, PendingSignup{
+		Username: "HeroOne", Email: "h@example.com", Salt: []byte{1, 2}, Verifier: []byte{3, 4}, Expansion: 2,
+	})
+	if err != nil || token == "" {
+		t.Fatalf("put %v %s", err, token)
+	}
+	if !s.HasPendingUsername(ctx, "heroone") || !s.HasPendingEmail(ctx, "H@example.com") {
+		t.Fatal("pending lookup")
+	}
+	got, err := s.ConsumePending(ctx, token)
+	if err != nil || got.Username != "HEROONE" || got.Email != "h@example.com" || got.Expansion != 2 {
+		t.Fatalf("consume %v %+v", err, got)
+	}
+	if s.HasPendingUsername(ctx, "HEROONE") {
+		t.Fatal("should be consumed")
+	}
+	if _, err := s.ConsumePending(ctx, token); err != ErrPendingNotFound {
+		t.Fatalf("reuse %v", err)
+	}
+}
+
 func TestStaffEvents(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()

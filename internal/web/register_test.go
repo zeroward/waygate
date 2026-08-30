@@ -260,6 +260,92 @@ func TestRegisterAndLoginDemo(t *testing.T) {
 	}
 }
 
+func TestRegisterRequiresEmailVerifyWhenSMTP(t *testing.T) {
+	ts, srv := testWeb(t)
+	defer ts.Close()
+	var mailed string
+	srv.mail.Intercept = func(to, subject, body string) error {
+		if to != "hero@example.com" {
+			t.Fatalf("to %s", to)
+		}
+		mailed = body
+		return nil
+	}
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	res, err := client.Get(ts.URL + "/register")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	form := url.Values{
+		"csrf_token":       {extractCSRF(string(body))},
+		"username":         {"HeroOne"},
+		"email":            {"hero@example.com"},
+		"password":         {"Abcd1234"},
+		"password_confirm": {"Abcd1234"},
+	}
+	res, err = client.PostForm(ts.URL+"/register", form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("register %d", res.StatusCode)
+	}
+
+	accPage, err := client.Get(ts.URL + "/account")
+	if err != nil {
+		t.Fatal(err)
+	}
+	accBody, _ := io.ReadAll(accPage.Body)
+	accPage.Body.Close()
+	if strings.Contains(string(accBody), "user-name") && strings.Contains(string(accBody), "HEROONE") {
+		t.Fatal("must not be logged in before verify")
+	}
+
+	login(t, client, ts.URL, "HeroOne", "Abcd1234")
+	denied, err := client.Get(ts.URL + "/account")
+	if err != nil {
+		t.Fatal(err)
+	}
+	denBody, _ := io.ReadAll(denied.Body)
+	denied.Body.Close()
+	if !strings.Contains(string(denBody), "Confirm the link we emailed") {
+		t.Fatalf("expected verify prompt: %s", denBody)
+	}
+
+	re := regexp.MustCompile(`/account/verify/([a-f0-9]+)`)
+	m := re.FindStringSubmatch(mailed)
+	if len(m) < 2 {
+		t.Fatalf("no verify link in mail: %s", mailed)
+	}
+	res, err = client.Get(ts.URL + m[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("verify %d", res.StatusCode)
+	}
+
+	follow := &http.Client{Jar: jar}
+	login(t, follow, ts.URL, "HeroOne", "Abcd1234")
+	ok, err := follow.Get(ts.URL + "/account")
+	if err != nil {
+		t.Fatal(err)
+	}
+	okBody, _ := io.ReadAll(ok.Body)
+	ok.Body.Close()
+	if ok.StatusCode != 200 || !strings.Contains(string(okBody), "HEROONE") {
+		t.Fatalf("after verify %d %s", ok.StatusCode, okBody)
+	}
+}
+
 func extractCSRF(html string) string {
 	re := regexp.MustCompile(`name="csrf_token" value="([a-f0-9]+)"`)
 	m := re.FindStringSubmatch(html)

@@ -123,6 +123,11 @@ func New(cfg config.Config, database *db.DB, soapc *soap.Client) *Service {
 	}
 }
 
+func SignupVerifier(username, password string) (salt, verifier []byte, err error) {
+	username = srp6.UpperLatin(strings.TrimSpace(username))
+	return srp6.MakeRegistrationData(username, password)
+}
+
 func (s *Service) Create(ctx context.Context, username, password, email string, expansion uint8) error {
 	username = srp6.UpperLatin(strings.TrimSpace(username))
 	email = strings.TrimSpace(email)
@@ -197,6 +202,36 @@ func (s *Service) createSQL(ctx context.Context, username, password, email strin
 	if err != nil {
 		return ErrUnavailable
 	}
+	return s.insertPrepared(ctx, username, email, expansion, salt, verifier)
+}
+
+// CreatePrepared inserts an account from already-computed SRP6 material (email verify).
+func (s *Service) CreatePrepared(ctx context.Context, username, email string, expansion uint8, salt, verifier []byte) error {
+	username = srp6.UpperLatin(strings.TrimSpace(username))
+	email = strings.TrimSpace(email)
+	if username == "" || len(salt) == 0 || len(verifier) == 0 {
+		return ErrUnavailable
+	}
+	taken, err := s.UsernameTaken(ctx, username)
+	if err != nil {
+		return err
+	}
+	if taken {
+		return ErrTaken
+	}
+	if s.cfg.RequireUniqueEmail && email != "" {
+		et, err := s.EmailTaken(ctx, email)
+		if err != nil {
+			return err
+		}
+		if et {
+			return ErrEmailTaken
+		}
+	}
+	return s.insertPrepared(ctx, username, email, expansion, salt, verifier)
+}
+
+func (s *Service) insertPrepared(ctx context.Context, username, email string, expansion uint8, salt, verifier []byte) error {
 	if s.cfg.DemoMode || s.db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -217,7 +252,7 @@ func (s *Service) createSQL(ctx context.Context, username, password, email strin
 		"INSERT INTO %s (`username`,`salt`,`verifier`,`email`,`reg_mail`,`expansion`) VALUES (?,?,?,?,?,?)",
 		s.db.QAuth("account"),
 	)
-	_, err = s.db.SQL.ExecContext(ctx, q, username, salt, verifier, email, email, expansion)
+	_, err := s.db.SQL.ExecContext(ctx, q, username, salt, verifier, email, email, expansion)
 	if err != nil {
 		if isDup(err) {
 			return ErrTaken

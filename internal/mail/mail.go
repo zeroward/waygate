@@ -12,6 +12,8 @@ import (
 
 type Sender struct {
 	cfg config.Config
+	// Intercept, if set, is used instead of SMTP (tests). Enabled() is true when set.
+	Intercept func(to, subject, body string) error
 }
 
 func New(cfg config.Config) *Sender {
@@ -19,11 +21,14 @@ func New(cfg config.Config) *Sender {
 }
 
 func (s *Sender) Enabled() bool {
-	return s.cfg.SMTPConfigured()
+	return s.cfg.SMTPConfigured() || s.Intercept != nil
 }
 
 func (s *Sender) Send(to, subject, body string) error {
-	if !s.Enabled() {
+	if s.Intercept != nil {
+		return s.Intercept(to, subject, body)
+	}
+	if !s.cfg.SMTPConfigured() {
 		return fmt.Errorf("smtp is not configured")
 	}
 	from := s.cfg.SMTPFrom

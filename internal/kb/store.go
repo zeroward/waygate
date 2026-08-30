@@ -124,7 +124,10 @@ CREATE INDEX IF NOT EXISTS idx_staff_events_at ON staff_events(at DESC);
 	if err != nil {
 		return err
 	}
-	return s.migrateTickets()
+	if err := s.migrateTickets(); err != nil {
+		return err
+	}
+	return s.migratePending()
 }
 
 const articleCols = `textid, slug, title, body_markdown, summary, category, sort_order, published, created_by, updated_by, created_at, updated_at`

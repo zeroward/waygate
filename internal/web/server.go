@@ -163,6 +163,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /staff/kb/{id}", s.staffKBEdit)
 	mux.HandleFunc("POST /staff/kb/{id}", s.staffKBUpdate)
 	mux.HandleFunc("POST /staff/kb/{id}/delete", s.staffKBDelete)
+	mux.HandleFunc("GET /account/verify/{token}", s.verifyGET)
 	mux.HandleFunc("GET /account/reset", s.resetGET)
 	mux.HandleFunc("POST /account/reset", s.resetPOST)
 	mux.HandleFunc("GET /account/reset/{token}", s.resetConfirmGET)

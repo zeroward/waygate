@@ -168,6 +168,56 @@ func (s *Server) registerPOST(w http.ResponseWriter, r *http.Request) {
 		fail(err.Error())
 		return
 	}
+	if s.mail.Enabled() {
+		if taken, err := s.accounts.UsernameTaken(r.Context(), form.Username); err != nil {
+			fail("could not create the account right now")
+			return
+		} else if taken {
+			fail(account.ErrTaken.Error())
+			return
+		}
+		if et, err := s.accounts.EmailTaken(r.Context(), form.Email); err != nil {
+			fail("could not create the account right now")
+			return
+		} else if et {
+			fail(account.ErrEmailTaken.Error())
+			return
+		}
+		if s.kb != nil && (s.kb.HasPendingUsername(r.Context(), form.Username) || s.kb.HasPendingEmail(r.Context(), form.Email)) {
+			if s.kb.HasPendingUsername(r.Context(), form.Username) {
+				fail(account.ErrTaken.Error())
+			} else {
+				fail(account.ErrEmailTaken.Error())
+			}
+			return
+		}
+		salt, verifier, err := account.SignupVerifier(form.Username, pass)
+		if err != nil {
+			fail("could not create the account right now")
+			return
+		}
+		token, err := s.kb.PutPending(r.Context(), kb.PendingSignup{
+			Username: form.Username, Email: form.Email, Salt: salt, Verifier: verifier, Expansion: wotlkExpansion,
+		})
+		if err != nil {
+			s.log.Error("register pending", "err", err, "user", form.Username)
+			fail("could not create the account right now")
+			return
+		}
+		link := s.cfg.SiteURL + "/account/verify/" + token
+		body := "Confirm this account for " + s.cfg.RealmName + ".\n\n" +
+			"Username: " + strings.ToUpper(form.Username) + "\n\n" +
+			"The account is not active until you open this link (expires in 24 hours):\n" + link + "\n\n" +
+			"If you did not register, ignore this message."
+		if err := s.mail.Send(form.Email, s.cfg.RealmName+" confirm your account", body); err != nil {
+			s.kb.DeletePendingToken(r.Context(), token)
+			s.log.Error("verify mail", "err", err, "user", form.Username)
+			fail("could not send the confirmation email. Try again later.")
+			return
+		}
+		s.flashRedirect(w, r, "/account", "info", "Check your email to activate the account. It cannot log in in-game or here until you confirm.")
+		return
+	}
 	if err := s.accounts.Create(r.Context(), form.Username, pass, form.Email, wotlkExpansion); err != nil {
 		switch {
 		case errors.Is(err, account.ErrTaken):
@@ -590,6 +640,10 @@ func (s *Server) loginPOST(w http.ResponseWriter, r *http.Request) {
 	pass := r.FormValue("password")
 	acc, err := s.accounts.Authenticate(r.Context(), user, pass)
 	if err != nil {
+		if s.mail.Enabled() && s.kb != nil && s.kb.HasPendingUsername(r.Context(), user) {
+			s.flashRedirect(w, r, "/account", "error", "Confirm the link we emailed before this account can log in.")
+			return
+		}
 		s.flashRedirect(w, r, "/account", "error", "Invalid username or password.")
 		return
 	}
@@ -638,6 +692,25 @@ func (s *Server) passwordPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.flashRedirect(w, r, "/account", "success", "Password updated. Use it at the login screen.")
+}
+
+func (s *Server) verifyGET(w http.ResponseWriter, r *http.Request) {
+	if !s.mail.Enabled() {
+		http.NotFound(w, r)
+		return
+	}
+	token := strings.TrimSpace(r.PathValue("token"))
+	pending, err := s.kb.ConsumePending(r.Context(), token)
+	if err != nil {
+		s.flashRedirect(w, r, "/account", "error", "That confirmation link is invalid or expired. Register again if you still need an account.")
+		return
+	}
+	if err := s.accounts.CreatePrepared(r.Context(), pending.Username, pending.Email, pending.Expansion, pending.Salt, pending.Verifier); err != nil {
+		s.log.Error("verify create", "err", err, "user", pending.Username)
+		s.flashRedirect(w, r, "/account", "error", "Could not activate the account. The username may already be taken.")
+		return
+	}
+	s.flashRedirect(w, r, "/account", "success", "Email confirmed. You can log in on the website and in the 3.3.5a client.")
 }
 
 func (s *Server) resetGET(w http.ResponseWriter, r *http.Request) {
