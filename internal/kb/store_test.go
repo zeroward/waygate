@@ -87,6 +87,34 @@ func TestSeedOnceAndCRUD(t *testing.T) {
 	}
 }
 
+func TestLatestPublished(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	got, err := s.LatestPublished(ctx)
+	if err != nil || got != nil {
+		t.Fatalf("empty %v %+v", err, got)
+	}
+	if _, err := s.Create(ctx, Article{Title: "Draft", Slug: "draft", Category: "X", CreatedBy: "a", UpdatedBy: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.LatestPublished(ctx)
+	if err != nil || got != nil {
+		t.Fatalf("draft leaked %v %+v", err, got)
+	}
+	old := Article{Title: "Older", Slug: "older", Category: "Getting started", Summary: "old", Published: true, CreatedBy: "a", UpdatedBy: "a"}
+	if _, err := s.Create(ctx, old); err != nil {
+		t.Fatal(err)
+	}
+	newer := Article{Title: "How to connect", Slug: "how-to-connect", Category: "Getting started", Summary: "Set realmlist.", Published: true, CreatedBy: "a", UpdatedBy: "a"}
+	if _, err := s.Create(ctx, newer); err != nil {
+		t.Fatal(err)
+	}
+	got, err = s.LatestPublished(ctx)
+	if err != nil || got == nil || got.Slug != "how-to-connect" {
+		t.Fatalf("want newest published, got %+v %v", got, err)
+	}
+}
+
 func TestSlugify(t *testing.T) {
 	if g := Slugify("How to connect!"); g != "how-to-connect" {
 		t.Fatalf("got %q", g)

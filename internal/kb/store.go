@@ -174,6 +174,18 @@ ORDER BY category ASC, sort_order ASC, title ASC`, like, like, like, like)
 	return scanAll(rows)
 }
 
+func (s *Store) LatestPublished(ctx context.Context) (*Article, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT `+articleCols+` FROM articles WHERE published = 1 ORDER BY updated_at DESC, title ASC LIMIT 1`)
+	a, err := scanArticle(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &a, nil
+}
+
 func (s *Store) ListAll(ctx context.Context) ([]Article, error) {
 	rows, err := s.db.QueryContext(ctx, `SELECT `+articleCols+` FROM articles ORDER BY updated_at DESC, title ASC`)
 	if err != nil {

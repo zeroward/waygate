@@ -35,6 +35,14 @@
     </div>
   </section>
 
+  {{if $s.LatestKB}}
+  <section class="panel home-kb">
+    <p class="eyebrow">{{$s.LatestKB.Category}}</p>
+    <h2><a href="/kb/{{$s.LatestKB.Slug}}">{{$s.LatestKB.Title}}</a></h2>
+    {{if $s.LatestKB.Summary}}<p class="lede">{{$s.LatestKB.Summary}}</p>{{end}}
+  </section>
+  {{end}}
+
   {{if $s.Modules}}
   <section class="home-mods">
     <header class="home-mods-head">

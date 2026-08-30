@@ -89,6 +89,9 @@ func TestHomeAndRegisterPages(t *testing.T) {
 	if !strings.Contains(string(body), "Installed modules") || !strings.Contains(string(body), "Playerbots") {
 		t.Fatal("home missing installed modules")
 	}
+	if !strings.Contains(string(body), "How to connect") || !strings.Contains(string(body), `/kb/how-to-connect`) {
+		t.Fatal("home missing latest published KB card")
+	}
 	res2, err := http.Get(ts.URL + "/register")
 	if err != nil {
 		t.Fatal(err)
@@ -128,6 +131,31 @@ func TestHomeAndRegisterPages(t *testing.T) {
 	}
 	if loc := res4.Header.Get("Location"); loc != "/kb/how-to-connect" {
 		t.Fatalf("connect location %s", loc)
+	}
+}
+
+func TestHomeOKWithoutPublishedKB(t *testing.T) {
+	ts, srv := testWeb(t)
+	defer ts.Close()
+	ctx := context.Background()
+	art, err := srv.kb.GetBySlug(ctx, "how-to-connect")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := srv.kb.Delete(ctx, art.ID); err != nil {
+		t.Fatal(err)
+	}
+	res, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 {
+		t.Fatalf("home %d", res.StatusCode)
+	}
+	if strings.Contains(string(body), `/kb/how-to-connect`) {
+		t.Fatal("deleted article still on home")
 	}
 }
 

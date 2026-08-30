@@ -11,18 +11,32 @@ import (
 
 	"github.com/zeroward/waygate/internal/account"
 	"github.com/zeroward/waygate/internal/downloads"
+	"github.com/zeroward/waygate/internal/kb"
 	"github.com/zeroward/waygate/internal/session"
 	"github.com/zeroward/waygate/internal/status"
 	"github.com/zeroward/waygate/internal/validate"
 )
+
+type homeView struct {
+	status.Snapshot
+	LatestKB *kb.Article
+}
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
-	snap := s.status.Get(r.Context())
-	s.view(w, r, "home.html", "Home", "home", snap)
+	hv := homeView{Snapshot: s.status.Get(r.Context())}
+	if s.kb != nil {
+		art, err := s.kb.LatestPublished(r.Context())
+		if err != nil {
+			s.log.Error("home kb", "err", err)
+		} else {
+			hv.LatestKB = art
+		}
+	}
+	s.view(w, r, "home.html", "Home", "home", hv)
 }
 
 func (s *Server) requireLogin(w http.ResponseWriter, r *http.Request) *session.Session {

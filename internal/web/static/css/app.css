@@ -444,6 +444,11 @@ a.metric:hover { border-color: rgba(180, 210, 225, 0.22); background: rgba(18, 2
   border-radius: 8px;
 }
 
+.home-kb h2 { margin: 0 0 0.45rem; font-size: 1.15rem; }
+.home-kb h2 a { color: var(--ice-2); text-decoration: none; }
+.home-kb h2 a:hover { color: #fff; }
+.home-kb .lede { max-width: 40rem; }
+
 .home-mods {
   padding: 1.15rem 1.2rem 1.25rem;
   background: var(--panel);
