@@ -24,6 +24,11 @@ import (
 
 func testWeb(t *testing.T) (*httptest.Server, *Server) {
 	t.Helper()
+	return testWebKB(t, "")
+}
+
+func testWebKB(t *testing.T, kbPath string) (*httptest.Server, *Server) {
+	t.Helper()
 	cfg := config.Config{
 		DemoMode:          true,
 		RealmName:         "Icecrown",
@@ -49,6 +54,7 @@ func testWeb(t *testing.T) (*httptest.Server, *Server) {
 		AccountMode:       "sql",
 		DownloadsDir:      t.TempDir(),
 		SiteURL:           "http://localhost",
+		KBPath:            kbPath,
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	acc := account.New(cfg, nil, nil)

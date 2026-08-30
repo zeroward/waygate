@@ -3,6 +3,7 @@ package web
 import (
 	"net/http"
 	"runtime/debug"
+	"strings"
 	"time"
 )
 
@@ -25,6 +26,10 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		}
 		start := time.Now()
 		lw := &statusWriter{ResponseWriter: w, code: 200}
+		if r.URL.Path != "/healthz" && !strings.HasPrefix(r.URL.Path, "/static/") {
+			sess := s.sessions.GetOrCreate(w, r)
+			defer s.sessions.SaveLatest(sess)
+		}
 		next.ServeHTTP(lw, r)
 		s.log.Info("http",
 			"method", r.Method,

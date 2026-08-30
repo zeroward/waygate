@@ -201,7 +201,7 @@ Never commit `.env`. SOAP passwords and MySQL passwords stay server-side.
 - Parameterized SQL only. Database names from env are restricted to `[A-Za-z0-9_]`.
 - Passwords are never logged. SOAP faults are mapped to generic client errors.
 - Helmet-style headers, 64 KiB form limit, CSRF, httpOnly session cookie (`Secure`, `SameSite=Lax`).
-- Session ID: 32 random bytes, server-side memory store (v1). **TODO:** Redis-backed sessions for multi-replica.
+- Session ID: 32 random bytes, stored in Gatehouse SQLite (`http_sessions` in `data/kb.sqlite`) so a container restart does not log everyone out. Redis is only needed for multiple replicas.
 - Rate limits on register, login, contact, reset.
 - Captcha on register when configured. **Production should not use `CAPTCHA_PROVIDER=none`.**
 - **TODO:** vote-for-points (not in v1).

@@ -121,11 +121,16 @@ func New(
 			log.Info("wireguard", "dir", cfg.WGDir, "endpoint", cfg.WGEndpointHost())
 		}
 	}
+	sessStore, err := session.NewStore(kbStore.SQL(), cfg.SessionTTL, cfg.SessionSecure)
+	if err != nil {
+		_ = kbStore.Close()
+		return nil, err
+	}
 	s := &Server{
 		cfg:       cfg,
 		log:       log,
 		tpl:       tpl,
-		sessions:  session.NewStore(cfg.SessionTTL, cfg.SessionSecure),
+		sessions:  sessStore,
 		accounts:  accounts,
 		status:    st,
 		captcha:   cap,

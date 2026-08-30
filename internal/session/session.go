@@ -2,7 +2,9 @@ package session
 
 import (
 	"crypto/rand"
+	"database/sql"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"sync"
 	"time"
@@ -48,28 +50,52 @@ type Session struct {
 	Flash        *Flash
 	Created      time.Time
 	Expiry       time.Time
+
+	store      *Store
+	replacedBy *Session
+	destroyed  bool
 }
 
 type Store struct {
 	mu     sync.Mutex
 	items  map[string]*Session
+	db     *sql.DB
 	ttl    time.Duration
 	secure bool
 	lastGC time.Time
 }
 
-func NewStore(ttl time.Duration, secure bool) *Store {
+func NewStore(db *sql.DB, ttl time.Duration, secure bool) (*Store, error) {
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
 	s := &Store{
 		items:  make(map[string]*Session),
+		db:     db,
 		ttl:    ttl,
 		secure: secure,
 		lastGC: time.Now(),
 	}
+	if db != nil {
+		if err := migrate(db); err != nil {
+			return nil, err
+		}
+	}
 	go s.loop()
-	return s
+	return s, nil
+}
+
+func migrate(db *sql.DB) error {
+	_, err := db.Exec(`
+CREATE TABLE IF NOT EXISTS http_sessions (
+  id TEXT PRIMARY KEY,
+  data TEXT NOT NULL,
+  expiry TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_http_sessions_expiry ON http_sessions(expiry);
+`)
+	return err
 }
 
 func (s *Store) loop() {
@@ -83,25 +109,68 @@ func (s *Store) loop() {
 func (s *Store) gc() {
 	now := time.Now()
 	s.mu.Lock()
-	defer s.mu.Unlock()
 	for id, sess := range s.items {
 		if now.After(sess.Expiry) {
 			delete(s.items, id)
 		}
 	}
 	s.lastGC = now
+	s.mu.Unlock()
+	if s.db != nil {
+		_, _ = s.db.Exec(`DELETE FROM http_sessions WHERE expiry < ?`, now.UTC().Format(time.RFC3339))
+	}
 }
 
 func (s *Store) GetOrCreate(w http.ResponseWriter, r *http.Request) *Session {
 	if c, err := r.Cookie(CookieName); err == nil && c.Value != "" {
-		s.mu.Lock()
-		sess, ok := s.items[c.Value]
-		s.mu.Unlock()
-		if ok && time.Now().Before(sess.Expiry) {
+		if sess := s.get(c.Value); sess != nil {
 			return sess
 		}
 	}
 	return s.create(w)
+}
+
+func (s *Store) get(id string) *Session {
+	now := time.Now()
+	s.mu.Lock()
+	if sess, ok := s.items[id]; ok {
+		s.mu.Unlock()
+		if now.After(sess.Expiry) || sess.destroyed {
+			return nil
+		}
+		return sess
+	}
+	s.mu.Unlock()
+	if s.db == nil {
+		return nil
+	}
+	var blob, expiry string
+	err := s.db.QueryRow(`SELECT data, expiry FROM http_sessions WHERE id = ?`, id).Scan(&blob, &expiry)
+	if err != nil {
+		return nil
+	}
+	exp, err := time.Parse(time.RFC3339, expiry)
+	if err != nil || now.After(exp) {
+		_, _ = s.db.Exec(`DELETE FROM http_sessions WHERE id = ?`, id)
+		return nil
+	}
+	sess := &Session{store: s}
+	if err := json.Unmarshal([]byte(blob), sess); err != nil {
+		return nil
+	}
+	sess.ID = id
+	sess.store = s
+	if sess.Expiry.IsZero() {
+		sess.Expiry = exp
+	}
+	s.mu.Lock()
+	if existing, ok := s.items[id]; ok {
+		s.mu.Unlock()
+		return existing
+	}
+	s.items[id] = sess
+	s.mu.Unlock()
+	return sess
 }
 
 func (s *Store) create(w http.ResponseWriter) *Session {
@@ -110,35 +179,69 @@ func (s *Store) create(w http.ResponseWriter) *Session {
 	sess := &Session{
 		ID:      id,
 		CSRF:    csrf,
-		Created: time.Now(),
-		Expiry:  time.Now().Add(s.ttl),
+		Created: time.Now().UTC(),
+		Expiry:  time.Now().UTC().Add(s.ttl),
+		store:   s,
 	}
 	s.mu.Lock()
 	s.items[id] = sess
 	s.mu.Unlock()
+	s.save(sess)
 	s.writeCookie(w, id)
 	return sess
 }
 
-func (s *Store) Regenerate(w http.ResponseWriter, old *Session) *Session {
-	s.mu.Lock()
-	if old != nil {
-		delete(s.items, old.ID)
+func (s *Store) SaveLatest(sess *Session) {
+	for sess != nil && sess.replacedBy != nil {
+		sess = sess.replacedBy
 	}
+	if sess == nil || sess.destroyed {
+		return
+	}
+	s.save(sess)
+}
+
+func (s *Store) save(sess *Session) {
+	if s.db == nil || sess == nil || sess.destroyed {
+		return
+	}
+	blob, err := json.Marshal(sess)
+	if err != nil {
+		return
+	}
+	_, _ = s.db.Exec(`INSERT INTO http_sessions (id, data, expiry, created_at) VALUES (?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET data = excluded.data, expiry = excluded.expiry`,
+		sess.ID, string(blob), sess.Expiry.UTC().Format(time.RFC3339), sess.Created.UTC().Format(time.RFC3339))
+}
+
+func (s *Store) deleteID(id string) {
+	s.mu.Lock()
+	delete(s.items, id)
 	s.mu.Unlock()
+	if s.db != nil {
+		_, _ = s.db.Exec(`DELETE FROM http_sessions WHERE id = ?`, id)
+	}
+}
+
+func (s *Store) Regenerate(w http.ResponseWriter, old *Session) *Session {
 	n := s.create(w)
-	if old != nil && old.User != nil {
-		u := *old.User
-		n.User = &u
+	if old != nil {
+		if old.User != nil {
+			u := *old.User
+			n.User = &u
+		}
+		old.replacedBy = n
+		old.destroyed = true
+		s.deleteID(old.ID)
+		s.save(n)
 	}
 	return n
 }
 
 func (s *Store) Destroy(w http.ResponseWriter, sess *Session) {
 	if sess != nil {
-		s.mu.Lock()
-		delete(s.items, sess.ID)
-		s.mu.Unlock()
+		sess.destroyed = true
+		s.deleteID(sess.ID)
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     CookieName,

@@ -133,6 +133,55 @@ func TestAccountUnstuck(t *testing.T) {
 	}
 }
 
+func TestLoginSurvivesServerRestart(t *testing.T) {
+	dir := t.TempDir()
+	kbPath := dir + "/kb.sqlite"
+	ts1, srv1 := testWebKB(t, kbPath)
+	if err := srv1.accounts.Create(context.Background(), "HeroOne", "Abcd1234", "h@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	login(t, client, ts1.URL, "HeroOne", "Abcd1234")
+	res, err := client.Get(ts1.URL + "/account")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if !strings.Contains(string(body), "HEROONE") {
+		t.Fatal("not logged in")
+	}
+	var cookie *http.Cookie
+	for _, c := range jar.Cookies(res.Request.URL) {
+		if c.Name == "waygate_session" {
+			cc := *c
+			cookie = &cc
+		}
+	}
+	if cookie == nil {
+		t.Fatal("no session cookie")
+	}
+	ts1.Close()
+
+	ts2, _ := testWebKB(t, kbPath)
+	defer ts2.Close()
+	req, err := http.NewRequest(http.MethodGet, ts2.URL+"/account", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.AddCookie(cookie)
+	res, err = http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	if !strings.Contains(string(body), "HEROONE") || strings.Contains(string(body), `name="password"`) {
+		t.Fatalf("session lost after restart: %s", body)
+	}
+}
+
 func TestTOTPSetupShowsQR(t *testing.T) {
 	ts, srv := testWeb(t)
 	defer ts.Close()
