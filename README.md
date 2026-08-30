@@ -194,6 +194,8 @@ Never commit `.env`. SOAP passwords and MySQL passwords stay server-side.
 - **TODO:** TOTP 2FA for website login (AzerothCore `totp_secret` is a different system; do not fake it).
 - Email uniqueness is enforced with a `SELECT` then `INSERT`. AzerothCore has no unique index on `account.email`. Do not treat that as a security boundary.
 
+Versioning is SemVer. This tree is **0.x alpha** (`v0.1.0-alpha.1`) until it has had in-depth security testing. Pre-releases are GitHub prereleases; `latest` on GHCR tracks `main`, not alphas.
+
 ## Container
 
 CI on `main` builds and pushes `ghcr.io/zeroward/waygate` (also `latest` and `sha-*`). Pull requests run tests and a docker build without pushing.
