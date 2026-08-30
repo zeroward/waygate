@@ -39,6 +39,7 @@ type Server struct {
 	resetRL   *ratelimit.Limiter
 	kbRL      *ratelimit.Limiter
 	unstuckRL *ratelimit.Limiter
+	ticketRL  *ratelimit.Limiter
 	kb        *kb.Store
 	downloads *downloads.Store
 }
@@ -77,6 +78,10 @@ func New(
 	if unstuckMax < 1 {
 		unstuckMax = 5
 	}
+	ticketMax := cfg.RateTickets
+	if ticketMax < 1 {
+		ticketMax = 5
+	}
 	kbStore, err := kb.Open(cfg.KBPath)
 	if err != nil {
 		return nil, err
@@ -96,6 +101,7 @@ func New(
 		resetRL:   ratelimit.New(cfg.RateWindow, cfg.RateReset),
 		kbRL:      ratelimit.New(cfg.RateWindow, kbMax),
 		unstuckRL: ratelimit.New(cfg.RateWindow, unstuckMax),
+		ticketRL:  ratelimit.New(cfg.RateWindow, ticketMax),
 		kb:        kbStore,
 		downloads: downloads.New(cfg.DownloadsDir, cfg.DownloadsCatalog),
 	}
@@ -131,6 +137,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /account/logout", s.logoutPOST)
 	mux.HandleFunc("POST /account/password", s.passwordPOST)
 	mux.HandleFunc("POST /account/unstuck", s.unstuckPOST)
+	mux.HandleFunc("GET /tickets", s.ticketsList)
+	mux.HandleFunc("GET /tickets/new", s.ticketsNew)
+	mux.HandleFunc("POST /tickets", s.ticketsCreate)
+	mux.HandleFunc("GET /tickets/{id}", s.ticketsView)
+	mux.HandleFunc("POST /tickets/{id}/comment", s.ticketsComment)
+	mux.HandleFunc("GET /staff/tickets", s.staffTickets)
+	mux.HandleFunc("GET /staff/tickets/{id}", s.staffTicketView)
+	mux.HandleFunc("POST /staff/tickets/{id}", s.staffTicketUpdate)
 	mux.HandleFunc("GET /staff", s.staffGET)
 	mux.HandleFunc("POST /staff/create", s.staffCreatePOST)
 	mux.HandleFunc("POST /staff/reset", s.staffResetPOST)

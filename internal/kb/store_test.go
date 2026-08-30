@@ -3,6 +3,7 @@ package kb
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -96,6 +97,51 @@ func TestStaffEvents(t *testing.T) {
 	ev, err := s.RecentEvents(ctx, 10)
 	if err != nil || len(ev) != 1 || ev[0].Actor != "STAFFER" || ev[0].Action != "create" || ev[0].Target != "NEWPLAYER" {
 		t.Fatalf("%v %+v", err, ev)
+	}
+}
+
+func TestTickets(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	t1, err := s.CreateTicket(ctx, Ticket{
+		AccountID: 1, Username: "HEROONE", Category: "Name change", Title: "Rename me",
+	}, "please")
+	if err != nil || t1.ID < 1 || !strings.HasPrefix(t1.PublicRef, "T-") || t1.Status != TicketOpen {
+		t.Fatalf("create %v %+v", err, t1)
+	}
+	if _, err := s.CreateTicket(ctx, Ticket{AccountID: 1, Username: "HEROONE", Category: "Nope", Title: "x"}, "y"); err != ErrBadCategory {
+		t.Fatalf("bad category %v", err)
+	}
+	t2, err := s.CreateTicket(ctx, Ticket{
+		AccountID: 2, Username: "OTHERTWO", Category: "Items", Title: "Other ticket",
+	}, "mine")
+	if err != nil {
+		t.Fatal(err)
+	}
+	mine, err := s.ListTicketsForAccount(ctx, 1)
+	if err != nil || len(mine) != 1 || mine[0].ID != t1.ID {
+		t.Fatalf("account list %v %+v", err, mine)
+	}
+	open, err := s.ListOpenTickets(ctx)
+	if err != nil || len(open) != 2 {
+		t.Fatalf("open %v %+v", err, open)
+	}
+	if err := s.AddTicketMessage(ctx, t1.ID, "STAFFER", true, "working"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetTicketStatus(ctx, t1.ID, TicketDone, "STAFFER"); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.GetTicket(ctx, t1.ID)
+	if err != nil || got.Status != TicketDone || got.ClosedBy != "STAFFER" || len(got.Messages) != 2 {
+		t.Fatalf("get %v %+v", err, got)
+	}
+	if err := s.AddTicketMessage(ctx, t1.ID, "HEROONE", false, "late"); err != ErrTicketClosed {
+		t.Fatalf("closed comment %v", err)
+	}
+	open, err = s.ListOpenTickets(ctx)
+	if err != nil || len(open) != 1 || open[0].ID != t2.ID {
+		t.Fatalf("open after done %v %+v", err, open)
 	}
 }
 

@@ -29,7 +29,7 @@ func staffTestServer(t *testing.T) (*httptest.Server, *account.Service) {
 		DefaultExpansion: 2, PasswordMinLength: 8, CaptchaProvider: "none",
 		StatusCache: 20 * time.Second, LeaderboardSize: 20,
 		BotPrefixes: []string{"RNDBOT"}, GMMinLevel: 1,
-		RateWindow: 15 * time.Minute, RateRegister: 50, RateLogin: 50, RateContact: 50, RateReset: 50, RateKB: 50,
+		RateWindow: 15 * time.Minute, RateRegister: 50, RateLogin: 50, RateContact: 50, RateReset: 50, RateKB: 50, RateTickets: 50,
 		DownloadsDir: t.TempDir(), AccountMode: "sql",
 	}
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))

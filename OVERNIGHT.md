@@ -30,3 +30,13 @@
 
 **Leftover:** None for this issue.
 
+## #5 Player tickets
+
+**Shipped:** In-app tickets in Gatehouse SQLite (`tickets` + `ticket_messages`), not WoW DBs. Logged-in `/tickets` lists yours, `/tickets/new` opens one (categories Name change / Character transfer/restore / Guild / Items / Other, optional owned-character picker), `/tickets/{id}` is the thread. Staff at `GM_MIN_LEVEL` use `/staff/tickets` for open + in-progress, reply, and set Open → In progress → Done/Closed. Player cannot edit the original; comments allowed while Open/In progress. CSRF on writes; `RATE_LIMIT_TICKETS` (default 5) on opens; bodies go through html/template (escaped). No SOAP, Discord, attachments, or email.
+
+**Files:** `internal/kb/tickets.go`, `internal/kb/store.go`, `internal/kb/store_test.go`, `internal/config/config.go`, `internal/web/server.go`, `internal/web/ticket_handlers.go`, `internal/web/ticket_test.go`, `internal/web/templates/tickets.html`, `internal/web/templates/ticket_new.html`, `internal/web/templates/ticket_view.html`, `internal/web/templates/staff_tickets.html`, `internal/web/templates/header.html`, `internal/web/templates/staff.html`, `internal/web/templates/account.html`, `internal/web/static/css/app.css`, `.env.example`
+
+**Verify:** Anon `GET /tickets` redirects to login. Player A cannot `GET` player B’s ticket (404). CSRF missing → 403. Staff reply + status; Done leaves the open queue; player cannot comment after close. Second open with `RATE_LIMIT_TICKETS=1` bounces to `/tickets/new`.
+
+**Leftover:** Staff can still open a ticket by ID after it is Done/Closed. No attachments.
+

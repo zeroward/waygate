@@ -78,6 +78,7 @@ type Config struct {
 	RateReset    int
 	RateKB       int
 	RateUnstuck  int
+	RateTickets  int
 
 	HowToConnectFile string
 	KBPath           string
@@ -153,6 +154,7 @@ func Load() (Config, error) {
 		RateReset:          envInt("RATE_LIMIT_RESET", 3),
 		RateKB:             envInt("RATE_LIMIT_KB", 20),
 		RateUnstuck:        envInt("RATE_LIMIT_UNSTUCK", 5),
+		RateTickets:        envInt("RATE_LIMIT_TICKETS", 5),
 		HowToConnectFile:   env("HOW_TO_CONNECT_FILE", "content/how-to-connect.md"),
 		KBPath:             env("KB_PATH", "data/kb.sqlite"),
 		DownloadsDir:       env("DOWNLOADS_DIR", "downloads"),
@@ -212,6 +214,9 @@ func (c *Config) validate() error {
 	}
 	if c.RateUnstuck < 1 {
 		c.RateUnstuck = 5
+	}
+	if c.RateTickets < 1 {
+		c.RateTickets = 5
 	}
 	return nil
 }

@@ -1043,3 +1043,33 @@ tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .money { color: var(--gold-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .char-unstuck .btn { font-size: 13px; padding: 0.32rem 0.65rem; }
 .char-unstuck form { margin: 0; }
+
+.ticket-view h2 { margin: 0 0 1rem; }
+.ticket-thread {
+  list-style: none;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.ticket-msg {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.75rem 0.9rem;
+  background: rgba(0, 0, 0, 0.18);
+}
+.ticket-msg.is-staff {
+  border-color: rgba(212, 180, 90, 0.28);
+  background: rgba(28, 22, 12, 0.45);
+}
+.ticket-msg-meta {
+  margin: 0 0 0.4rem;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+.ticket-msg-body {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

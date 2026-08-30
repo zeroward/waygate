@@ -7,7 +7,7 @@
   <title>{{if .Title}}{{.Title}} — {{end}}{{.RealmName}}</title>
   <meta name="description" content="{{.RealmName}} — {{.CoreName}} account registration and realm status.">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/app.css?v=18">
+  <link rel="stylesheet" href="/static/css/app.css?v=19">
   {{if eq .CaptchaProv "turnstile"}}
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   {{end}}
@@ -63,6 +63,7 @@
           </summary>
           <div class="user-menu-panel">
             <a href="/account">Account</a>
+            <a href="/tickets">Tickets</a>
             <a href="/account#password">Change password</a>
             <form method="post" action="/account/logout">
               <input type="hidden" name="csrf_token" value="{{.CSRF}}">

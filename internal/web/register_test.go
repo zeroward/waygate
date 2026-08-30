@@ -44,6 +44,7 @@ func testWeb(t *testing.T) (*httptest.Server, *Server) {
 		RateContact:       50,
 		RateReset:         50,
 		RateKB:            50,
+		RateTickets:       50,
 		HowToConnectFile:  "",
 		AccountMode:       "sql",
 		DownloadsDir:      t.TempDir(),

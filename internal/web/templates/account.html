@@ -10,9 +10,10 @@
       <dt>Username</dt><dd>{{.User.Username}}</dd>
       <dt>Email</dt><dd>{{.User.Email}}</dd>
     </dl>
-    {{if .Staff}}
-    <p><a class="btn" href="/staff">Admin panel</a></p>
-    {{end}}
+    <p class="kb-edit-actions">
+      <a class="btn" href="/tickets">Tickets</a>
+      {{if .Staff}}<a class="btn" href="/staff">Admin panel</a>{{end}}
+    </p>
 
     <h2>Characters</h2>
     <p class="hint">Unstuck sends a logged-out character to their hearth (inn bind).</p>

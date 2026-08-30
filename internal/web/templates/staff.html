@@ -6,7 +6,7 @@
     <p class="home-kicker">{{rankName .User.GMLevel}}</p>
     <h1>Admin panel</h1>
     <p class="lede">Create accounts, reset passwords, publish Downloads, and set GM or Admin. Super GM cannot be granted here.</p>
-    {{if .CanEditKB}}<p class="home-cta-quiet"><a href="/staff/kb">Knowledge Base articles</a></p>{{end}}
+    <p class="home-cta-quiet"><a href="/staff/tickets">Player tickets</a>{{if .CanEditKB}} · <a href="/staff/kb">Knowledge Base articles</a>{{end}}</p>
   </section>
 
   <section class="panel staff-create">
