@@ -9,7 +9,7 @@ import (
 )
 
 func TestDemoSearchAndInspect(t *testing.T) {
-	s := New(config.Config{DemoMode: true}, nil)
+	s := New(config.Config{DemoMode: true}, nil, nil)
 	hits := s.Search(context.Background(), "Frost")
 	if len(hits) != 1 || hits[0].Name != "Frostwarden" {
 		t.Fatalf("search %+v", hits)

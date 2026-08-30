@@ -3,6 +3,8 @@ package armory
 import (
 	"context"
 	"fmt"
+	"io"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -18,6 +20,7 @@ const searchLimit = 25
 type Service struct {
 	cfg config.Config
 	db  *db.DB
+	log *slog.Logger
 
 	mu    sync.Mutex
 	cache map[string]cacheEnt
@@ -29,8 +32,11 @@ type cacheEnt struct {
 	ok    bool
 }
 
-func New(cfg config.Config, database *db.DB) *Service {
-	return &Service{cfg: cfg, db: database, cache: map[string]cacheEnt{}}
+func New(cfg config.Config, database *db.DB, log *slog.Logger) *Service {
+	if log == nil {
+		log = slog.New(slog.NewTextHandler(io.Discard, nil))
+	}
+	return &Service{cfg: cfg, db: database, log: log, cache: map[string]cacheEnt{}}
 }
 
 type SearchHit struct {

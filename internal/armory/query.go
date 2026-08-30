@@ -34,6 +34,7 @@ func (s *Service) searchSQL(ctx context.Context, q string) []SearchHit {
 	args = append(args, searchLimit)
 	rows, err := s.db.SQL.QueryContext(ctx, query, args...)
 	if err != nil {
+		s.log.Error("armory search", "err", err)
 		return nil
 	}
 	defer rows.Close()
@@ -116,6 +117,7 @@ func (s *Service) gear(ctx context.Context, guid uint32) []GearItem {
 		s.db.QChar("character_inventory"), s.db.QChar("item_instance"), s.db.QWorld("item_template"))
 	rows, err := s.db.SQL.QueryContext(ctx, q, guid)
 	if err != nil {
+		s.log.Error("armory gear query", "guid", guid, "err", err)
 		return out
 	}
 	defer rows.Close()
@@ -155,6 +157,9 @@ func (s *Service) talents(ctx context.Context, guid uint32, active, count int) [
 	}
 	q := fmt.Sprintf(`SELECT `+"`spell`"+`, `+"`specMask`"+` FROM %s WHERE `+"`guid`"+` = ?`, s.db.QChar("character_talent"))
 	rows, err := s.db.SQL.QueryContext(ctx, q, guid)
+	if err != nil {
+		s.log.Error("armory talents query", "guid", guid, "err", err)
+	}
 	if err == nil {
 		defer rows.Close()
 		for rows.Next() {
@@ -175,6 +180,7 @@ func (s *Service) talents(ctx context.Context, guid uint32, active, count int) [
 		s.db.QChar("character_glyphs"))
 	grows, err := s.db.SQL.QueryContext(ctx, gq, guid)
 	if err != nil {
+		s.log.Error("armory glyphs query", "guid", guid, "err", err)
 		return specs
 	}
 	defer grows.Close()
@@ -214,6 +220,7 @@ func (s *Service) achievements(ctx context.Context, guid uint32) []Achievement {
 		s.db.QChar("character_achievement"))
 	rows, err := s.db.SQL.QueryContext(ctx, q, guid)
 	if err != nil {
+		s.log.Error("armory achievements query", "guid", guid, "err", err)
 		return nil
 	}
 	defer rows.Close()
@@ -241,6 +248,7 @@ func (s *Service) arena(ctx context.Context, guid uint32) []ArenaTeam {
 		ORDER BY at.`+"`type`"+` ASC`, s.db.QChar("arena_team_member"), s.db.QChar("arena_team"))
 	rows, err := s.db.SQL.QueryContext(ctx, q, guid)
 	if err != nil {
+		s.log.Error("armory arena query", "guid", guid, "err", err)
 		return nil
 	}
 	defer rows.Close()

@@ -106,7 +106,7 @@ func New(
 		ticketRL:  ratelimit.New(cfg.RateWindow, ticketMax),
 		kb:        kbStore,
 		downloads: downloads.New(cfg.DownloadsDir, cfg.DownloadsCatalog),
-		armory:    armory.New(cfg, st.Database()),
+		armory:    armory.New(cfg, st.Database(), log),
 	}
 	if err := s.seedHowToConnect(); err != nil {
 		_ = kbStore.Close()

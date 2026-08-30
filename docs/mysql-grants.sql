@@ -11,6 +11,7 @@ GRANT SELECT ON acore_auth.account_access TO 'webreg'@'%';
 GRANT SELECT ON acore_auth.realmlist TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.characters TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.character_homebind TO 'webreg'@'%';
+-- Armory inspect (apply on existing servers too; CREATE USER does not add these).
 GRANT SELECT ON acore_characters.character_inventory TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.item_instance TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.character_talent TO 'webreg'@'%';
