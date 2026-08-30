@@ -112,6 +112,14 @@ CREATE TABLE IF NOT EXISTS articles (
 );
 CREATE INDEX IF NOT EXISTS idx_articles_cat ON articles(category, sort_order, title);
 CREATE INDEX IF NOT EXISTS idx_articles_pub ON articles(published);
+CREATE TABLE IF NOT EXISTS staff_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_staff_events_at ON staff_events(at DESC);
 `)
 	return err
 }

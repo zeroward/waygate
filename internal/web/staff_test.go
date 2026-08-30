@@ -131,6 +131,9 @@ func TestStaffCreateAndReset(t *testing.T) {
 	if !strings.Contains(string(body), "NEWPLAYER") {
 		t.Fatalf("new account missing: %s", body)
 	}
+	if !strings.Contains(string(body), "Recent actions") || !strings.Contains(string(body), ">create<") {
+		t.Fatal("staff action log missing create event")
+	}
 	if !strings.Contains(string(body), `name="username" value="NEWPLAYER"`) {
 		t.Fatalf("created row not selected: %s", body)
 	}

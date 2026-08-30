@@ -20,3 +20,13 @@
 
 **Leftover:** Other AH-bot names can be added to `boardSkipNames` if they show up.
 
+## #4 Admin panel: staff action log
+
+**Shipped:** SQLite `staff_events` in the Gatehouse KB database (not WoW MySQL). Successful unstuck, staff create/reset/rank, download upload/delete, and KB create/update/delete insert a row. `/staff` shows time, actor, action, target (newest first). Pruned to 200 rows and 30 days.
+
+**Files:** `internal/kb/events.go`, `internal/kb/store.go`, `internal/kb/store_test.go`, `internal/web/handlers.go`, `internal/web/kb_handlers.go`, `internal/web/staff_downloads.go`, `internal/web/templates/staff.html`, `internal/web/staff_test.go`
+
+**Verify:** After creating an account from Admin panel, GET `/staff` contains `Recent actions` and `create`.
+
+**Leftover:** None for this issue.
+

@@ -267,7 +267,29 @@ func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
 		"DownloadsWritable": s.downloads.Writable(),
 		"DownloadsMax":      downloads.HumanSize(s.cfg.DownloadsMaxBytes()),
 		"DownloadsScanMax":  downloadScanMax(s),
+		"Events":            s.recentStaffEvents(r.Context()),
 	})
+}
+
+func (s *Server) logStaff(actor, action, target string) {
+	if s.kb == nil {
+		return
+	}
+	if err := s.kb.LogEvent(context.Background(), actor, action, target); err != nil {
+		s.log.Error("staff event", "err", err, "action", action)
+	}
+}
+
+func (s *Server) recentStaffEvents(ctx context.Context) []kb.Event {
+	if s.kb == nil {
+		return nil
+	}
+	ev, err := s.kb.RecentEvents(ctx, 200)
+	if err != nil {
+		s.log.Error("staff events", "err", err)
+		return nil
+	}
+	return ev
 }
 
 func (s *Server) staffSelected(ctx context.Context, rows []account.ListedAccount, raw, q string, includeBots bool) *account.ListedAccount {
@@ -375,7 +397,9 @@ func (s *Server) staffCreatePOST(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	s.log.Info("staff create", "actor", s.sessions.GetOrCreate(w, r).User.Username, "target", strings.ToUpper(user))
+	actor := s.sessions.GetOrCreate(w, r).User.Username
+	s.log.Info("staff create", "actor", actor, "target", strings.ToUpper(user))
+	s.logStaff(actor, "create", strings.ToUpper(user))
 	s.flashRedirect(w, r, "/staff?select="+url.QueryEscape(strings.ToUpper(user)), "success", "Created account "+user+".")
 }
 
@@ -414,6 +438,7 @@ func (s *Server) staffResetPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("staff reset", "actor", sess.User.Username, "target", strings.ToUpper(target))
+	s.logStaff(sess.User.Username, "reset", strings.ToUpper(target))
 	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Password updated for "+target+".")
 }
 
@@ -457,6 +482,7 @@ func (s *Server) staffRankPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("staff rank", "actor", sess.User.Username, "target", strings.ToUpper(target), "rank", level)
+	s.logStaff(sess.User.Username, "rank", strings.ToUpper(target)+"="+account.RankName(level))
 	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Set "+target+" to "+account.RankName(level)+".")
 }
 
@@ -534,6 +560,7 @@ func (s *Server) unstuckPOST(w http.ResponseWriter, r *http.Request) {
 		"to_zone", res.ToZone,
 		"via", res.Via,
 	)
+	s.logStaff(sess.User.Username, "unstuck", res.Name)
 	s.flashRedirect(w, r, "/account", "success", res.Name+" was sent to their hearth. Log in in-game.")
 }
 

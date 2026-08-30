@@ -241,6 +241,7 @@ func (s *Server) staffKBCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("kb create", "actor", sess.User.Username, "slug", saved.Slug, "id", saved.ID)
+	s.logStaff(sess.User.Username, "kb-create", saved.Slug)
 	s.flashRedirect(w, r, "/staff/kb/"+strconv.FormatInt(saved.ID, 10), "success", "Article saved.")
 }
 
@@ -276,6 +277,7 @@ func (s *Server) staffKBUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("kb update", "actor", sess.User.Username, "slug", saved.Slug, "id", saved.ID)
+	s.logStaff(sess.User.Username, "kb-update", saved.Slug)
 	s.flashRedirect(w, r, "/staff/kb/"+strconv.FormatInt(saved.ID, 10), "success", "Article saved.")
 }
 
@@ -306,6 +308,7 @@ func (s *Server) staffKBDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.log.Info("kb delete", "actor", sess.User.Username, "id", id)
+	s.logStaff(sess.User.Username, "kb-delete", strconv.FormatInt(id, 10))
 	s.flashRedirect(w, r, "/staff/kb", "success", "Article deleted.")
 }
 

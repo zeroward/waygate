@@ -87,6 +87,18 @@ func TestSeedOnceAndCRUD(t *testing.T) {
 	}
 }
 
+func TestStaffEvents(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	if err := s.LogEvent(ctx, "STAFFER", "create", "NEWPLAYER"); err != nil {
+		t.Fatal(err)
+	}
+	ev, err := s.RecentEvents(ctx, 10)
+	if err != nil || len(ev) != 1 || ev[0].Actor != "STAFFER" || ev[0].Action != "create" || ev[0].Target != "NEWPLAYER" {
+		t.Fatalf("%v %+v", err, ev)
+	}
+}
+
 func TestLatestPublished(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
