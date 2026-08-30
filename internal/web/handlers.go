@@ -293,6 +293,9 @@ func (s *Server) registerPOST(w http.ResponseWriter, r *http.Request) {
 	}
 	sess := s.sessions.Regenerate(w, s.sessions.GetOrCreate(w, r))
 	sess.User = toSiteUser(u)
+	if dek, err := s.id.UnlockDEK(r.Context(), u.ID, pass); err == nil {
+		sess.CredentialKey = dek
+	}
 	sess.SetFlash("success", "Account created. Set your realmlist and enter Azeroth.")
 	http.Redirect(w, r, "/account", http.StatusSeeOther)
 }
@@ -829,9 +832,9 @@ func (s *Server) accountGET(w http.ResponseWriter, r *http.Request) {
 			chars = list
 		}
 	}
-	var links []identity.Link
+	var wowLogins []wowLoginView
 	if sess.User != nil && s.id != nil {
-		links, _ = s.id.Links(r.Context(), sess.User.ID)
+		wowLogins = s.wowLoginViews(r, sess)
 	}
 	totpOn := false
 	totpSecret, totpURL, totpQR := "", "", ""
@@ -861,7 +864,8 @@ func (s *Server) accountGET(w http.ResponseWriter, r *http.Request) {
 	}
 	s.view(w, r, "account.html", "Account", "account", map[string]any{
 		"Characters":  chars,
-		"WowLogins":   links,
+		"WowLogins":   wowLogins,
+		"WowUnlocked": sess.User != nil && len(sess.CredentialKey) == 32,
 		"WowMax":      s.cfg.WowCredentialsMax,
 		"TOTPOn":      totpOn,
 		"TOTPPending": sess.PendingUser != nil && sess.User == nil,
@@ -900,7 +904,11 @@ func (s *Server) wowCredentialPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, "/account", "error", err.Error())
 		return
 	}
-	if _, err := s.id.AddCredential(r.Context(), sess.User.ID, user, pass, "", wotlkExpansion); err != nil {
+	if len(sess.CredentialKey) != 32 {
+		s.flashRedirect(w, r, "/account#wow", "error", "Enter your website password to save client logins.")
+		return
+	}
+	if _, err := s.id.AddCredentialWithDEK(r.Context(), sess.User.ID, user, pass, "", wotlkExpansion, sess.CredentialKey); err != nil {
 		switch {
 		case errors.Is(err, identity.ErrTaken), errors.Is(err, account.ErrTaken):
 			s.flashRedirect(w, r, "/account", "error", "that client username is taken")
@@ -912,7 +920,121 @@ func (s *Server) wowCredentialPOST(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	s.flashRedirect(w, r, "/account", "success", "Added WoW client login "+strings.ToUpper(user)+". Use it in the 3.3.5a client.")
+	s.flashRedirect(w, r, "/account#wow", "success", "Added WoW client login "+strings.ToUpper(user)+". Use it in the 3.3.5a client.")
+}
+
+type wowLoginView struct {
+	Username  string
+	Password  string
+	HasSecret bool
+	LastLogin string
+	Chars     int
+}
+
+func (s *Server) wowLoginViews(r *http.Request, sess *session.Session) []wowLoginView {
+	links, err := s.id.Links(r.Context(), sess.User.ID)
+	if err != nil {
+		return nil
+	}
+	ids := make([]uint32, 0, len(links))
+	for _, l := range links {
+		ids = append(ids, l.AccountID)
+	}
+	stats := s.status.AccountStats(r.Context(), ids)
+	dek := sess.CredentialKey
+	out := make([]wowLoginView, 0, len(links))
+	for _, l := range links {
+		st := stats[l.AccountID]
+		row := wowLoginView{
+			Username:  l.Username,
+			HasSecret: l.HasSecret(),
+			LastLogin: st.LastLogin,
+			Chars:     st.Chars,
+		}
+		if row.LastLogin == "" {
+			row.LastLogin = "—"
+		}
+		if len(dek) == 32 && l.HasSecret() {
+			if p, err := s.id.OpenClientPassword(l, dek); err == nil {
+				row.Password = p
+			} else {
+				row.HasSecret = false
+			}
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
+func (s *Server) wowUnlockPOST(w http.ResponseWriter, r *http.Request) {
+	sess := s.requireLogin(w, r)
+	if sess == nil {
+		return
+	}
+	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
+		return
+	}
+	dek, err := s.id.UnlockDEK(r.Context(), sess.User.ID, r.FormValue("current_password"))
+	if err != nil {
+		s.flashRedirect(w, r, "/account#wow", "error", "Website password is incorrect.")
+		return
+	}
+	sess.CredentialKey = dek
+	s.flashRedirect(w, r, "/account#wow", "success", "Client passwords unlocked for this session.")
+}
+
+func (s *Server) wowPasswordPOST(w http.ResponseWriter, r *http.Request) {
+	sess := s.requireLogin(w, r)
+	if sess == nil {
+		return
+	}
+	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
+		return
+	}
+	if len(sess.CredentialKey) != 32 {
+		s.flashRedirect(w, r, "/account#wow", "error", "Enter your website password to save client logins.")
+		return
+	}
+	user := strings.TrimSpace(r.FormValue("wow_username"))
+	pass := r.FormValue("wow_password")
+	if pass != r.FormValue("wow_password_confirm") {
+		s.flashRedirect(w, r, "/account#wow", "error", "WoW passwords do not match")
+		return
+	}
+	if err := validate.Username(user); err != nil {
+		s.flashRedirect(w, r, "/account#wow", "error", err.Error())
+		return
+	}
+	if err := validate.Password(pass, user, s.cfg.PasswordMinLength); err != nil {
+		s.flashRedirect(w, r, "/account#wow", "error", err.Error())
+		return
+	}
+	links, err := s.id.Links(r.Context(), sess.User.ID)
+	if err != nil {
+		s.flashRedirect(w, r, "/account#wow", "error", "Could not save the client password.")
+		return
+	}
+	owned := false
+	for _, l := range links {
+		if strings.EqualFold(l.Username, user) {
+			owned = true
+			break
+		}
+	}
+	if !owned {
+		http.NotFound(w, r)
+		return
+	}
+	if err := s.accounts.ResetPassword(r.Context(), user, pass); err != nil {
+		s.log.Error("wow password", "err", err, "user", sess.User.Username)
+		s.flashRedirect(w, r, "/account#wow", "error", "Could not save the client password.")
+		return
+	}
+	if err := s.id.SealClientPassword(r.Context(), sess.User.ID, user, pass, sess.CredentialKey); err != nil {
+		s.flashRedirect(w, r, "/account#wow", "error", "Could not save the client password.")
+		return
+	}
+	s.flashRedirect(w, r, "/account#wow", "success", "Saved Wow.exe password for "+strings.ToUpper(user)+".")
 }
 
 func (s *Server) unstuckPOST(w http.ResponseWriter, r *http.Request) {
@@ -987,15 +1109,18 @@ func (s *Server) loginPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess := s.sessions.GetOrCreate(w, r)
+	dek, _ := s.id.UnlockDEK(r.Context(), u.ID, pass)
 	if s.id.TOTPEnabled(r.Context(), u.ID) {
 		sess.PendingUser = toSiteUser(u)
 		sess.PendingNext = r.FormValue("next")
 		sess.User = nil
+		sess.CredentialKey = dek
 		s.flashRedirect(w, r, "/account", "info", "Enter the code from your authenticator app.")
 		return
 	}
 	sess = s.sessions.Regenerate(w, sess)
 	sess.User = toSiteUser(u)
+	sess.CredentialKey = dek
 	sess.SetFlash("success", "Welcome back, "+u.Username+".")
 	http.Redirect(w, r, safeNext(r.FormValue("next")), http.StatusSeeOther)
 }
@@ -1050,6 +1175,9 @@ func (s *Server) passwordPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.sessions.RevokeUser(sess.User.ID, sess.ID)
+	if dek, err := s.id.UnlockDEK(r.Context(), sess.User.ID, nw); err == nil {
+		sess.CredentialKey = dek
+	}
 	s.flashRedirect(w, r, "/account", "success", "Website password updated. Your WoW client password is unchanged.")
 }
 

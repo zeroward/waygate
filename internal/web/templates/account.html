@@ -65,13 +65,64 @@
 
   <section class="panel">
     <h2 id="wow">WoW client logins</h2>
-    <p class="hint">These usernames and passwords are for Wow.exe only. They are not your website password. You can have up to {{$d.WowMax}}.</p>
+    <p class="hint">These usernames and passwords are for Wow.exe only. Client passwords are encrypted with your website password. Passkeys do not unlock them. You can have up to {{$d.WowMax}}.</p>
+    {{if not $d.WowUnlocked}}
+    <form method="post" action="/account/wow/unlock" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Website password
+        <input type="password" name="current_password" required maxlength="16" autocomplete="current-password">
+      </label>
+      <button type="submit" class="btn">Unlock client passwords</button>
+    </form>
+    {{end}}
     {{if $d.WowLogins}}
-    <ul class="plain">
-      {{range $d.WowLogins}}
-      <li><code>{{.Username}}</code></li>
-      {{end}}
-    </ul>
+    <div class="table-wrap">
+      <table class="wow-logins">
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Password</th>
+            <th>Last login</th>
+            <th>Characters</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $d.WowLogins}}
+          <tr>
+            <td class="name"><code>{{.Username}}</code></td>
+            <td>
+              {{if not $d.WowUnlocked}}
+              <span class="muted">Unlock to view</span>
+              {{else if .Password}}
+              <div class="secret-pass">
+                <input id="wow-pass-{{.Username}}" type="password" value="{{.Password}}" readonly autocomplete="off" spellcheck="false">
+                <button type="button" class="btn" data-reveal-pass="wow-pass-{{.Username}}">Show</button>
+              </div>
+              {{else}}
+              <span class="muted">Not saved</span>
+              <details>
+                <summary>Save password</summary>
+                <form method="post" action="/account/wow/password" class="form">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+                  <input type="hidden" name="wow_username" value="{{.Username}}">
+                  <label>Client password
+                    <input type="password" name="wow_password" required minlength="8" maxlength="16" autocomplete="new-password">
+                  </label>
+                  <label>Confirm
+                    <input type="password" name="wow_password_confirm" required minlength="8" maxlength="16" autocomplete="new-password">
+                  </label>
+                  <button type="submit" class="btn btn-gold">Save</button>
+                </form>
+              </details>
+              {{end}}
+            </td>
+            <td>{{.LastLogin}}</td>
+            <td>{{.Chars}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
     {{else}}
     <p class="empty">No client logins linked yet.</p>
     {{end}}

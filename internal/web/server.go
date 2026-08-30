@@ -205,6 +205,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /account/password", s.passwordPOST)
 	mux.HandleFunc("POST /account/unstuck", s.unstuckPOST)
 	mux.HandleFunc("POST /account/wow", s.wowCredentialPOST)
+	mux.HandleFunc("POST /account/wow/unlock", s.wowUnlockPOST)
+	mux.HandleFunc("POST /account/wow/password", s.wowPasswordPOST)
 	mux.HandleFunc("POST /account/wg", s.wgCreatePOST)
 	mux.HandleFunc("POST /account/wg/{id}/delete", s.wgDeletePOST)
 	mux.HandleFunc("GET /account/wg/{id}/{kind}", s.wgDownload)

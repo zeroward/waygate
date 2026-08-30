@@ -28,10 +28,12 @@ func (s *Server) totpLoginPOST(w http.ResponseWriter, r *http.Request) {
 	}
 	next := sess.PendingNext
 	u := *sess.PendingUser
+	dek := sess.CredentialKey
 	sess.PendingUser = nil
 	sess.PendingNext = ""
 	sess = s.sessions.Regenerate(w, sess)
 	sess.User = &u
+	sess.CredentialKey = dek
 	sess.SetFlash("success", "Welcome back, "+u.Username+".")
 	http.Redirect(w, r, safeNext(next), http.StatusSeeOther)
 }

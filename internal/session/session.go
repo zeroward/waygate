@@ -35,21 +35,22 @@ type Flash struct {
 }
 
 type Session struct {
-	ID           string
-	User         *User
-	PendingUser  *User
-	PendingNext  string
-	TOTPSecret   string   `json:"-"`
-	TOTPURL      string   `json:"-"`
-	TOTPQR       string   `json:"-"`
-	TOTPCodes    []string `json:"-"`
-	WebAuthnJSON []byte
-	WebAuthnName string
-	WebAuthnNext string
-	CSRF         string
-	Flash        *Flash
-	Created      time.Time
-	Expiry       time.Time
+	ID            string
+	User          *User
+	PendingUser   *User
+	PendingNext   string
+	TOTPSecret    string   `json:"-"`
+	TOTPURL       string   `json:"-"`
+	TOTPQR        string   `json:"-"`
+	TOTPCodes     []string `json:"-"`
+	WebAuthnJSON  []byte
+	WebAuthnName  string
+	WebAuthnNext  string
+	CredentialKey []byte `json:"-"`
+	CSRF          string
+	Flash         *Flash
+	Created       time.Time
+	Expiry        time.Time
 
 	store      *Store
 	replacedBy *Session
@@ -261,6 +262,9 @@ func (s *Store) Regenerate(w http.ResponseWriter, old *Session) *Session {
 		if old.User != nil {
 			u := *old.User
 			n.User = &u
+		}
+		if len(old.CredentialKey) > 0 {
+			n.CredentialKey = append([]byte(nil), old.CredentialKey...)
 		}
 		old.replacedBy = n
 		old.destroyed = true

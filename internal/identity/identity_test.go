@@ -85,6 +85,49 @@ func TestAuthRejectsBannedWowAccount(t *testing.T) {
 	}
 }
 
+func TestWowSecretRoundTrip(t *testing.T) {
+	id, _ := testID(t)
+	ctx := context.Background()
+	u, err := id.Register(ctx, "HeroOne", "Abcd1234", "h@example.com", "", "ClientPass1", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dek, err := id.UnlockDEK(ctx, u.ID, "Abcd1234")
+	if err != nil || len(dek) != 32 {
+		t.Fatalf("dek %v %d", err, len(dek))
+	}
+	links, err := id.Links(ctx, u.ID)
+	if err != nil || len(links) != 1 || !links[0].HasSecret() {
+		t.Fatalf("links %v %+v", err, links)
+	}
+	got, err := id.OpenClientPassword(links[0], dek)
+	if err != nil || got != "ClientPass1" {
+		t.Fatalf("open %q %v", got, err)
+	}
+	dek2, err := id.UnlockDEK(ctx, u.ID, "Abcd1234")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got2, err := id.OpenClientPassword(links[0], dek2)
+	if err != nil || got2 != "ClientPass1" {
+		t.Fatalf("reopen %q %v", got2, err)
+	}
+	if err := id.ChangePassword(ctx, u, "Abcd1234", "NewPass12"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := id.UnlockDEK(ctx, u.ID, "Abcd1234"); err != ErrBadPassword {
+		t.Fatalf("old kek %v", err)
+	}
+	dek3, err := id.UnlockDEK(ctx, u.ID, "NewPass12")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got3, err := id.OpenClientPassword(links[0], dek3)
+	if err != nil || got3 != "ClientPass1" {
+		t.Fatalf("after site password change %q %v", got3, err)
+	}
+}
+
 func TestAddCredentialCap(t *testing.T) {
 	id, _ := testID(t)
 	ctx := context.Background()

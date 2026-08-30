@@ -2,6 +2,7 @@ package status
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -89,6 +90,68 @@ func (c *Cache) AccountCharactersMany(ctx context.Context, accountIDs []uint32) 
 		})
 	}
 	return out, rows.Err()
+}
+
+type AccountStat struct {
+	LastLogin string
+	Chars     int
+}
+
+func (c *Cache) AccountStats(ctx context.Context, accountIDs []uint32) map[uint32]AccountStat {
+	out := make(map[uint32]AccountStat, len(accountIDs))
+	if len(accountIDs) == 0 {
+		return out
+	}
+	if c.cfg.DemoMode || c.db == nil {
+		n := len(demoCharacters())
+		for _, id := range accountIDs {
+			out[id] = AccountStat{LastLogin: "—", Chars: n}
+		}
+		return out
+	}
+	ph := make([]string, len(accountIDs))
+	args := make([]any, len(accountIDs))
+	for i, id := range accountIDs {
+		ph[i] = "?"
+		args[i] = id
+	}
+	in := strings.Join(ph, ",")
+	lq := fmt.Sprintf(`SELECT a.`+"`id`"+`, a.`+"`last_login`"+` FROM %s a WHERE a.`+"`id`"+` IN (%s)`, c.db.QAuth("account"), in)
+	rows, err := c.db.SQL.QueryContext(ctx, lq, args...)
+	if err != nil {
+		return out
+	}
+	for rows.Next() {
+		var id uint32
+		var last sql.NullTime
+		if err := rows.Scan(&id, &last); err != nil {
+			break
+		}
+		st := AccountStat{LastLogin: "—"}
+		if last.Valid && !last.Time.IsZero() {
+			st.LastLogin = last.Time.UTC().Format("2006-01-02 15:04")
+		}
+		out[id] = st
+	}
+	rows.Close()
+	cq := fmt.Sprintf(`SELECT c.`+"`account`"+`, COUNT(*) FROM %s c WHERE c.`+"`account`"+` IN (%s) AND c.`+"`deleteDate`"+` IS NULL GROUP BY c.`+"`account`"+``,
+		c.db.QChar("characters"), in)
+	crows, err := c.db.SQL.QueryContext(ctx, cq, args...)
+	if err != nil {
+		return out
+	}
+	defer crows.Close()
+	for crows.Next() {
+		var id uint32
+		var n int
+		if err := crows.Scan(&id, &n); err != nil {
+			return out
+		}
+		st := out[id]
+		st.Chars = n
+		out[id] = st
+	}
+	return out
 }
 
 func demoCharacters() []Character {

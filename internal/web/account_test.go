@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httptest"
 	"net/url"
 	"strings"
 	"testing"
@@ -60,6 +61,93 @@ func TestAccountListsCharacters(t *testing.T) {
 	}
 	if !strings.Contains(html, `name="guid" value="2"`) {
 		t.Fatal("offline character missing guid")
+	}
+	if !strings.Contains(html, "HEROONE") {
+		t.Fatal("missing wow username")
+	}
+	if !strings.Contains(html, `type="password"`) || !strings.Contains(html, `value="Abcd1234"`) {
+		t.Fatal("client password should be present and covered")
+	}
+	if !strings.Contains(html, "Last login") || !strings.Contains(html, "Characters") {
+		t.Fatal("missing wow login table headers")
+	}
+	if !strings.Contains(html, "data-reveal-pass") {
+		t.Fatal("missing show/hide")
+	}
+}
+
+func TestWowUnlockAndSavePassword(t *testing.T) {
+	ts, srv := testWeb(t)
+	defer ts.Close()
+	if err := srv.accounts.Create(context.Background(), "HeroOne", "Abcd1234", "h@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	login(t, client, ts.URL, "HeroOne", "Abcd1234")
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/account", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range jar.Cookies(req.URL) {
+		req.AddCookie(c)
+	}
+	sess := srv.sessions.GetOrCreate(httptest.NewRecorder(), req)
+	if len(sess.CredentialKey) != 32 {
+		t.Fatal("login should unwrap DEK")
+	}
+	sess.CredentialKey = nil
+
+	res, err := client.Get(ts.URL + "/account")
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	html := string(locked)
+	if !strings.Contains(html, "Unlock to view") || !strings.Contains(html, "/account/wow/unlock") {
+		t.Fatal("expected unlock form")
+	}
+	if strings.Contains(html, `value="Abcd1234"`) {
+		t.Fatal("password visible while locked")
+	}
+
+	res, err = client.PostForm(ts.URL+"/account/wow/unlock", url.Values{
+		"csrf_token":       {extractCSRF(html)},
+		"current_password": {"nopeNOPE1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+
+	res, err = client.Get(ts.URL + "/account")
+	if err != nil {
+		t.Fatal(err)
+	}
+	still, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if strings.Contains(string(still), `value="Abcd1234"`) {
+		t.Fatal("bad unlock must not reveal")
+	}
+
+	res, err = client.PostForm(ts.URL+"/account/wow/unlock", url.Values{
+		"csrf_token":       {extractCSRF(string(still))},
+		"current_password": {"Abcd1234"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	res, err = client.Get(ts.URL + "/account")
+	if err != nil {
+		t.Fatal(err)
+	}
+	open, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if !strings.Contains(string(open), `value="Abcd1234"`) {
+		t.Fatal("unlock should reveal covered password")
 	}
 }
 

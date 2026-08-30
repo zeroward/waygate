@@ -32,9 +32,15 @@ type User struct {
 }
 
 type Link struct {
-	UserID    uint32
-	AccountID uint32
-	Username  string
+	UserID      uint32
+	AccountID   uint32
+	Username    string
+	SecretBlob  []byte
+	SecretNonce []byte
+}
+
+func (l Link) HasSecret() bool {
+	return len(l.SecretBlob) > 0 && len(l.SecretNonce) > 0
 }
 
 type Store struct {
@@ -105,7 +111,14 @@ CREATE TABLE IF NOT EXISTS wg_peers (
 	_, _ = db.Exec(`ALTER TABLE webauthn_credentials ADD COLUMN cred_json TEXT NOT NULL DEFAULT ''`)
 	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_webauthn_user ON webauthn_credentials(user_id)`)
 	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_wg_peers_user ON wg_peers(user_id)`)
-	return err
+	if err != nil {
+		return err
+	}
+	_, _ = db.Exec(`ALTER TABLE users ADD COLUMN dek_wrap BLOB`)
+	_, _ = db.Exec(`ALTER TABLE users ADD COLUMN dek_wrap_nonce BLOB`)
+	_, _ = db.Exec(`ALTER TABLE wow_links ADD COLUMN secret_blob BLOB`)
+	_, _ = db.Exec(`ALTER TABLE wow_links ADD COLUMN secret_nonce BLOB`)
+	return nil
 }
 
 func (s *Store) CreateUser(ctx context.Context, username, email, passwordHash string, staff uint8) (User, error) {
@@ -158,6 +171,33 @@ func (s *Store) SetPassword(ctx context.Context, id uint32, hash string) error {
 	return err
 }
 
+func (s *Store) DEKWrap(ctx context.Context, userID uint32) (wrap, nonce []byte, err error) {
+	err = s.db.QueryRowContext(ctx, `SELECT dek_wrap, dek_wrap_nonce FROM users WHERE id = ?`, userID).Scan(&wrap, &nonce)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil, ErrNotFound
+	}
+	return wrap, nonce, err
+}
+
+func (s *Store) SetDEKWrap(ctx context.Context, userID uint32, wrap, nonce []byte) error {
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET dek_wrap = ?, dek_wrap_nonce = ?, updated_at = ? WHERE id = ?`, wrap, nonce, now, userID)
+	return err
+}
+
+func (s *Store) SetLinkSecret(ctx context.Context, userID uint32, wowUser string, blob, nonce []byte) error {
+	wowUser = srp6.UpperLatin(strings.TrimSpace(wowUser))
+	res, err := s.db.ExecContext(ctx, `UPDATE wow_links SET secret_blob = ?, secret_nonce = ? WHERE user_id = ? AND username = ?`, blob, nonce, userID, wowUser)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 func (s *Store) SetStaffLevel(ctx context.Context, id uint32, level uint8) error {
 	now := time.Now().UTC().Format(time.RFC3339)
 	_, err := s.db.ExecContext(ctx, `UPDATE users SET staff_level = ?, updated_at = ? WHERE id = ?`, int(level), now, id)
@@ -199,7 +239,7 @@ func (s *Store) Link(ctx context.Context, userID, accountID uint32, wowUser stri
 }
 
 func (s *Store) Links(ctx context.Context, userID uint32) ([]Link, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT user_id, account_id, username FROM wow_links WHERE user_id = ? ORDER BY username`, userID)
+	rows, err := s.db.QueryContext(ctx, `SELECT user_id, account_id, username, secret_blob, secret_nonce FROM wow_links WHERE user_id = ? ORDER BY username`, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -207,7 +247,7 @@ func (s *Store) Links(ctx context.Context, userID uint32) ([]Link, error) {
 	var out []Link
 	for rows.Next() {
 		var l Link
-		if err := rows.Scan(&l.UserID, &l.AccountID, &l.Username); err != nil {
+		if err := rows.Scan(&l.UserID, &l.AccountID, &l.Username, &l.SecretBlob, &l.SecretNonce); err != nil {
 			return nil, err
 		}
 		out = append(out, l)
@@ -229,8 +269,8 @@ func (s *Store) AccountIDs(ctx context.Context, userID uint32) ([]uint32, error)
 
 func (s *Store) LinkByAccount(ctx context.Context, accountID uint32) (Link, error) {
 	var l Link
-	err := s.db.QueryRowContext(ctx, `SELECT user_id, account_id, username FROM wow_links WHERE account_id = ?`, accountID).
-		Scan(&l.UserID, &l.AccountID, &l.Username)
+	err := s.db.QueryRowContext(ctx, `SELECT user_id, account_id, username, secret_blob, secret_nonce FROM wow_links WHERE account_id = ?`, accountID).
+		Scan(&l.UserID, &l.AccountID, &l.Username, &l.SecretBlob, &l.SecretNonce)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Link{}, ErrNotFound
 	}

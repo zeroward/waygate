@@ -45,6 +45,62 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 	return u, nil
 }
 
+func (s *Service) UnlockDEK(ctx context.Context, userID uint32, password string) ([]byte, error) {
+	u, err := s.store.GetByID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	kek, ok := VerifyAndKey(u.PasswordHash, password)
+	if !ok {
+		return nil, ErrBadPassword
+	}
+	return s.unwrapOrInit(ctx, userID, kek)
+}
+
+func (s *Service) unwrapOrInit(ctx context.Context, userID uint32, kek []byte) ([]byte, error) {
+	wrap, nonce, err := s.store.DEKWrap(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if len(wrap) > 0 && len(nonce) > 0 {
+		return open(kek, nonce, wrap)
+	}
+	dek, err := newDEK()
+	if err != nil {
+		return nil, err
+	}
+	n, b, err := seal(kek, dek)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.store.SetDEKWrap(ctx, userID, b, n); err != nil {
+		return nil, err
+	}
+	return dek, nil
+}
+
+func (s *Service) SealClientPassword(ctx context.Context, userID uint32, wowUser, password string, dek []byte) error {
+	if len(dek) != dekLen || password == "" {
+		return errors.New("missing key")
+	}
+	nonce, blob, err := seal(dek, []byte(password))
+	if err != nil {
+		return err
+	}
+	return s.store.SetLinkSecret(ctx, userID, wowUser, blob, nonce)
+}
+
+func (s *Service) OpenClientPassword(l Link, dek []byte) (string, error) {
+	if !l.HasSecret() {
+		return "", nil
+	}
+	plain, err := open(dek, l.SecretNonce, l.SecretBlob)
+	if err != nil {
+		return "", err
+	}
+	return string(plain), nil
+}
+
 func (s *Service) claimLegacy(ctx context.Context, username, password string) (User, error) {
 	acc, err := s.ac.Authenticate(ctx, username, password)
 	if err != nil {
@@ -63,6 +119,9 @@ func (s *Service) claimLegacy(ctx context.Context, username, password string) (U
 	if err := s.setPassword(ctx, u.ID, password); err != nil {
 		return User{}, err
 	}
+	if dek, err := s.UnlockDEK(ctx, u.ID, password); err == nil {
+		_ = s.SealClientPassword(ctx, u.ID, acc.Username, password, dek)
+	}
 	u.PasswordHash = "" // not needed by caller
 	return u, nil
 }
@@ -79,6 +138,9 @@ func (s *Service) claimLegacyExisting(ctx context.Context, u User, password stri
 	if err := s.setPassword(ctx, u.ID, password); err != nil {
 		return User{}, err
 	}
+	if dek, err := s.UnlockDEK(ctx, u.ID, password); err == nil {
+		_ = s.SealClientPassword(ctx, u.ID, acc.Username, password, dek)
+	}
 	return u, nil
 }
 
@@ -91,14 +153,40 @@ func (s *Service) setPassword(ctx context.Context, id uint32, password string) e
 }
 
 func (s *Service) ChangePassword(ctx context.Context, user User, old, nw string) error {
+	var dek []byte
 	if NeedsLegacy(user.PasswordHash) {
 		if _, err := s.ac.Authenticate(ctx, user.Username, old); err != nil {
 			return ErrBadPassword
 		}
-	} else if !CheckPassword(user.PasswordHash, old) {
-		return ErrBadPassword
+	} else {
+		kek, ok := VerifyAndKey(user.PasswordHash, old)
+		if !ok {
+			return ErrBadPassword
+		}
+		var err error
+		dek, err = s.unwrapOrInit(ctx, user.ID, kek)
+		if err != nil {
+			return err
+		}
 	}
-	return s.setPassword(ctx, user.ID, nw)
+	kekNew, hash, err := HashPasswordAndKey(nw)
+	if err != nil {
+		return err
+	}
+	if err := s.store.SetPassword(ctx, user.ID, hash); err != nil {
+		return err
+	}
+	if len(dek) == 0 {
+		dek, err = newDEK()
+		if err != nil {
+			return err
+		}
+	}
+	nonce, wrap, err := seal(kekNew, dek)
+	if err != nil {
+		return err
+	}
+	return s.store.SetDEKWrap(ctx, user.ID, wrap, nonce)
 }
 
 func (s *Service) SetPassword(ctx context.Context, username, password string) error {
@@ -159,7 +247,7 @@ func (s *Service) Register(ctx context.Context, siteUser, sitePass, email, wowUs
 	if acTaken {
 		return User{}, ErrTaken
 	}
-	hash, err := HashPassword(sitePass)
+	kek, hash, err := HashPasswordAndKey(sitePass)
 	if err != nil {
 		return User{}, err
 	}
@@ -176,6 +264,9 @@ func (s *Service) Register(ctx context.Context, siteUser, sitePass, email, wowUs
 	}
 	if err := s.store.Link(ctx, u.ID, listed.ID, wowUser); err != nil {
 		return User{}, err
+	}
+	if dek, err := s.unwrapOrInit(ctx, u.ID, kek); err == nil {
+		_ = s.SealClientPassword(ctx, u.ID, wowUser, wowPass, dek)
 	}
 	return u, nil
 }
@@ -210,6 +301,19 @@ func (s *Service) AddCredential(ctx context.Context, userID uint32, wowUser, wow
 		return Link{}, err
 	}
 	return Link{UserID: userID, AccountID: listed.ID, Username: wowUser}, nil
+}
+
+func (s *Service) AddCredentialWithDEK(ctx context.Context, userID uint32, wowUser, wowPass, email string, expansion uint8, dek []byte) (Link, error) {
+	ln, err := s.AddCredential(ctx, userID, wowUser, wowPass, email, expansion)
+	if err != nil {
+		return Link{}, err
+	}
+	if len(dek) == dekLen {
+		if err := s.SealClientPassword(ctx, userID, wowUser, wowPass, dek); err != nil {
+			return ln, err
+		}
+	}
+	return ln, nil
 }
 
 func (s *Service) rejectIfBanned(ctx context.Context, u User) error {

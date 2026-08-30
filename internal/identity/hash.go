@@ -22,16 +22,22 @@ const (
 )
 
 func HashPassword(password string) (string, error) {
+	_, hash, err := HashPasswordAndKey(password)
+	return hash, err
+}
+
+func HashPasswordAndKey(password string) (key []byte, hash string, err error) {
 	salt := make([]byte, saltLen)
 	if _, err := rand.Read(salt); err != nil {
-		return "", err
+		return nil, "", err
 	}
-	key := argon2.IDKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonKeyLen)
-	return fmt.Sprintf("%s$v=%d$m=%d,t=%d,p=%d$%s$%s",
+	key = argon2.IDKey([]byte(password), salt, argonTime, argonMemory, argonThreads, argonKeyLen)
+	hash = fmt.Sprintf("%s$v=%d$m=%d,t=%d,p=%d$%s$%s",
 		hashPrefix, argon2.Version, argonMemory, argonTime, argonThreads,
 		base64.RawStdEncoding.EncodeToString(salt),
 		base64.RawStdEncoding.EncodeToString(key),
-	), nil
+	)
+	return key, hash, nil
 }
 
 func NeedsLegacy(hash string) bool {
@@ -39,12 +45,17 @@ func NeedsLegacy(hash string) bool {
 }
 
 func CheckPassword(hash, password string) bool {
+	_, ok := VerifyAndKey(hash, password)
+	return ok
+}
+
+func VerifyAndKey(hash, password string) ([]byte, bool) {
 	if NeedsLegacy(hash) || !strings.HasPrefix(hash, hashPrefix+"$") {
-		return false
+		return nil, false
 	}
 	parts := strings.Split(hash, "$")
 	if len(parts) != 5 {
-		return false
+		return nil, false
 	}
 	var mem, timeCost uint32
 	var threads uint8
@@ -65,12 +76,15 @@ func CheckPassword(hash, password string) bool {
 	}
 	salt, err := base64.RawStdEncoding.DecodeString(parts[3])
 	if err != nil {
-		return false
+		return nil, false
 	}
 	want, err := base64.RawStdEncoding.DecodeString(parts[4])
 	if err != nil {
-		return false
+		return nil, false
 	}
 	got := argon2.IDKey([]byte(password), salt, timeCost, mem, threads, uint32(len(want)))
-	return subtle.ConstantTimeCompare(want, got) == 1
+	if subtle.ConstantTimeCompare(want, got) != 1 {
+		return nil, false
+	}
+	return got, true
 }

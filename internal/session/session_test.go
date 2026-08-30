@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -68,6 +69,35 @@ func TestSessionPersistsAcrossStoreReopen(t *testing.T) {
 	again := s3.GetOrCreate(httptest.NewRecorder(), cookieReq(rec, "/"))
 	if again.TakeFlash() != nil {
 		t.Fatal("flash should be consumed")
+	}
+}
+
+func TestCredentialKeyNotPersisted(t *testing.T) {
+	db := testDB(t)
+	s1, err := NewStore(db, time.Hour, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := httptest.NewRecorder()
+	sess := s1.GetOrCreate(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	sess.User = &User{ID: 7, Username: "HEROONE"}
+	sess.CredentialKey = []byte("0123456789abcdef0123456789abcdef")
+	s1.SaveLatest(sess)
+
+	s2, err := NewStore(db, time.Hour, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := s2.GetOrCreate(httptest.NewRecorder(), cookieReq(rec, "/"))
+	if len(got.CredentialKey) != 0 {
+		t.Fatal("DEK must not persist in sqlite")
+	}
+	var blob string
+	if err := db.QueryRow(`SELECT data FROM http_sessions WHERE id = ?`, sess.ID).Scan(&blob); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(blob, "0123456789abcdef") || strings.Contains(blob, "CredentialKey") {
+		t.Fatalf("session json leaked key: %s", blob)
 	}
 }
 
