@@ -16,6 +16,7 @@ The app’s *code* is careful in several places that usually go wrong (parameter
 3. **Session cookies are not `Secure`** and there is **no HSTS**, while the public site is HTTPS. Origin `:3080` is also published on all interfaces.
 4. **ClamAV is installed and unused.** Staff can upload `.exe` / archives; every logged-in player can download them.
 5. **WireGuard on the host forwards all `wg0` traffic**, not just realm ports.
+6. **A game ban does not log the player out of the website** (password + passkey). Demoting GM in the panel does not clear website `staff_level`. Re-POSTing TOTP setup sets `enabled=0` immediately.
 
 hCaptcha **is** on `/register` (live). Companion/unstuck/ticket IDORs were **not** found.
 
@@ -42,7 +43,7 @@ Docker + firewalld often disagree. Public-zone “no” is **not** enough while 
 
 ## Findings
 
-Severity: **Critical / High / Medium / Low**. IDs match GitHub issue drafts (S0–S14).
+Severity: **Critical / High / Medium / Low**. IDs match GitHub issue drafts (S0–S20).
 
 ### S0 — Critical — MySQL published on all interfaces
 
@@ -126,6 +127,36 @@ Severity: **Critical / High / Medium / Low**. IDs match GitHub issue drafts (S0�
 **Surface:** Password success with TOTP sets `PendingUser` on the same session id; regenerate happens after the code.  
 **Gameplan:** `Regenerate` when entering the TOTP challenge; copy only `PendingUser` / `PendingNext`.
 
+### S15 — High — Suspended accounts still use the website
+
+**Surface:** `identity.Authenticate` checks bans only on the legacy SRP6 claim path. After Argon2id is set, password login never looks at `account_banned`. Passkey login never does either. Staff Suspend blocks Wow.exe, not Gatehouse (tickets, downloads, VPN, possibly `/staff` if `staff_level` remains).  
+**Gameplan:** After password/passkey success, reject if any linked WoW account has an active ban. Same generic error as a bad password. Tests: ban → website login denied; unban → allowed.
+
+### S16 — High — Website staff rank does not follow `/staff/rank`
+
+**Surface:** Session `GMLevel` is `users.staff_level`. `/staff/rank` only writes AzerothCore `account_access`. `SetStaffLevel` exists and is never called from HTTP. Demote Admin→Player in the panel: in-game GM gone, **website admin remains**. Promote the other way: in-game GM, website still locked out until something else sets `staff_level`.  
+**Gameplan:** On every successful `SetGMLevel`, set linked `staff_level` to the same value (still never 4). Reload staff from DB on `/staff*` or destroy that user’s sessions on demotion. Test: demote → `/staff` 403.
+
+### S17 — High — Starting TOTP turns existing MFA off
+
+**Surface:** `StartTOTP` upserts `enabled = 0` and wipes recovery hashes. `totpStartPOST` does not require TOTP to be off. The UI hides Setup when enabled; a direct POST (stolen session) disables MFA until someone confirms a new secret. Password login then skips the second factor.  
+**Gameplan:** If TOTP is already enabled, reject start unless a current code is supplied. Store a pending secret beside the live one; only flip `enabled` on confirm. Test: enabled → start leaves `enabled=1`.
+
+### S18 — Medium — Password change/reset does not kill other sessions
+
+**Surface:** Email reset and password change update the hash only. SQLite sessions stay valid up to 24h.  
+**Gameplan:** Index sessions by `user_id`. On reset/change/demotion, delete that user’s sessions (optionally keep the current one after regenerate).
+
+### S19 — Medium — Email verify is a state-changing GET
+
+**Surface:** `GET /account/verify/{token}` consumes the token and creates the account. Prefetch/mail scanners can activate it.  
+**Gameplan:** Interstitial page + POST, token in the form. Keep hashed single-use tokens.
+
+### S20 — Medium — Weak TOTP recovery codes
+
+**Surface:** Recovery codes are 5 random bytes (10 hex ≈ 40 bits) compared with `==`, not constant-time. Enroll confirm/disable are not rate-limited.  
+**Gameplan:** Longer codes, `subtle.ConstantTimeCompare`, rate-limit confirm/disable.
+
 ### S14 — Low — Compose hardening
 
 **Surface:** waygate is already `read_only` + non-root. Missing `cap_drop: ALL` and `no-new-privileges`. Do not apply that to `wireguard`.  
@@ -158,8 +189,9 @@ Severity: **Critical / High / Medium / Low**. IDs match GitHub issue drafts (S0�
 2. `SESSION_SECURE_COOKIE=true` and stop publishing **3080** if Cloudflare is the only ingress (S1, S2).  
 3. Enable ClamAV + drop `.exe` (S4); raise `GM_MIN_LEVEL` (S6).  
 4. Tighten WG FORWARD (S5).  
-5. Session/TOTP and grant nits (S7–S9, S13).  
-6. Download limits, passkey host, filename, compose caps (S10–S12, S14).
+5. Ban check on website login; sync `staff_level`; stop TOTP start from disabling MFA (S15–S17).  
+6. Session/TOTP and grant nits (S7–S9, S13, S18–S20).  
+7. Download limits, passkey host, filename, compose caps (S10–S12, S14).
 
 Code remediations are follow-up PRs on this branch or stacked branches. This document does not merge to `main` by itself.
 
@@ -171,4 +203,4 @@ Code remediations are follow-up PRs on this branch or stacked branches. This doc
 ./scripts/file-security-issues.sh
 ```
 
-That creates S0–S14 on `zeroward/waygate` with labels `security` and `P0`/`P1`/`P2`/`P3`.
+That creates S0–S20 on `zeroward/waygate` with labels `security` and `P0`/`P1`/`P2`/`P3`.

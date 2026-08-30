@@ -280,5 +280,89 @@ Do not merge to main until reviewed.
 EOF
 )"
 
+issue "security: website login ignores game bans (S15)" "security,P1" "$(cat <<'EOF'
+## Severity
+High
+
+## Surface
+`identity.Authenticate` only checks bans on the legacy SRP6 claim path (`internal/identity/service.go`). After Argon2id is set, password login never looks at `account_banned`. Passkey login never does either. Staff Suspend blocks Wow.exe, not Gatehouse (tickets, downloads, VPN, and `/staff` if `staff_level` remains).
+
+## Gameplan
+After password/passkey success, reject if any linked WoW account has an active ban. Use the same generic error as a bad password. Tests: ban → website login denied; unban → allowed.
+
+Do not merge to main until reviewed.
+EOF
+)"
+
+issue "security: /staff/rank does not update website staff_level (S16)" "security,P1" "$(cat <<'EOF'
+## Severity
+High (authz)
+
+## Surface
+Session privileges use `users.staff_level`. `/staff/rank` only writes AzerothCore `account_access`. `SetStaffLevel` exists and is never called from HTTP. Demote Admin→Player: in-game GM cleared, **website admin retained**. Promote the other way: in-game GM, website still locked out.
+
+## Gameplan
+On every successful `SetGMLevel`, set the linked identity `staff_level` to the same value (still never Super GM). Reload staff from DB on `/staff*` or destroy that user’s sessions on demotion. Test: demote → `/staff` 403.
+
+Do not merge to main until reviewed.
+EOF
+)"
+
+issue "security: TOTP setup POST disables live MFA (S17)" "security,P1" "$(cat <<'EOF'
+## Severity
+High
+
+## Surface
+`StartTOTP` upserts `enabled = 0` and clears recovery hashes (`internal/identity/totp.go`). `totpStartPOST` does not require TOTP to be off. The UI hides Setup when enabled; a direct authenticated POST (stolen session) turns MFA off until someone confirms a new secret.
+
+## Gameplan
+If TOTP is already enabled, reject start unless a current code is supplied. Store a pending secret beside the live row; only set `enabled=1` on confirm. Test: enabled → start leaves `enabled=1`.
+
+Do not merge to main until reviewed.
+EOF
+)"
+
+issue "security: password change does not invalidate other sessions (S18)" "security,P2" "$(cat <<'EOF'
+## Severity
+Medium
+
+## Surface
+Email reset and password change update the hash only. Existing SQLite sessions remain valid for up to 24h (`internal/session/session.go`).
+
+## Gameplan
+Persist `user_id` on `http_sessions`. On password reset/change and staff demotion, delete that user’s sessions (optionally keep the current one after regenerate).
+
+Do not merge to main until reviewed.
+EOF
+)"
+
+issue "security: email verify should not be a GET (S19)" "security,P2" "$(cat <<'EOF'
+## Severity
+Medium
+
+## Surface
+`GET /account/verify/{token}` consumes the token and creates the account (`internal/web/handlers.go`). Mail prefetch/scanners can activate registrations.
+
+## Gameplan
+Show a confirm page and consume the token on POST. Keep hashed single-use tokens.
+
+Do not merge to main until reviewed.
+EOF
+)"
+
+issue "security: strengthen TOTP recovery codes (S20)" "security,P2" "$(cat <<'EOF'
+## Severity
+Medium
+
+## Surface
+Recovery codes are 5 random bytes (10 hex ≈ 40 bits) compared with string equality, not constant-time (`internal/identity/totp.go`). Enroll confirm/disable are not rate-limited.
+
+## Gameplan
+Longer codes, `subtle.ConstantTimeCompare`, rate-limit confirm/disable.
+
+Do not merge to main until reviewed.
+EOF
+)"
+
 echo "Created security issues. List:"
-gh issue list --label security --limit 20
+gh issue list --label security --limit 30
