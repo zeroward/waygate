@@ -28,8 +28,13 @@ browser  →  Gatehouse (waygate) :3080
 | `acore_auth.account` | Username (uppercase), `salt` BINARY(32), `verifier` BINARY(32), email, expansion |
 | `acore_auth.account_access` | Hide GMs when `HIDE_GM=true` |
 | `acore_auth.realmlist` | Unused for public address — **public host/port come from env** so this host can publish world as **28085**, not 8085 |
-| `acore_characters.characters` | Online list, leaderboards, account character list; **UPDATE** for unstuck (hearth/homebind) |
+| `acore_characters.characters` | Online list, leaderboards, account character list; **UPDATE** for unstuck (hearth/homebind); last-saved position for Companion |
+| `acore_characters.character_queststatus` | Companion quest log |
+| `acore_characters.character_queststatus_rewarded` | Companion “already done” filter |
 | `acore_characters.character_homebind` | Inn bind used by Account → Unstuck |
+| `acore_world.quest_template` | Companion quest titles, objectives, zone routes |
+| `acore_world.quest_template_addon` | Companion chain order (prev/next, exclusive groups) |
+| `acore_world.quest_poi_points` | Companion nearby-quest ordering |
 | SOAP `executeCommand` | Preferred write path so the **core** generates SRP6 data |
 
 Website login verifies the password with the same SRP6 verifier the authserver uses. Website sessions are **not** in-game sessions.
@@ -89,7 +94,9 @@ The home page lists **installed AzerothCore modules** by scanning `MODULES_DIR` 
 
 **Downloads** (including file URLs) and the **Knowledge Base** (`/kb`) require a logged-in account of any level. Anonymous requests redirect to login. `/connect` redirects to `/kb/how-to-connect`. Editing requires GM 3+.
 
-Logged-in accounts with `account_access.gmlevel` ≥ `GM_MIN_LEVEL` get an **Admin panel**: list registrations (bots hidden by default), create player accounts, reset passwords via SOAP/SRP6, upload or remove **Downloads**, and set rank to **GM** (2) or **Admin** (3). Knowledge Base create/edit is **Admin (GM 3+) only**. Super GM (4 / console) cannot be granted from the site. You can only assign a rank below your own, you cannot change your own rank, and you cannot modify an account whose GM level is higher than yours.
+**Companion** (`/companion`) is a second-monitor quest helper for characters on linked WoW logins. Pick a region and it lists leftover quests in a recommended order from this realm’s `quest_template` / `quest_template_addon` chains (plus nearby POI when present). Dailies, dungeons, and raids are skipped. It also shows the last-saved quest log. Not live GPS — worldserver writes the row on its save interval and on logout. Optional Wowhead quest links are outbound only (no scrape). Not a Zygor/Joana copy.
+
+Logged-in accounts with `gmlevel` ≥ `GM_MOD_LEVEL` (default 1) can answer **staff tickets**. The **Admin panel** (`/staff`) needs `gmlevel` ≥ `GM_MIN_LEVEL` (default 3): list registrations (bots hidden by default), create player accounts, reset passwords via SOAP/SRP6, upload or remove **Downloads**, set a maintenance banner, and set rank to **GM** (2) or **Admin** (3). Knowledge Base create/edit is **Admin (GM 3+) only**. Super GM (4 / console) cannot be granted from the site. You can only assign a rank below your own, you cannot change your own rank, and you cannot modify an account whose GM level is higher than yours. Mods who open `/staff` are sent to the ticket queue.
 
 ## Quick start (offline UI)
 
@@ -148,6 +155,15 @@ Download URLs are `/downloads/{id}` (catalog `id`), never raw filesystem paths.
 
 6. Put a reverse proxy in front for HTTPS, then set `SESSION_SECURE_COOKIE=true` and `SITE_URL=https://…`.
 
+7. **Player VPN (WireGuard)** is optional. It runs as the compose `wireguard` service (`network_mode: host`, UDP **51820**) and **replaces** host `wg-quick@wg0`:
+
+   ```bash
+   sudo systemctl disable --now wg-quick@wg0
+   # leave /etc/wireguard/wg0.conf as a backup
+   ```
+
+   Then set `WG_ENABLED=true` in `.env` and `docker compose up -d --build`. Registered users mint up to 5 device configs on Account (QR + zip bundle). Split tunnel only — not a general internet exit. Recreate any old `10.10.10.x` peer from the website (`10.8.0.0/24`). Do not start `wg-quick@wg0` again.
+
 ## Environment
 
 See `.env.example` for the full list. Important variables:
@@ -158,8 +174,12 @@ See `.env.example` for the full list. Important variables:
 | `WEBREG_PORT` | Host port published by compose (default 3080) |
 | `DEMO_MODE` | Skip MySQL/SOAP; fake status |
 | `LISTEN_ADDR` | Bind address (`:3080`) |
+| `SITE_URL` | Website origin (Cloudflare): mail links and passkeys. RP ID is this hostname. Not the realm host. |
+| `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGINS` | Optional passkey overrides; default from `SITE_URL`. RP ID must match the `SITE_URL` host — do not use `PUBLIC_HOST`. |
+| `WG_ENABLED` | Show Account VPN panel; requires the compose `wireguard` service |
+| `WG_ENDPOINT` / `WG_PORT` / `WG_PEER_MAX` | Default client endpoint (admins can override on the Admin panel), listen port, 5 configs per user |
 | `REALM_NAME` / `SITE_BLURB` / `CORE_NAME` | Home page |
-| `PUBLIC_HOST` | `realmlist.wtf` hostname |
+| `PUBLIC_HOST` | Realmlist / VPN game hostname. Separate from `SITE_URL`. |
 | `PUBLIC_AUTH_PORT` | Usually 3724 |
 | `PUBLIC_WORLD_PORT` | Public world port (**28085** on this host, not 8085) |
 | `MYSQL_*` / `AUTH_DB` / `CHARACTERS_DB` / `WORLD_DB` | AC databases |
@@ -168,9 +188,12 @@ See `.env.example` for the full list. Important variables:
 | `ACCOUNT_CREATE_MODE` | `auto` / `soap` / `sql` |
 | `BOT_USERNAME_PREFIXES` | Comma list, default `rndbot` |
 | `HIDE_GM` | Hide GM characters from leaderboards (default `false`) |
-| `GM_MIN_LEVEL` | Minimum `account_access.gmlevel` for the Admin panel at `/staff` (default 1) |
+| `GM_MIN_LEVEL` | Minimum gmlevel for the Admin panel at `/staff` (default 3) |
+| `GM_MOD_LEVEL` | Minimum gmlevel for `/staff/tickets` (default 1, must be ≤ `GM_MIN_LEVEL`) |
+| `TICKET_WEBHOOK_URL` | Optional Discord webhook for new tickets |
 | `STATUS_CACHE_SECONDS` | 15–30 recommended |
 | `CAPTCHA_PROVIDER` | `none` / `turnstile` / `hcaptcha` |
+| `REGISTER_KEY` | Optional invite key for public registration (admins can override on the Admin panel) |
 | `SMTP_*` | Enables contact form + 15‑minute single-use password reset |
 | `DISCORD_URL` / `CONTACT_EMAIL` | Shown when SMTP is unset |
 | `TRUST_PROXY` | Honour `X-Forwarded-For` only behind a known proxy |
@@ -187,11 +210,11 @@ Never commit `.env`. SOAP passwords and MySQL passwords stay server-side.
 - Parameterized SQL only. Database names from env are restricted to `[A-Za-z0-9_]`.
 - Passwords are never logged. SOAP faults are mapped to generic client errors.
 - Helmet-style headers, 64 KiB form limit, CSRF, httpOnly session cookie (`Secure`, `SameSite=Lax`).
-- Session ID: 32 random bytes, server-side memory store (v1). **TODO:** Redis-backed sessions for multi-replica.
+- Session ID: 32 random bytes, stored in Gatehouse SQLite (`http_sessions` in `data/kb.sqlite`) so a container restart does not log everyone out. Redis is only needed for multiple replicas.
 - Rate limits on register, login, contact, reset.
 - Captcha on register when configured. **Production should not use `CAPTCHA_PROVIDER=none`.**
 - **TODO:** vote-for-points (not in v1).
-- **TODO:** TOTP 2FA for website login (AzerothCore `totp_secret` is a different system; do not fake it).
+- Website login supports TOTP and passkeys. Neither applies to the 3.3.5a client. Passkeys follow `SITE_URL` (the website), not `PUBLIC_HOST` (the realm).
 - Email uniqueness is enforced with a `SELECT` then `INSERT`. AzerothCore has no unique index on `account.email`. Do not treat that as a security boundary.
 
 Versioning is SemVer. This tree is **0.x alpha** (`v0.1.0-alpha.1`) until it has had in-depth security testing. Pre-releases are GitHub prereleases; `latest` on GHCR tracks `main`, not alphas.

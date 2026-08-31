@@ -28,6 +28,30 @@ type UnstuckResult struct {
 	Via      string
 }
 
+func (c *Cache) UnstuckAny(ctx context.Context, accountIDs []uint32, guid uint32) (UnstuckResult, error) {
+	if c.cfg.DemoMode || c.db == nil {
+		return demoUnstuck(guid)
+	}
+	if guid == 0 || len(accountIDs) == 0 {
+		return UnstuckResult{}, ErrCharNotFound
+	}
+	var last error
+	for _, id := range accountIDs {
+		res, err := c.Unstuck(ctx, id, guid)
+		if err == nil {
+			return res, nil
+		}
+		last = err
+		if !errors.Is(err, ErrCharNotFound) {
+			return UnstuckResult{}, err
+		}
+	}
+	if last != nil {
+		return UnstuckResult{}, last
+	}
+	return UnstuckResult{}, ErrCharNotFound
+}
+
 func (c *Cache) Unstuck(ctx context.Context, accountID, guid uint32) (UnstuckResult, error) {
 	if c.cfg.DemoMode || c.db == nil {
 		return demoUnstuck(guid)

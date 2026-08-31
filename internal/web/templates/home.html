@@ -2,14 +2,26 @@
 {{$s := .Data}}
 <div class="home">
   <section class="home-hero">
-    <p class="home-kicker">
-      <span class="live{{if $s.RealmUp}} is-up{{end}}" aria-hidden="true"></span>
-      {{if $s.RealmUp}}Online{{else}}Offline{{end}}
-      <span class="dot">·</span>
-      WotLK 3.3.5a
-      <span class="dot">·</span>
-      Build 12340
-    </p>
+    <div class="home-kickers">
+      <p class="home-kicker">
+        <span class="live{{if $s.RealmUp}} is-up{{end}}" aria-hidden="true"></span>
+        {{if $s.RealmUp}}Online{{else}}Offline{{end}}
+        <span class="dot">·</span>
+        WotLK 3.3.5a
+        <span class="dot">·</span>
+        Build 12340
+      </p>
+      {{if $s.WGEnabled}}
+      <p class="home-kicker">
+        <span class="live{{if $s.WGUp}} is-up{{end}}" aria-hidden="true"></span>
+        {{if $s.WGUp}}Online{{else}}Offline{{end}}
+        <span class="dot">·</span>
+        WireGuard Server
+        <span class="dot">·</span>
+        UDP {{$s.WGPort}}
+      </p>
+      {{end}}
+    </div>
     <h1>{{.RealmName}}</h1>
     <p class="lede">{{$s.Blurb}}</p>
     {{if .User}}
@@ -34,6 +46,31 @@
       <span class="metric-sub">Included in players</span>
     </div>
   </section>
+
+  {{if $s.Calendar}}
+  <section class="panel home-calendar">
+    <h2>Realm calendar</h2>
+    <ul>
+      {{range $s.Calendar}}
+      <li>
+        <time datetime="{{.Date}}">{{.DisplayDate}}</time>
+        <div>
+          <strong>{{.Title}}</strong>
+          {{if .Detail}}<span>{{.Detail}}</span>{{end}}
+        </div>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+
+  {{if $s.LatestKB}}
+  <section class="panel home-kb">
+    <p class="eyebrow">{{$s.LatestKB.Category}}</p>
+    <h2><a href="/kb/{{$s.LatestKB.Slug}}">{{$s.LatestKB.Title}}</a></h2>
+    {{if $s.LatestKB.Summary}}<p class="lede">{{$s.LatestKB.Summary}}</p>{{end}}
+  </section>
+  {{end}}
 
   {{if $s.Modules}}
   <section class="home-mods">

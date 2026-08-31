@@ -37,6 +37,7 @@ type Snapshot struct {
 	Kills        []BoardRow
 	Honor        []BoardRow
 	Arena        []BoardRow
+	Gold         []BoardRow
 	WorldVersion string
 	Modules      []acmod.Module
 }
@@ -74,6 +75,8 @@ type Cache struct {
 func New(cfg config.Config, database *db.DB, soapc *soap.Client) *Cache {
 	return &Cache{cfg: cfg, db: database, soap: soapc}
 }
+
+func (c *Cache) Database() *db.DB { return c.db }
 
 func (c *Cache) Get(ctx context.Context) Snapshot {
 	c.mu.Lock()
@@ -123,6 +126,7 @@ func (c *Cache) refresh(ctx context.Context) Snapshot {
 	s.Kills = c.board(ctx, "c.`totalKills`", uintFmt)
 	s.Honor = c.board(ctx, "c.`totalHonorPoints`", uintFmt)
 	s.Arena = c.board(ctx, "c.`arenaPoints`", uintFmt)
+	s.Gold = c.board(ctx, "c.`money`", goldFmt)
 	s.Modules = c.listModules(ctx)
 	return s
 }
@@ -159,6 +163,11 @@ func (c *Cache) modulesFromDB(ctx context.Context) []acmod.Module {
 
 func playtimeFmt(v uint32) string { return wow.Playtime(v) }
 func uintFmt(v uint32) string     { return fmt.Sprintf("%d", v) }
+func goldFmt(v uint32) string     { return wow.Gold(v) }
+
+// Character names omitted from boards (AH bots and similar). Account bots
+// are already filtered via BOT_USERNAME_PREFIXES (rndbot*).
+var boardSkipNames = []string{"AUCTIONEER"}
 
 func (c *Cache) probeWorld(ctx context.Context) bool {
 	if c.soap != nil && c.cfg.SOAPConfigured() {
@@ -330,6 +339,10 @@ func (c *Cache) filters(onlineOnly, hideGM bool) (string, []any) {
 		b.WriteString(" AND a.`username` NOT LIKE ?")
 		args = append(args, p+"%")
 	}
+	for _, n := range boardSkipNames {
+		b.WriteString(" AND UPPER(c.`name`) <> ?")
+		args = append(args, n)
+	}
 	if hideGM {
 		b.WriteString(" AND NOT EXISTS (SELECT 1 FROM " + c.db.QAuth("account_access") + " aa WHERE aa.`id` = a.`id` AND aa.`gmlevel` > 0)")
 		b.WriteString(" AND (c.`extra_flags` & 1) = 0")
@@ -385,6 +398,11 @@ func demoSnapshot(base Snapshot) Snapshot {
 		mk("Sunreaver", 80, "Mage", 1850, "1850"),
 		mk("Anchorite", 71, "Priest", 1600, "1600"),
 		mk("NorthrendScout", 77, "Hunter", 1420, "1420"),
+	})
+	base.Gold = rankRows([]BoardRow{
+		mk("Frostwarden", 80, "Paladin", 12_345_678, wow.Gold(12_345_678)),
+		mk("Icemourn", 80, "Death Knight", 8_800_000, wow.Gold(8_800_000)),
+		mk("Sunreaver", 80, "Mage", 250_000, wow.Gold(250_000)),
 	})
 	base.Modules = []acmod.Module{
 		{ID: "mod-playerbots", Title: "Playerbots", Blurb: "Random and player-controlled AI companions."},

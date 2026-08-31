@@ -1,0 +1,45 @@
+{{template "header" .}}
+{{$d := .Data}}
+<section class="panel">
+  <div class="kb-index-head">
+    <div>
+      <p class="eyebrow">Admin</p>
+      <h1>Tickets</h1>
+      <p class="lede">Open and in-progress player tickets. Reply and set status here.</p>
+    </div>
+    <p class="kb-index-actions">
+      <a class="btn" href="/staff">Admin panel</a>
+    </p>
+  </div>
+  {{if $d.Tickets}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Ref</th>
+          <th>Player</th>
+          <th>Title</th>
+          <th>Category</th>
+          <th>Status</th>
+          <th>Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $d.Tickets}}
+        <tr>
+          <td class="name"><a href="/staff/tickets/{{.ID}}">{{.PublicRef}}</a></td>
+          <td>{{.Username}}</td>
+          <td>{{.Title}}</td>
+          <td>{{.Category}}</td>
+          <td>{{.StatusLabel}}</td>
+          <td>{{.UpdatedAt.Format "2006-01-02 15:04"}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">No open tickets.</p>
+  {{end}}
+</section>
+{{template "footer" .}}

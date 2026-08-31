@@ -1,0 +1,220 @@
+{{template "header" .}}
+{{$d := .Data}}
+{{$p := $d.Profile}}
+<section class="panel armory-char">
+  <p class="eyebrow">{{$p.Faction}} · {{$p.Race}} {{$p.Class}}</p>
+  <h1>{{$p.Name}}</h1>
+  <p class="lede">Level {{$p.Level}}{{if $p.Guild}} · <a href="/armory/guild/{{pathEscape $p.Guild}}">{{$p.Guild}}</a>{{end}} · {{if $p.Online}}Online{{else}}{{$p.Logout}}{{end}}</p>
+  <nav class="tabs">
+    <a href="/armory/{{$p.Name}}?tab=sheet" {{if eq $d.Tab "sheet"}}class="is-active"{{end}}>Sheet</a>
+    <a href="/armory/{{$p.Name}}?tab=gear" {{if eq $d.Tab "gear"}}class="is-active"{{end}}>Gear</a>
+    <a href="/armory/{{$p.Name}}?tab=talents" {{if eq $d.Tab "talents"}}class="is-active"{{end}}>Talents</a>
+    <a href="/armory/{{$p.Name}}?tab=professions" {{if eq $d.Tab "professions"}}class="is-active"{{end}}>Professions</a>
+    <a href="/armory/{{$p.Name}}?tab=reputations" {{if eq $d.Tab "reputations"}}class="is-active"{{end}}>Reputations</a>
+    <a href="/armory/{{$p.Name}}?tab=achievements" {{if eq $d.Tab "achievements"}}class="is-active"{{end}}>Achievements</a>
+    <a href="/armory/{{$p.Name}}?tab=pvp" {{if eq $d.Tab "pvp"}}class="is-active"{{end}}>PvP</a>
+    {{if $p.Guild}}<a href="/armory/{{$p.Name}}?tab=guild" {{if eq $d.Tab "guild"}}class="is-active"{{end}}>Guild</a>{{end}}
+  </nav>
+
+  {{if eq $d.Tab "sheet"}}
+  <div class="armory-sheet">
+  <div class="armory-model" id="armory-model" data-model="{{$p.ModelJSON}}">
+    <p class="muted armory-model-fallback">Loading 3D model…</p>
+  </div>
+  <div>
+  <dl class="kv">
+    <dt>Level</dt><dd>{{$p.Level}}</dd>
+    <dt>Race</dt><dd>{{$p.Race}}</dd>
+    <dt>Class</dt><dd class="class-{{classSlug $p.ClassID}}">{{$p.Class}}</dd>
+    <dt>Gender</dt><dd>{{$p.Gender}}</dd>
+    <dt>Faction</dt><dd class="faction-{{$p.Faction}}">{{$p.Faction}}</dd>
+    <dt>Guild</dt><dd>{{if $p.Guild}}<a href="/armory/guild/{{pathEscape $p.Guild}}">{{$p.Guild}}</a>{{else}}—{{end}}</dd>
+    <dt>Location</dt><dd>{{$p.Location}}</dd>
+    <dt>Played</dt><dd>{{$p.Played}}</dd>
+    <dt>Gold</dt><dd class="money">{{$p.Gold}}</dd>
+    <dt>Status</dt><dd>{{if $p.Online}}Online{{else}}{{$p.Logout}}{{end}}</dd>
+    <dt>Honor</dt><dd>{{$p.Honor}}</dd>
+    <dt>Arena points</dt><dd>{{$p.ArenaPoints}}</dd>
+    <dt>Honorable kills</dt><dd>{{$p.HonorableKills}}</dd>
+  </dl>
+  <p class="hint">3D models from Wowhead. Unstuck is on the Account page for characters you own.</p>
+  </div>
+  </div>
+  {{end}}
+
+  {{if eq $d.Tab "gear"}}
+  <p class="hint">Equipped slots only. Bags and bank are not shown. Item names come from the world database.</p>
+  <ul class="armory-gear">
+    {{range $p.Gear}}
+    <li>
+      <span class="armory-slot">{{.SlotName}}</span>
+      {{if .Empty}}
+      <span class="muted">Empty</span>
+      {{else}}
+      <a class="{{.QualityClass}}" href="{{.Wowhead}}" rel="noopener noreferrer">{{.Name}}</a>
+      {{end}}
+    </li>
+    {{end}}
+  </ul>
+  {{end}}
+
+  {{if eq $d.Tab "talents"}}
+  {{if $p.Specs}}
+  <div class="armory-specs">
+    {{range $p.Specs}}
+    <section class="armory-spec">
+      <h2>{{.Label}}{{if .Active}} <span class="badge badge-gold">Active</span>{{end}}</h2>
+      {{if .Talents}}
+      <ul class="armory-talents">
+        {{range .Talents}}<li>{{if .Wowhead}}<a href="{{.Wowhead}}" rel="noopener noreferrer">{{.Name}}</a>{{else}}{{.Name}}{{end}}</li>{{end}}
+      </ul>
+      {{else}}
+      <p class="empty">No talents recorded.</p>
+      {{end}}
+      <h3>Glyphs</h3>
+      {{if .Glyphs}}
+      <ul class="armory-glyphs">
+        {{range .Glyphs}}
+        <li>{{if .Major}}Major{{else}}Minor{{end}}: {{.Name}}</li>
+        {{end}}
+      </ul>
+      {{else}}
+      <p class="empty">No glyphs recorded.</p>
+      {{end}}
+    </section>
+    {{end}}
+  </div>
+  {{else}}
+  <p class="empty">No talent data.</p>
+  {{end}}
+  {{end}}
+
+  {{if eq $d.Tab "professions"}}
+  {{if $p.Professions}}
+  <div class="armory-skills">
+    <section>
+      <h2>Primary</h2>
+      <ul>
+        {{range $p.Professions}}{{if not .Secondary}}
+        <li><span>{{.Name}}</span> <span>{{.Value}} / {{.Max}}</span></li>
+        {{end}}{{end}}
+      </ul>
+    </section>
+    <section>
+      <h2>Secondary</h2>
+      <ul>
+        {{range $p.Professions}}{{if .Secondary}}
+        <li><span>{{.Name}}</span> <span>{{.Value}} / {{.Max}}</span></li>
+        {{end}}{{end}}
+      </ul>
+    </section>
+  </div>
+  {{else}}
+  <p class="empty">No professions trained.</p>
+  {{end}}
+  {{end}}
+
+  {{if eq $d.Tab "reputations"}}
+  {{if $p.Reputations}}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Faction</th><th>Standing</th><th></th></tr></thead>
+      <tbody>
+        {{range $p.Reputations}}
+        <tr>
+          <td class="name">{{.Name}}</td>
+          <td>{{.Rank}}</td>
+          <td class="muted">{{.Group}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">No reputations recorded.</p>
+  {{end}}
+  {{end}}
+
+  {{if eq $d.Tab "achievements"}}
+  {{if $p.Achievements}}
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Achievement</th><th>Date</th></tr></thead>
+      <tbody>
+        {{range $p.Achievements}}
+        <tr>
+          <td>{{.Name}}</td>
+          <td>{{.Date}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">No achievements recorded.</p>
+  {{end}}
+  {{end}}
+
+  {{if eq $d.Tab "pvp"}}
+  <dl class="kv">
+    <dt>Honor</dt><dd>{{$p.Honor}}</dd>
+    <dt>Arena points</dt><dd>{{$p.ArenaPoints}}</dd>
+    <dt>Honorable kills</dt><dd>{{$p.HonorableKills}}</dd>
+  </dl>
+  {{if $p.Arena}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Bracket</th><th>Team</th><th>Rating</th><th>Season</th><th>Personal</th></tr>
+      </thead>
+      <tbody>
+        {{range $p.Arena}}
+        <tr>
+          <td>{{.Bracket}}</td>
+          <td class="name">{{.Name}}</td>
+          <td>{{.Rating}}</td>
+          <td>{{.SeasonWins}} / {{.SeasonGames}}</td>
+          <td>{{.PersonalRating}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">No arena teams.</p>
+  {{end}}
+  {{end}}
+
+  {{if eq $d.Tab "guild"}}
+  {{if $p.Guild}}
+  <h2><a href="/armory/guild/{{pathEscape $p.Guild}}">{{$p.Guild}}</a></h2>
+  {{if $p.GuildMOTD}}<p class="lede">{{$p.GuildMOTD}}</p>{{end}}
+  <p class="hint"><a href="/armory/guild/{{pathEscape $p.Guild}}">Open guild page</a></p>
+  {{if $p.GuildRoster}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Level</th><th>Class</th><th>Rank</th><th></th></tr>
+      </thead>
+      <tbody>
+        {{range $p.GuildRoster}}
+        <tr>
+          <td class="name"><a href="/armory/{{.Name}}">{{.Name}}</a>{{if .Online}} <span class="char-online">Online</span>{{end}}</td>
+          <td>{{.Level}}</td>
+          <td class="class-{{classSlug .ClassID}}">{{.Class}}</td>
+          <td>{{if .Rank}}{{.Rank}}{{else}}—{{end}}</td>
+          <td></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">No members listed.</p>
+  {{end}}
+  {{else}}
+  <p class="empty">Not in a guild.</p>
+  {{end}}
+  {{end}}
+</section>
+{{template "footer" .}}

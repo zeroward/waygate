@@ -1,0 +1,151 @@
+package identity
+
+import (
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"net/url"
+	"strings"
+
+	"github.com/pquerna/otp/totp"
+	qrcode "github.com/skip2/go-qrcode"
+)
+
+type TOTPStatus struct {
+	Enabled bool
+	Secret  string // only during enroll
+	URL     string
+}
+
+func (s *Store) TOTPStatus(ctx context.Context, userID uint32) (enabled bool, err error) {
+	var en int
+	err = s.db.QueryRowContext(ctx, `SELECT enabled FROM user_totp WHERE user_id = ?`, userID).Scan(&en)
+	if err != nil {
+		return false, nil
+	}
+	return en != 0, nil
+}
+
+func (s *Store) StartTOTP(ctx context.Context, userID uint32, username, issuer string) (secret, url string, err error) {
+	if on, _ := s.TOTPStatus(ctx, userID); on {
+		return "", "", ErrTOTPEnabled
+	}
+	key, err := totp.Generate(totp.GenerateOpts{
+		Issuer:      issuer,
+		AccountName: username,
+	})
+	if err != nil {
+		return "", "", err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO user_totp (user_id, secret, enabled, confirmed_at, recovery_hashes) VALUES (?, ?, 0, '', '[]')
+		ON CONFLICT(user_id) DO UPDATE SET secret = excluded.secret, enabled = 0, confirmed_at = '', recovery_hashes = '[]'`,
+		userID, key.Secret())
+	if err != nil {
+		return "", "", err
+	}
+	return key.Secret(), key.URL(), nil
+}
+
+func (s *Store) PendingTOTP(ctx context.Context, userID uint32, username, issuer string) (secret, otpURL string, err error) {
+	var en int
+	err = s.db.QueryRowContext(ctx, `SELECT secret, enabled FROM user_totp WHERE user_id = ?`, userID).Scan(&secret, &en)
+	if err != nil || en != 0 || secret == "" {
+		return "", "", nil
+	}
+	return secret, totpAuthURL(issuer, username, secret), nil
+}
+
+func totpAuthURL(issuer, username, secret string) string {
+	iss := url.QueryEscape(issuer)
+	return "otpauth://totp/" + url.PathEscape(issuer) + ":" + url.PathEscape(username) + "?secret=" + secret + "&issuer=" + iss
+}
+
+// QRDataURI returns a PNG data URI for an otpauth URL (CSP allows img-src data:).
+func QRDataURI(otpauth string) (string, error) {
+	if otpauth == "" {
+		return "", fmt.Errorf("empty otpauth url")
+	}
+	png, err := qrcode.Encode(otpauth, qrcode.Medium, 256)
+	if err != nil {
+		return "", err
+	}
+	return "data:image/png;base64," + base64.StdEncoding.EncodeToString(png), nil
+}
+
+func (s *Store) ConfirmTOTP(ctx context.Context, userID uint32, code string) ([]string, error) {
+	var secret string
+	var enabled int
+	err := s.db.QueryRowContext(ctx, `SELECT secret, enabled FROM user_totp WHERE user_id = ?`, userID).Scan(&secret, &enabled)
+	if err != nil {
+		return nil, fmt.Errorf("authenticator is not set up")
+	}
+	if !totp.Validate(strings.TrimSpace(code), secret) {
+		return nil, fmt.Errorf("invalid authenticator code")
+	}
+	codes, hashes := newRecoveryCodes()
+	hjson, _ := json.Marshal(hashes)
+	_, err = s.db.ExecContext(ctx, `UPDATE user_totp SET enabled = 1, confirmed_at = datetime('now'), recovery_hashes = ? WHERE user_id = ?`, string(hjson), userID)
+	return codes, err
+}
+
+func (s *Store) ValidateTOTP(ctx context.Context, userID uint32, code string) error {
+	var secret string
+	var enabled int
+	var recJSON string
+	err := s.db.QueryRowContext(ctx, `SELECT secret, enabled, recovery_hashes FROM user_totp WHERE user_id = ?`, userID).Scan(&secret, &enabled, &recJSON)
+	if err != nil || enabled == 0 {
+		return fmt.Errorf("authenticator is not enabled")
+	}
+	code = strings.TrimSpace(code)
+	if totp.Validate(code, secret) {
+		return nil
+	}
+	var hashes []string
+	_ = json.Unmarshal([]byte(recJSON), &hashes)
+	sum := sha256.Sum256([]byte(strings.ToUpper(code)))
+	want := hex.EncodeToString(sum[:])
+	wantb := []byte(want)
+	matched := -1
+	for i, h := range hashes {
+		hb := []byte(h)
+		if len(hb) == len(wantb) && subtle.ConstantTimeCompare(hb, wantb) == 1 {
+			matched = i
+		}
+	}
+	if matched < 0 {
+		return fmt.Errorf("invalid authenticator code")
+	}
+	hashes = append(hashes[:matched], hashes[matched+1:]...)
+	b, _ := json.Marshal(hashes)
+	_, _ = s.db.ExecContext(ctx, `UPDATE user_totp SET recovery_hashes = ? WHERE user_id = ?`, string(b), userID)
+	return nil
+}
+
+func (s *Store) DisableTOTP(ctx context.Context, userID uint32) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM user_totp WHERE user_id = ?`, userID)
+	return err
+}
+
+func newRecoveryCodes() (plain, hashes []string) {
+	plain = make([]string, 8)
+	hashes = make([]string, 8)
+	for i := 0; i < 8; i++ {
+		b := make([]byte, 10)
+		_, _ = rand.Read(b)
+		p := strings.ToUpper(hex.EncodeToString(b))
+		plain[i] = p
+		sum := sha256.Sum256([]byte(p))
+		hashes[i] = hex.EncodeToString(sum[:])
+	}
+	return plain, hashes
+}
+
+func (s *Service) TOTPEnabled(ctx context.Context, userID uint32) bool {
+	on, _ := s.store.TOTPStatus(ctx, userID)
+	return on
+}

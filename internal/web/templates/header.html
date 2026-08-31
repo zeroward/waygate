@@ -7,7 +7,7 @@
   <title>{{if .Title}}{{.Title}} — {{end}}{{.RealmName}}</title>
   <meta name="description" content="{{.RealmName}} — {{.CoreName}} account registration and realm status.">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/app.css?v=17">
+  <link rel="stylesheet" href="/static/css/app.css?v=32">
   {{if eq .CaptchaProv "turnstile"}}
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   {{end}}
@@ -15,19 +15,30 @@
   <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
   {{end}}
   {{if eq .Active "staff"}}
-  <script src="/static/js/staff.js?v=9" defer></script>
+  <script src="/static/js/staff.js?v=10" defer></script>
   {{end}}
   {{if eq .Active "kb"}}
   <script src="/static/js/kb.js?v=2" defer></script>
   {{end}}
   {{if eq .Active "account"}}
-  <script src="/static/js/account.js?v=1" defer></script>
+  <script src="/static/js/account.js?v=3" defer></script>
+  <script src="/static/js/passkey.js?v=1" defer></script>
+  {{end}}
+  {{if eq .Active "companion"}}
+  <script src="/static/js/companion.js?v=2" defer></script>
+  {{end}}
+  {{if eq .Active "armory"}}
+  <script src="/static/js/jquery-3.5.1.min.js" defer></script>
+  <script src="/static/js/armory-model.js?v=3" defer></script>
   {{end}}
 </head>
 <body class="page-{{.Active}}">
   <div class="frost" aria-hidden="true"></div>
   {{if .Demo}}
   <div class="demo-banner">Demo mode — no AzerothCore databases. Status and accounts are simulated.</div>
+  {{end}}
+  {{if .Banner}}
+  <div class="maint-banner">{{.Banner}}</div>
   {{end}}
   <header class="mast">
     <div class="mast-inner">
@@ -48,10 +59,17 @@
         <a href="/downloads" {{if eq .Active "downloads"}}class="is-active"{{end}}>Downloads</a>
         <a href="/online" {{if eq .Active "online"}}class="is-active"{{end}}>Online</a>
         <a href="/leaderboards" {{if eq .Active "leaderboards"}}class="is-active"{{end}}>Leaderboards</a>
+        <a href="/armory" {{if eq .Active "armory"}}class="is-active"{{end}}>Armory</a>
+        <a href="/companion" {{if eq .Active "companion"}}class="is-active"{{end}}><span class="nav-wide">Companion</span><span class="nav-narrow">Quests</span></a>
       </nav>
 
       <div class="nav-util">
-        {{if .Staff}}<a href="/staff" class="nav-util-link{{if eq .Active "staff"}} is-active{{end}}">Admin panel</a>{{end}}
+        {{if .Staff}}
+        <a href="/staff" class="nav-util-link{{if eq .Active "staff"}} is-active{{end}}">Admin panel</a>
+        {{end}}
+        {{if .Mod}}
+        <a href="/staff/tickets" class="nav-util-link">Tickets</a>
+        {{end}}
         <a href="/contact" class="nav-util-link{{if eq .Active "contact"}} is-active{{end}}">Contact</a>
         <div class="nav-account">
         {{if .User}}
@@ -63,6 +81,8 @@
           </summary>
           <div class="user-menu-panel">
             <a href="/account">Account</a>
+            <a href="/tickets">My tickets</a>
+            {{if .Mod}}<a href="/staff/tickets">Staff tickets</a>{{end}}
             <a href="/account#password">Change password</a>
             <form method="post" action="/account/logout">
               <input type="hidden" name="csrf_token" value="{{.CSRF}}">

@@ -160,6 +160,9 @@ func TestSanitizeFileName(t *testing.T) {
 	if _, err := SanitizeFileName(".hidden.zip"); err == nil {
 		t.Fatal("hidden")
 	}
+	if _, err := SanitizeFileName("Wow.exe"); err == nil {
+		t.Fatal("exe")
+	}
 }
 
 func TestAddAndRemove(t *testing.T) {

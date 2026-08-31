@@ -1,0 +1,44 @@
+{{template "header" .}}
+{{$d := .Data}}
+<section class="panel">
+  <div class="kb-index-head">
+    <div>
+      <p class="eyebrow">Support</p>
+      <h1>Tickets</h1>
+      <p class="lede">Ask staff about a name change, character, guild, or items. Replies stay on this site.</p>
+    </div>
+    <p class="kb-index-actions">
+      {{if .Staff}}<a class="btn" href="/staff/tickets">Staff queue</a>{{end}}
+      <a class="btn btn-gold" href="/tickets/new">New ticket</a>
+    </p>
+  </div>
+  {{if $d.Tickets}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Ref</th>
+          <th>Title</th>
+          <th>Category</th>
+          <th>Status</th>
+          <th>Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $d.Tickets}}
+        <tr>
+          <td class="name"><a href="/tickets/{{.ID}}">{{.PublicRef}}</a></td>
+          <td>{{.Title}}</td>
+          <td>{{.Category}}</td>
+          <td>{{.StatusLabel}}</td>
+          <td>{{.UpdatedAt.Format "2006-01-02 15:04"}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">No tickets yet.</p>
+  {{end}}
+</section>
+{{template "footer" .}}

@@ -51,6 +51,7 @@ type Config struct {
 	BotPrefixes        []string
 	HideGM             bool
 	GMMinLevel         uint8
+	GMModLevel         uint8
 	StatusCache        time.Duration
 	LeaderboardSize    int
 	RequireUniqueEmail bool
@@ -62,22 +63,41 @@ type Config struct {
 	HCaptchaSiteKey  string
 	HCaptchaSecret   string
 
-	SMTPHost     string
-	SMTPPort     int
-	SMTPUser     string
-	SMTPPassword string
-	SMTPFrom     string
-	SMTPTLS      bool
-	ContactEmail string
-	DiscordURL   string
+	SMTPHost         string
+	SMTPPort         int
+	SMTPUser         string
+	SMTPPassword     string
+	SMTPFrom         string
+	SMTPTLS          bool
+	ContactEmail     string
+	DiscordURL       string
+	TicketWebhookURL string
 
-	RateWindow   time.Duration
-	RateRegister int
-	RateLogin    int
-	RateContact  int
-	RateReset    int
-	RateKB       int
-	RateUnstuck  int
+	RateWindow    time.Duration
+	RateRegister  int
+	RateLogin     int
+	RateContact   int
+	RateReset     int
+	RateKB        int
+	RateUnstuck   int
+	RateTickets   int
+	RateDownloads int
+
+	WowCredentialsMax int
+	WebAuthnRPID      string
+	WebAuthnOrigins   []string
+
+	WGEnabled     bool
+	WGDir         string
+	WGEndpoint    string
+	WGPort        int
+	WGPeerMax     int
+	WGExtraNets   []string
+	WGInterface   string
+	WGServerAddr  string
+	WGAgentListen string
+
+	RegisterKey string
 
 	HowToConnectFile string
 	KBPath           string
@@ -93,13 +113,16 @@ type Config struct {
 func Load() (Config, error) {
 	_ = LoadDotEnv(".env")
 
+	siteURL := strings.TrimRight(env("SITE_URL", "http://127.0.0.1:3080"), "/")
+	secureDefault := strings.HasPrefix(strings.ToLower(siteURL), "https://")
+
 	c := Config{
 		ListenAddr:         env("LISTEN_ADDR", ":3080"),
 		DemoMode:           envBool("DEMO_MODE", false),
 		LogLevel:           strings.ToLower(env("LOG_LEVEL", "info")),
 		TrustProxy:         envBool("TRUST_PROXY", false),
-		SiteURL:            strings.TrimRight(env("SITE_URL", "http://127.0.0.1:3080"), "/"),
-		SessionSecure:      envBool("SESSION_SECURE_COOKIE", false),
+		SiteURL:            siteURL,
+		SessionSecure:      envBool("SESSION_SECURE_COOKIE", secureDefault),
 		SessionTTL:         time.Duration(envInt("SESSION_TTL_HOURS", 24)) * time.Hour,
 		CoreName:           env("CORE_NAME", "AzerothCore WotLK 3.3.5a"),
 		RealmName:          env("REALM_NAME", "Icecrown"),
@@ -128,7 +151,8 @@ func Load() (Config, error) {
 		SOAPTimeout:        time.Duration(envInt("SOAP_TIMEOUT_SECONDS", 8)) * time.Second,
 		AccountMode:        strings.ToLower(env("ACCOUNT_CREATE_MODE", "auto")),
 		HideGM:             envBool("HIDE_GM", false),
-		GMMinLevel:         uint8(envInt("GM_MIN_LEVEL", 1)),
+		GMMinLevel:         uint8(envInt("GM_MIN_LEVEL", 3)),
+		GMModLevel:         uint8(envInt("GM_MOD_LEVEL", 1)),
 		StatusCache:        time.Duration(envInt("STATUS_CACHE_SECONDS", 20)) * time.Second,
 		LeaderboardSize:    envInt("LEADERBOARD_SIZE", 20),
 		RequireUniqueEmail: envBool("REQUIRE_UNIQUE_EMAIL", true),
@@ -146,6 +170,7 @@ func Load() (Config, error) {
 		SMTPTLS:            envBool("SMTP_TLS", true),
 		ContactEmail:       env("CONTACT_EMAIL", ""),
 		DiscordURL:         env("DISCORD_URL", ""),
+		TicketWebhookURL:   strings.TrimSpace(env("TICKET_WEBHOOK_URL", "")),
 		RateWindow:         time.Duration(envInt("RATE_LIMIT_WINDOW_MINUTES", 15)) * time.Minute,
 		RateRegister:       envInt("RATE_LIMIT_REGISTER", 5),
 		RateLogin:          envInt("RATE_LIMIT_LOGIN", 10),
@@ -153,6 +178,19 @@ func Load() (Config, error) {
 		RateReset:          envInt("RATE_LIMIT_RESET", 3),
 		RateKB:             envInt("RATE_LIMIT_KB", 20),
 		RateUnstuck:        envInt("RATE_LIMIT_UNSTUCK", 5),
+		RateTickets:        envInt("RATE_LIMIT_TICKETS", 5),
+		RateDownloads:      envInt("RATE_LIMIT_DOWNLOADS", 8),
+		WowCredentialsMax:  envInt("WOW_CREDENTIALS_MAX", 5),
+		WebAuthnRPID:       strings.TrimSpace(env("WEBAUTHN_RP_ID", "")),
+		WGEnabled:          envBool("WG_ENABLED", false),
+		WGDir:              env("WG_DIR", "data/wg"),
+		WGEndpoint:         strings.TrimSpace(env("WG_ENDPOINT", "")),
+		WGPort:             envInt("WG_PORT", 51820),
+		WGPeerMax:          envInt("WG_PEER_MAX", 5),
+		WGInterface:        env("WG_INTERFACE", "wg0"),
+		WGServerAddr:       env("WG_SERVER_ADDR", "10.8.0.1/24"),
+		WGAgentListen:      env("WG_AGENT_LISTEN", "127.0.0.1:9180"),
+		RegisterKey:        strings.TrimSpace(env("REGISTER_KEY", "")),
 		HowToConnectFile:   env("HOW_TO_CONNECT_FILE", "content/how-to-connect.md"),
 		KBPath:             env("KB_PATH", "data/kb.sqlite"),
 		DownloadsDir:       env("DOWNLOADS_DIR", "downloads"),
@@ -165,6 +203,22 @@ func Load() (Config, error) {
 	}
 
 	c.BotPrefixes = parsePrefixes(env("BOT_USERNAME_PREFIXES", "rndbot"))
+	if raw := env("WEBAUTHN_ORIGINS", ""); raw != "" {
+		for _, p := range strings.Split(raw, ",") {
+			p = strings.TrimSpace(strings.TrimRight(p, "/"))
+			if p != "" {
+				c.WebAuthnOrigins = append(c.WebAuthnOrigins, p)
+			}
+		}
+	}
+	if raw := env("WG_EXTRA_NETS", ""); raw != "" {
+		for _, p := range strings.Split(raw, ",") {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				c.WGExtraNets = append(c.WGExtraNets, p)
+			}
+		}
+	}
 
 	if err := c.validate(); err != nil {
 		return Config{}, err
@@ -202,10 +256,19 @@ func (c *Config) validate() error {
 		return fmt.Errorf("LEADERBOARD_SIZE must be 1–100")
 	}
 	if c.GMMinLevel == 0 {
-		c.GMMinLevel = 1
+		c.GMMinLevel = 3
 	}
 	if c.GMMinLevel > 4 {
 		return fmt.Errorf("GM_MIN_LEVEL must be 1–4")
+	}
+	if c.GMModLevel == 0 {
+		c.GMModLevel = 1
+	}
+	if c.GMModLevel > 4 {
+		return fmt.Errorf("GM_MOD_LEVEL must be 1–4")
+	}
+	if c.GMModLevel > c.GMMinLevel {
+		return fmt.Errorf("GM_MOD_LEVEL must be <= GM_MIN_LEVEL")
 	}
 	if c.RateKB < 1 {
 		c.RateKB = 20
@@ -213,7 +276,59 @@ func (c *Config) validate() error {
 	if c.RateUnstuck < 1 {
 		c.RateUnstuck = 5
 	}
+	if c.RateTickets < 1 {
+		c.RateTickets = 5
+	}
+	if c.RateDownloads < 1 {
+		c.RateDownloads = 8
+	}
+	if c.WowCredentialsMax < 1 {
+		c.WowCredentialsMax = 5
+	}
+	if c.WowCredentialsMax > 20 {
+		c.WowCredentialsMax = 20
+	}
+	if c.WGPort < 1 || c.WGPort > 65535 {
+		c.WGPort = 51820
+	}
+	if c.WGPeerMax < 1 {
+		c.WGPeerMax = 5
+	}
+	if c.WGPeerMax > 20 {
+		c.WGPeerMax = 20
+	}
+	if strings.TrimSpace(c.WGInterface) == "" {
+		c.WGInterface = "wg0"
+	}
+	if strings.TrimSpace(c.WGServerAddr) == "" {
+		c.WGServerAddr = "10.8.0.1/24"
+	}
+	if strings.TrimSpace(c.WGDir) == "" {
+		c.WGDir = "data/wg"
+	}
 	return nil
+}
+
+func (c Config) WGEndpointHost() string {
+	raw := strings.TrimSpace(c.WGEndpoint)
+	if raw == "" {
+		raw = strings.TrimSpace(c.PublicHost)
+	}
+	if raw == "" {
+		raw = "127.0.0.1"
+	}
+	if _, _, err := splitHostPort(raw); err == nil {
+		return raw
+	}
+	return fmt.Sprintf("%s:%d", raw, c.WGPort)
+}
+
+func splitHostPort(hostport string) (host, port string, err error) {
+	i := strings.LastIndex(hostport, ":")
+	if i < 0 || strings.Contains(hostport[i+1:], "]") {
+		return "", "", fmt.Errorf("no port")
+	}
+	return hostport[:i], hostport[i+1:], nil
 }
 
 func (c Config) SMTPConfigured() bool {

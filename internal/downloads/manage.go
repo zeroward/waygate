@@ -32,7 +32,7 @@ type UploadInput struct {
 }
 
 func AllowedExtHint() string {
-	return ".zip, .7z, .rar, .mpq, .patch, .exe"
+	return ".zip, .7z, .rar, .mpq, .patch"
 }
 
 func (s *Store) Writable() bool {

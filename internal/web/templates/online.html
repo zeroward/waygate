@@ -13,7 +13,7 @@
       <tbody>
         {{range $s.Players}}
         <tr>
-          <td class="name">{{.Name}}</td>
+          <td class="name"><a href="/armory/{{.Name}}">{{.Name}}</a></td>
           <td>{{.Level}}</td>
           <td>{{.Race}}</td>
           <td class="class-{{classSlug .ClassID}}">{{.Class}}</td>

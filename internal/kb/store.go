@@ -112,9 +112,31 @@ CREATE TABLE IF NOT EXISTS articles (
 );
 CREATE INDEX IF NOT EXISTS idx_articles_cat ON articles(category, sort_order, title);
 CREATE INDEX IF NOT EXISTS idx_articles_pub ON articles(published);
+CREATE TABLE IF NOT EXISTS staff_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL,
+  actor TEXT NOT NULL,
+  action TEXT NOT NULL,
+  target TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_staff_events_at ON staff_events(at DESC);
 `)
-	return err
+	if err != nil {
+		return err
+	}
+	if err := s.migrateTickets(); err != nil {
+		return err
+	}
+	if err := s.migrateSettings(); err != nil {
+		return err
+	}
+	if err := s.migrateEvents(); err != nil {
+		return err
+	}
+	return s.migratePending()
 }
+
+func (s *Store) SQL() *sql.DB { return s.db }
 
 const articleCols = `textid, slug, title, body_markdown, summary, category, sort_order, published, created_by, updated_by, created_at, updated_at`
 
@@ -172,6 +194,18 @@ ORDER BY category ASC, sort_order ASC, title ASC`, like, like, like, like)
 	}
 	defer rows.Close()
 	return scanAll(rows)
+}
+
+func (s *Store) LatestPublished(ctx context.Context) (*Article, error) {
+	row := s.db.QueryRowContext(ctx, `SELECT `+articleCols+` FROM articles WHERE published = 1 ORDER BY updated_at DESC, title ASC LIMIT 1`)
+	a, err := scanArticle(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &a, nil
 }
 
 func (s *Store) ListAll(ctx context.Context) ([]Article, error) {

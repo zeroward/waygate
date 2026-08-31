@@ -26,6 +26,9 @@ func TestDemoAccountCharacters(t *testing.T) {
 	if chars[0].Name == "" || chars[0].Gold == "" || chars[0].Location == "" {
 		t.Fatalf("incomplete: %+v", chars[0])
 	}
+	if chars[0].Login != "HEROONE" {
+		t.Fatalf("login %q", chars[0].Login)
+	}
 }
 
 func TestDemoUnstuck(t *testing.T) {
@@ -63,6 +66,14 @@ func TestDemoOnlineBreakdown(t *testing.T) {
 	if s.OnlineTotal != 33 {
 		t.Fatalf("total %d", s.OnlineTotal)
 	}
+	if len(s.Gold) < 1 || s.Gold[0].Name != "Frostwarden" || !strings.Contains(s.Gold[0].Value, "g") {
+		t.Fatalf("demo gold board %+v", s.Gold)
+	}
+	for _, row := range s.Gold {
+		if strings.HasPrefix(strings.ToUpper(row.Name), "RNDBOT") {
+			t.Fatalf("bot on gold board %s", row.Name)
+		}
+	}
 	if len(s.Modules) < 3 {
 		t.Fatalf("demo modules %d", len(s.Modules))
 	}
@@ -77,6 +88,9 @@ func TestFiltersHideGM(t *testing.T) {
 	hide, _ := c.filters(false, true)
 	if !strings.Contains(hide, "gmlevel") || !strings.Contains(hide, "extra_flags") {
 		t.Fatalf("HIDE_GM should omit GMs: %s", hide)
+	}
+	if !strings.Contains(show, "UPPER(c.`name`)") {
+		t.Fatalf("AH-bot denylist missing from board filter: %s", show)
 	}
 }
 

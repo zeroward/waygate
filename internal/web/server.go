@@ -6,22 +6,31 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
 	"github.com/zeroward/waygate/internal/account"
+	"github.com/zeroward/waygate/internal/armory"
 	"github.com/zeroward/waygate/internal/captcha"
+	"github.com/zeroward/waygate/internal/clamav"
+	"github.com/zeroward/waygate/internal/companion"
 	"github.com/zeroward/waygate/internal/config"
 	"github.com/zeroward/waygate/internal/downloads"
+	"github.com/zeroward/waygate/internal/identity"
 	"github.com/zeroward/waygate/internal/kb"
 	"github.com/zeroward/waygate/internal/mail"
 	"github.com/zeroward/waygate/internal/ratelimit"
 	"github.com/zeroward/waygate/internal/session"
 	"github.com/zeroward/waygate/internal/status"
+	"github.com/zeroward/waygate/internal/wg"
 	"github.com/zeroward/waygate/internal/wow"
+
+	"github.com/go-webauthn/webauthn/webauthn"
 )
 
 type Server struct {
@@ -39,8 +48,18 @@ type Server struct {
 	resetRL   *ratelimit.Limiter
 	kbRL      *ratelimit.Limiter
 	unstuckRL *ratelimit.Limiter
+	ticketRL  *ratelimit.Limiter
+	dlRL      *ratelimit.Limiter
 	kb        *kb.Store
+	id        *identity.Service
 	downloads *downloads.Store
+	armory    *armory.Service
+	companion *companion.Service
+	wa        *webauthn.WebAuthn
+	wgOK      bool
+	wgLiveMu  sync.Mutex
+	wgLive    bool
+	wgLiveAt  time.Time
 }
 
 func New(
@@ -63,7 +82,8 @@ func New(
 			}
 			return strings.ToUpper(string(r))
 		},
-		"rankName": account.RankName,
+		"rankName":   account.RankName,
+		"pathEscape": url.PathEscape,
 	}
 	tpl, err := template.New("").Funcs(funcs).ParseFS(embedded, "templates/*.html")
 	if err != nil {
@@ -77,15 +97,54 @@ func New(
 	if unstuckMax < 1 {
 		unstuckMax = 5
 	}
+	ticketMax := cfg.RateTickets
+	if ticketMax < 1 {
+		ticketMax = 5
+	}
+	dlMax := cfg.RateDownloads
+	if dlMax < 1 {
+		dlMax = 8
+	}
 	kbStore, err := kb.Open(cfg.KBPath)
 	if err != nil {
+		return nil, err
+	}
+	idStore, err := identity.NewStore(kbStore.SQL())
+	if err != nil {
+		_ = kbStore.Close()
+		return nil, err
+	}
+	idSvc := identity.New(idStore, accounts, cfg.WowCredentialsMax)
+	if !cfg.DemoMode {
+		if err := idSvc.MigrateFromAC(context.Background(), log); err != nil {
+			log.Error("identity migrate", "err", err)
+		}
+	}
+	wa, waErr := newWebAuthn(cfg)
+	if waErr != nil {
+		log.Error("webauthn disabled", "err", waErr)
+	} else if wa != nil {
+		log.Info("webauthn", "rp", wa.Config.RPID, "origins", wa.Config.RPOrigins, "realm", cfg.PublicHost)
+	}
+	wgOK := false
+	if cfg.WGEnabled {
+		if _, err := wg.EnsureServerKeys(cfg.WGDir); err != nil {
+			log.Error("wireguard keys", "err", err)
+		} else {
+			wgOK = true
+			log.Info("wireguard", "dir", cfg.WGDir, "endpoint", cfg.WGEndpointHost())
+		}
+	}
+	sessStore, err := session.NewStore(kbStore.SQL(), cfg.SessionTTL, cfg.SessionSecure)
+	if err != nil {
+		_ = kbStore.Close()
 		return nil, err
 	}
 	s := &Server{
 		cfg:       cfg,
 		log:       log,
 		tpl:       tpl,
-		sessions:  session.NewStore(cfg.SessionTTL, cfg.SessionSecure),
+		sessions:  sessStore,
 		accounts:  accounts,
 		status:    st,
 		captcha:   cap,
@@ -96,17 +155,24 @@ func New(
 		resetRL:   ratelimit.New(cfg.RateWindow, cfg.RateReset),
 		kbRL:      ratelimit.New(cfg.RateWindow, kbMax),
 		unstuckRL: ratelimit.New(cfg.RateWindow, unstuckMax),
+		ticketRL:  ratelimit.New(cfg.RateWindow, ticketMax),
+		dlRL:      ratelimit.New(cfg.RateWindow, dlMax),
 		kb:        kbStore,
+		id:        idSvc,
 		downloads: downloads.New(cfg.DownloadsDir, cfg.DownloadsCatalog),
+		armory:    armory.New(cfg, st.Database(), log),
+		companion: companion.New(cfg, st.Database(), log),
+		wa:        wa,
+		wgOK:      wgOK,
 	}
 	if err := s.seedHowToConnect(); err != nil {
 		_ = kbStore.Close()
 		return nil, err
 	}
 	s.downloads.SetScanMax(cfg.ClamAVScanMaxBytes())
-	// ClamAV is installed but scanning is off until the upload/scan path is finished.
 	if cfg.ClamAVAddr != "" {
-		s.log.Info("clamav scanning disabled", "addr", cfg.ClamAVAddr)
+		s.downloads.SetScanner(clamav.New(cfg.ClamAVAddr, cfg.ClamAVTimeout))
+		s.log.Info("clamav scanning enabled", "addr", cfg.ClamAVAddr)
 	}
 	return s, nil
 }
@@ -126,15 +192,52 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /downloads/{id}", s.downloadsFile)
 	mux.HandleFunc("GET /online", s.online)
 	mux.HandleFunc("GET /leaderboards", s.leaderboards)
+	mux.HandleFunc("GET /armory", s.armorySearch)
+	mux.HandleFunc("GET /armory/mv/{path...}", s.armoryModelProxy)
+	mux.HandleFunc("GET /armory/display/{entry}/{displayId}", s.armoryDisplayMap)
+	mux.HandleFunc("GET /armory/guild/{name}", s.armoryGuild)
+	mux.HandleFunc("GET /armory/{name}", s.armoryInspect)
+	mux.HandleFunc("GET /companion", s.companionPage)
+	mux.HandleFunc("GET /companion/live", s.companionLive)
 	mux.HandleFunc("GET /account", s.accountGET)
 	mux.HandleFunc("POST /account/login", s.loginPOST)
+	mux.HandleFunc("POST /account/login/totp", s.totpLoginPOST)
+	mux.HandleFunc("POST /account/totp/start", s.totpStartPOST)
+	mux.HandleFunc("POST /account/totp/confirm", s.totpConfirmPOST)
+	mux.HandleFunc("POST /account/totp/disable", s.totpDisablePOST)
+	mux.HandleFunc("POST /account/passkey/register/begin", s.passkeyRegisterBegin)
+	mux.HandleFunc("POST /account/passkey/register/finish", s.passkeyRegisterFinish)
+	mux.HandleFunc("POST /account/passkey/login/begin", s.passkeyLoginBegin)
+	mux.HandleFunc("POST /account/passkey/login/finish", s.passkeyLoginFinish)
+	mux.HandleFunc("POST /account/passkey/delete", s.passkeyDeletePOST)
 	mux.HandleFunc("POST /account/logout", s.logoutPOST)
 	mux.HandleFunc("POST /account/password", s.passwordPOST)
 	mux.HandleFunc("POST /account/unstuck", s.unstuckPOST)
+	mux.HandleFunc("POST /account/wow", s.wowCredentialPOST)
+	mux.HandleFunc("POST /account/wow/unlock", s.wowUnlockPOST)
+	mux.HandleFunc("POST /account/wow/password", s.wowPasswordPOST)
+	mux.HandleFunc("POST /account/wg", s.wgCreatePOST)
+	mux.HandleFunc("POST /account/wg/{id}/delete", s.wgDeletePOST)
+	mux.HandleFunc("GET /account/wg/{id}/{kind}", s.wgDownload)
+	mux.HandleFunc("GET /tickets", s.ticketsList)
+	mux.HandleFunc("GET /tickets/new", s.ticketsNew)
+	mux.HandleFunc("POST /tickets", s.ticketsCreate)
+	mux.HandleFunc("GET /tickets/{id}", s.ticketsView)
+	mux.HandleFunc("POST /tickets/{id}/comment", s.ticketsComment)
+	mux.HandleFunc("GET /staff/tickets", s.staffTickets)
+	mux.HandleFunc("GET /staff/tickets/{id}", s.staffTicketView)
+	mux.HandleFunc("POST /staff/tickets/{id}", s.staffTicketUpdate)
 	mux.HandleFunc("GET /staff", s.staffGET)
+	mux.HandleFunc("POST /staff/banner", s.staffBannerPOST)
+	mux.HandleFunc("POST /staff/events", s.staffEventPOST)
+	mux.HandleFunc("POST /staff/events/{id}/delete", s.staffEventDeletePOST)
 	mux.HandleFunc("POST /staff/create", s.staffCreatePOST)
 	mux.HandleFunc("POST /staff/reset", s.staffResetPOST)
 	mux.HandleFunc("POST /staff/rank", s.staffRankPOST)
+	mux.HandleFunc("POST /staff/ban", s.staffBanPOST)
+	mux.HandleFunc("POST /staff/unban", s.staffUnbanPOST)
+	mux.HandleFunc("POST /staff/wg", s.wgEndpointPOST)
+	mux.HandleFunc("POST /staff/register-key", s.registerKeyPOST)
 	mux.HandleFunc("POST /staff/downloads", s.staffDownloadPOST)
 	mux.HandleFunc("POST /staff/downloads/delete", s.staffDownloadDeletePOST)
 	mux.HandleFunc("GET /staff/kb", s.staffKB)
@@ -144,6 +247,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /staff/kb/{id}", s.staffKBEdit)
 	mux.HandleFunc("POST /staff/kb/{id}", s.staffKBUpdate)
 	mux.HandleFunc("POST /staff/kb/{id}/delete", s.staffKBDelete)
+	mux.HandleFunc("GET /account/verify/{token}", s.verifyGET)
+	mux.HandleFunc("POST /account/verify/{token}", s.verifyPOST)
 	mux.HandleFunc("GET /account/reset", s.resetGET)
 	mux.HandleFunc("POST /account/reset", s.resetPOST)
 	mux.HandleFunc("GET /account/reset/{token}", s.resetConfirmGET)
@@ -215,6 +320,8 @@ type page struct {
 	Flash        *session.Flash
 	User         *session.User
 	Staff        bool
+	Mod          bool
+	Banner       string
 	Demo         bool
 	RealmName    string
 	CoreName     string
@@ -234,13 +341,16 @@ type page struct {
 
 func (s *Server) view(w http.ResponseWriter, r *http.Request, name, title, active string, data any) {
 	sess := s.sessions.GetOrCreate(w, r)
+	s.applyStaffLevel(r.Context(), sess)
 	p := page{
 		Title:        title,
 		Active:       active,
 		CSRF:         sess.CSRF,
 		Flash:        sess.TakeFlash(),
 		User:         sess.User,
-		Staff:        sess.User.IsStaff(s.cfg.GMMinLevel),
+		Staff:        sess.User.IsStaff(s.staffMin()),
+		Mod:          sess.User.IsStaff(s.modMin()),
+		Banner:       s.maintenanceBanner(r.Context()),
 		CanEditKB:    s.canEditKB(sess.User),
 		Demo:         s.cfg.DemoMode,
 		RealmName:    s.cfg.RealmName,

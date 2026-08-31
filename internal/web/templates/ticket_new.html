@@ -1,0 +1,39 @@
+{{template "header" .}}
+{{$d := .Data}}
+{{$f := $d.Form}}
+<section class="panel narrow">
+  <p class="eyebrow">Support</p>
+  <h1>New ticket</h1>
+  <p class="lede">Staff reply on the ticket thread. There is no Discord, email, or in-game mail from this form.</p>
+  {{if $d.Error}}<p class="flash flash-error" role="alert">{{$d.Error}}</p>{{end}}
+  <form method="post" action="/tickets" class="form">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <label>Category
+      <select name="category" required>
+        <option value="">Choose…</option>
+        {{range $d.Categories}}
+        <option value="{{.}}" {{if eq $f.Category .}}selected{{end}}>{{.}}</option>
+        {{end}}
+      </select>
+    </label>
+    <label>Title
+      <input name="title" value="{{$f.Title}}" required maxlength="120" autocomplete="off">
+    </label>
+    <label>Character (optional)
+      <select name="character_guid">
+        <option value="">None</option>
+        {{range $d.Characters}}
+        <option value="{{.GUID}}" {{if eq (printf "%d" $f.CharacterGUID) (printf "%d" .GUID)}}selected{{end}}>{{.Name}}</option>
+        {{end}}
+      </select>
+    </label>
+    <label>Message
+      <textarea name="body" rows="8" required maxlength="4000">{{$d.Body}}</textarea>
+    </label>
+    <p class="kb-edit-actions">
+      <button type="submit" class="btn btn-gold">Open ticket</button>
+      <a class="btn" href="/tickets">Cancel</a>
+    </p>
+  </form>
+</section>
+{{template "footer" .}}

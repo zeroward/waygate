@@ -1,0 +1,55 @@
+{{template "header" .}}
+{{$d := .Data}}
+{{$t := $d.Ticket}}
+<section class="panel ticket-view">
+  <p class="eyebrow">{{if $d.Staff}}Admin{{else}}Support{{end}}</p>
+  <h1>{{$t.PublicRef}}</h1>
+  <p class="kb-meta">
+    {{$t.Category}} · {{$t.StatusLabel}}
+    {{if $t.CharacterName}} · {{$t.CharacterName}}{{end}}
+    {{if $d.Staff}} · {{$t.Username}}{{end}}
+  </p>
+  <h2>{{$t.Title}}</h2>
+  <ol class="ticket-thread">
+    {{range $t.Messages}}
+    <li class="ticket-msg{{if .FromStaff}} is-staff{{end}}">
+      <p class="ticket-msg-meta">{{.Author}}{{if .FromStaff}} <span class="badge badge-gold">Staff</span>{{end}} · {{.CreatedAt.Format "2006-01-02 15:04"}}</p>
+      <p class="ticket-msg-body">{{.Body}}</p>
+    </li>
+    {{end}}
+  </ol>
+  {{if $d.Staff}}
+  <form method="post" action="/staff/tickets/{{$t.ID}}" class="form">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <label>Status
+      <select name="status">
+        {{range $d.Statuses}}
+        <option value="{{.Value}}" {{if eq $t.Status .Value}}selected{{end}}>{{.Label}}</option>
+        {{end}}
+      </select>
+    </label>
+    <label>Reply
+      <textarea name="body" rows="6" maxlength="4000"></textarea>
+    </label>
+    <p class="kb-edit-actions">
+      <button type="submit" class="btn btn-gold">Update</button>
+      <a class="btn" href="/staff/tickets">Queue</a>
+    </p>
+  </form>
+  {{else if $t.OpenForComment}}
+  <form method="post" action="/tickets/{{$t.ID}}/comment" class="form">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <label>Comment
+      <textarea name="body" rows="6" maxlength="4000" required></textarea>
+    </label>
+    <p class="kb-edit-actions">
+      <button type="submit" class="btn btn-gold">Send</button>
+      <a class="btn" href="/tickets">My tickets</a>
+    </p>
+  </form>
+  {{else}}
+  <p class="hint">This ticket is closed. You cannot add comments.</p>
+  <p class="kb-edit-actions"><a class="btn" href="/tickets">My tickets</a></p>
+  {{end}}
+</section>
+{{template "footer" .}}

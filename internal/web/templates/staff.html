@@ -5,8 +5,103 @@
   <section class="home-hero">
     <p class="home-kicker">{{rankName .User.GMLevel}}</p>
     <h1>Admin panel</h1>
-    <p class="lede">Create accounts, reset passwords, publish Downloads, and set GM or Admin. Super GM cannot be granted here.</p>
+    <p class="lede">Create accounts, reset passwords, suspend or unban, publish Downloads, and set GM or Admin. Super GM cannot be granted here.</p>
     {{if .CanEditKB}}<p class="home-cta-quiet"><a href="/staff/kb">Knowledge Base articles</a></p>{{end}}
+  </section>
+
+  <section class="panel" id="banner">
+    <h2>Maintenance banner</h2>
+    <p class="hint">Shown on every page. Leave the message empty to clear. Until is optional (UTC).</p>
+    <form method="post" action="/staff/banner" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Message
+        <input name="message" maxlength="280" value="{{$d.BannerMessage}}" placeholder="Realm restart at 20:00 UTC">
+      </label>
+      <label>Until (optional)
+        <input type="datetime-local" name="until" value="{{$d.BannerUntil}}">
+      </label>
+      <button type="submit" class="btn btn-gold">Save banner</button>
+    </form>
+  </section>
+
+  <section class="panel" id="calendar">
+    <h2>Realm calendar</h2>
+    <p class="hint">Dated notes on the home page: raid nights, weekly reset, “don’t log in”. Past dates drop off the public list automatically.</p>
+    <form method="post" action="/staff/events" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Date
+        <input type="date" name="event_date" required>
+      </label>
+      <label>Title
+        <input name="title" required maxlength="80" placeholder="Raid night — ICC 25">
+      </label>
+      <label>Detail (optional)
+        <input name="detail" maxlength="280" placeholder="8pm UTC. Sign up in Discord.">
+      </label>
+      <button type="submit" class="btn btn-gold">Add event</button>
+    </form>
+    {{if $d.Calendar}}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>Title</th><th></th></tr></thead>
+        <tbody>
+          {{range $d.Calendar}}
+          <tr>
+            <td>{{.Date}}</td>
+            <td>{{.Title}}{{if .Detail}} <span class="muted">{{.Detail}}</span>{{end}}</td>
+            <td>
+              <form method="post" action="/staff/events/{{.ID}}/delete">
+                <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+                <button type="submit" class="btn btn-ghost">Remove</button>
+              </form>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="empty">No calendar events yet.</p>
+    {{end}}
+  </section>
+
+  <section class="panel staff-tickets" id="tickets">
+    <header class="home-mods-head">
+      <h2>Open tickets</h2>
+      <span class="mod-count">{{len $d.OpenTickets}}</span>
+    </header>
+    <p class="hint">Reply and set status from the queue. Players cannot see other accounts’ tickets.</p>
+    {{if $d.OpenTickets}}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Ref</th>
+            <th>Player</th>
+            <th>Title</th>
+            <th>Category</th>
+            <th>Status</th>
+            <th>Updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $d.OpenTickets}}
+          <tr>
+            <td class="name"><a href="/staff/tickets/{{.ID}}">{{.PublicRef}}</a></td>
+            <td>{{.Username}}</td>
+            <td>{{.Title}}</td>
+            <td>{{.Category}}</td>
+            <td>{{.StatusLabel}}</td>
+            <td>{{.UpdatedAt.Format "2006-01-02 15:04"}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="empty">No open tickets.</p>
+    {{end}}
+    <p class="kb-edit-actions"><a class="btn btn-gold" href="/staff/tickets">Ticket queue</a></p>
   </section>
 
   <section class="panel staff-create">
@@ -49,6 +144,7 @@
           <thead>
             <tr>
               <th>Username</th>
+              <th>Gatehouse</th>
               <th>Email</th>
               <th>Joined</th>
               <th>Last login</th>
@@ -63,14 +159,20 @@
                 data-user="{{.Username}}"
                 data-email="{{.Email}}"
                 data-gm="{{.GMLevel}}"
+                data-gatehouse="{{.Gatehouse}}"
+                data-linked="{{range $i, $n := .Linked}}{{if $i}},{{end}}{{$n}}{{end}}"
                 data-online="{{if .Online}}1{{else}}0{{end}}"
+                data-banned="{{if .Banned}}1{{else}}0{{end}}"
+                data-ban-reason="{{.BanReason}}"
+                data-ban-until="{{.BanUntil}}"
                 aria-selected="{{if and $sel (eq .Username $sel.Username)}}true{{else}}false{{end}}">
               <td class="name">{{.Username}}</td>
+              <td>{{if .Gatehouse}}{{.Gatehouse}}{{else}}—{{end}}</td>
               <td>{{if .Email}}{{.Email}}{{else}}—{{end}}</td>
               <td>{{.JoinDate}}</td>
               <td>{{.LastLogin}}</td>
               <td>{{if .GMLevel}}{{rankName .GMLevel}}{{else}}—{{end}}</td>
-              <td>{{if .Online}}online{{else}}offline{{end}}</td>
+              <td>{{.StatusLabel}}</td>
             </tr>
             {{end}}
           </tbody>
@@ -98,8 +200,27 @@
           <h2 data-staff-name>{{if $sel}}{{$sel.Username}}{{end}}</h2>
           <div class="staff-drawer-meta">
             <span class="badge{{if and $sel $sel.GMLevel}} badge-gold{{end}}" data-staff-gm-badge>{{if $sel}}{{rankName $sel.GMLevel}}{{end}}</span>
-            <span class="staff-status{{if and $sel $sel.Online}} is-online{{else}} is-offline{{end}}" data-staff-status>{{if $sel}}{{if $sel.Online}}online{{else}}offline{{end}}{{end}}</span>
+            <span class="staff-status{{if and $sel $sel.Banned}} is-banned{{else if and $sel $sel.Online}} is-online{{else}} is-offline{{end}}" data-staff-status>{{if $sel}}{{$sel.StatusLabel}}{{end}}</span>
           </div>
+          <p class="hint" data-staff-gatehouse-hint{{if not (and $sel $sel.Gatehouse)}} hidden{{end}}>{{if and $sel $sel.Gatehouse}}Gatehouse account {{$sel.Gatehouse}}. Rank and suspend apply to every Wow.exe login on that account.{{end}}</p>
+          <p class="hint" data-staff-linked-hint{{if not $d.LinkedLogins}} hidden{{end}}>{{if $d.LinkedLogins}}Wow.exe logins: {{range $i, $n := $d.LinkedLogins}}{{if $i}}, {{end}}<code>{{$n}}</code>{{end}}{{end}}</p>
+          {{if $d.SelChars}}
+          <div class="table-wrap staff-sel-chars">
+            <table>
+              <thead><tr><th>Name</th><th>Login</th><th>Level</th><th>Class</th></tr></thead>
+              <tbody>
+                {{range $d.SelChars}}
+                <tr>
+                  <td class="name"><a href="/armory/{{.Name}}">{{.Name}}</a>{{if .Online}} <span class="char-online">Online</span>{{end}}</td>
+                  <td>{{if .Login}}<code>{{.Login}}</code>{{else}}—{{end}}</td>
+                  <td>{{.Level}}</td>
+                  <td class="class-{{classSlug .ClassID}}">{{.Class}}</td>
+                </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+          {{end}}
         </header>
 
         {{if and .Flash $sel}}
@@ -135,7 +256,7 @@
 
         <form method="post" action="/staff/rank" class="staff-rank" data-staff-rank{{if not $d.CanRank}} aria-disabled="true"{{end}}>
           <h3>Rank</h3>
-          <p class="hint">GM or Admin only. Super GM cannot be granted. You can only assign a rank below your own.</p>
+          <p class="hint">GM or Admin only. Super GM cannot be granted. Rank applies to every Wow.exe login on this Gatehouse account. You can only assign a rank below your own.</p>
           <input type="hidden" name="csrf_token" value="{{.CSRF}}">
           <input type="hidden" name="username" value="{{if $sel}}{{$sel.Username}}{{end}}" data-staff-user-field autocomplete="off">
           {{if $d.Query}}<input type="hidden" name="q" value="{{$d.Query}}">{{end}}
@@ -158,6 +279,54 @@
           </div>
         </form>
 
+        <form method="post" action="/staff/ban" class="staff-ban" data-staff-ban{{if or (not $d.CanModify) (and $sel $sel.Banned)}} aria-disabled="true"{{end}}{{if and $sel $sel.Banned}} hidden{{end}}>
+          <h3>Suspend account</h3>
+          <p class="hint">Blocks website login and every Wow.exe login on this Gatehouse account. SOAP kicks them if the world is up; otherwise they stay out on the next login.</p>
+          <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+          <input type="hidden" name="username" value="{{if $sel}}{{$sel.Username}}{{end}}" data-staff-user-field autocomplete="off">
+          {{if $d.Query}}<input type="hidden" name="q" value="{{$d.Query}}">{{end}}
+          {{if $d.IncludeBots}}<input type="hidden" name="bots" value="1">{{end}}
+          {{if gt $d.Page 1}}<input type="hidden" name="p" value="{{$d.Page}}">{{end}}
+          <label>Length
+            <select name="duration" data-staff-ban-duration {{if not $d.CanModify}}disabled{{end}}>
+              <option value="perm" selected>Permanent</option>
+              <option value="1h">1 hour</option>
+              <option value="1d">1 day</option>
+              <option value="7d">7 days</option>
+              <option value="30d">30 days</option>
+            </select>
+          </label>
+          <label>Reason
+            <input name="reason" maxlength="255" required minlength="3" autocomplete="off" {{if not $d.CanModify}}disabled{{end}}>
+          </label>
+          <button type="submit" class="btn btn-gold" data-staff-ban-go {{if not $d.CanModify}}disabled{{end}}>Suspend</button>
+          <div class="staff-confirm" data-staff-ban-confirm hidden>
+            <p data-staff-ban-confirm-text>Suspend this account?</p>
+            <div class="staff-confirm-actions">
+              <button type="button" class="btn btn-gold" data-staff-ban-yes>Confirm</button>
+              <button type="button" class="btn btn-ghost" data-staff-ban-no>Cancel</button>
+            </div>
+          </div>
+        </form>
+
+        <form method="post" action="/staff/unban" class="staff-unban" data-staff-unban{{if not $d.CanModify}} aria-disabled="true"{{end}}{{if not (and $sel $sel.Banned)}} hidden{{end}}>
+          <h3>Suspended</h3>
+          <p class="hint" data-staff-ban-meta>{{if and $sel $sel.Banned}}{{if $sel.BanUntil}}Until {{$sel.BanUntil}}. {{end}}{{if $sel.BanReason}}{{$sel.BanReason}}{{end}}{{end}}</p>
+          <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+          <input type="hidden" name="username" value="{{if $sel}}{{$sel.Username}}{{end}}" data-staff-user-field autocomplete="off">
+          {{if $d.Query}}<input type="hidden" name="q" value="{{$d.Query}}">{{end}}
+          {{if $d.IncludeBots}}<input type="hidden" name="bots" value="1">{{end}}
+          {{if gt $d.Page 1}}<input type="hidden" name="p" value="{{$d.Page}}">{{end}}
+          <button type="submit" class="btn btn-gold" data-staff-unban-go {{if not $d.CanModify}}disabled{{end}}>Lift suspension</button>
+          <div class="staff-confirm" data-staff-unban-confirm hidden>
+            <p>Lift the suspension for {{if $sel}}{{$sel.Username}}{{else}}this account{{end}}?</p>
+            <div class="staff-confirm-actions">
+              <button type="button" class="btn btn-gold" data-staff-unban-yes>Confirm</button>
+              <button type="button" class="btn btn-ghost" data-staff-unban-no>Cancel</button>
+            </div>
+          </div>
+        </form>
+
         <div class="staff-drawer-tools">
           <button type="button" class="btn" data-staff-copy>Copy username</button>
           <button type="button" class="btn btn-ghost" data-staff-clear>Clear selection</button>
@@ -166,12 +335,39 @@
     </aside>
   </div>
 
+  <section class="panel account-pass" id="register-key">
+    <h2>Registration key</h2>
+    <p class="hint">When set, new players must enter this on <a href="/register">/register</a>. Staff “Create account” does not need it. Leave blank to allow anyone to register.</p>
+    <form method="post" action="/staff/register-key" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Key
+        <input name="register_key" value="{{$d.RegisterKey}}" maxlength="64" autocomplete="off" placeholder="optional">
+      </label>
+      <button type="submit" class="btn btn-gold">Save registration key</button>
+    </form>
+  </section>
+
+  {{if $d.WGOn}}
+  <section class="panel account-pass" id="vpn">
+    <h2>VPN endpoint</h2>
+    <p class="hint">Public hostname or IP players use to reach WireGuard (UDP {{$d.WGPort}}). This is the <code>Endpoint</code> in each client config. Realmlist.wtf always uses the wg0 address <code>{{$d.WGRealmIP}}</code>.</p>
+    <form method="post" action="/staff/wg" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Hostname or IP
+        <input name="endpoint" value="{{$d.WGEndpoint}}" maxlength="253" placeholder="vpn.example.com or 203.0.113.10" autocomplete="off">
+      </label>
+      <p class="hint">Port is optional (default {{$d.WGPort}}). Leave blank and save to restore PUBLIC_HOST.</p>
+      <button type="submit" class="btn btn-gold">Save VPN endpoint</button>
+    </form>
+  </section>
+  {{end}}
+
   <section class="panel staff-dl" id="downloads">
     <header class="home-mods-head">
       <h2>Downloads</h2>
       <span class="mod-count">{{len $d.Downloads}}</span>
     </header>
-    <p class="staff-dl-lede">Published on the Downloads tab for logged-in players. Virus scanning is temporarily off.{{if $d.DownloadsMax}} Max {{$d.DownloadsMax}}.{{end}} Types: .zip, .7z, .rar, .mpq, .patch, .exe.</p>
+    <p class="staff-dl-lede">Published on the Downloads tab for logged-in players. {{if $d.DownloadsScanning}}Virus scanning is on.{{else}}Virus scanning is off.{{end}}{{if $d.DownloadsMax}} Max {{$d.DownloadsMax}}.{{end}} Types: .zip, .7z, .rar, .mpq, .patch.</p>
     {{if not $d.DownloadsWritable}}
     <p class="flash flash-error">The downloads folder is not writable. Mount it read-write and let the site process user write it.</p>
     {{end}}
@@ -185,7 +381,7 @@
         </select>
       </label>
       <label class="staff-dl-file">File
-        <input type="file" name="file" required accept=".zip,.7z,.rar,.mpq,.patch,.exe" {{if not $d.DownloadsWritable}}disabled{{end}}>
+        <input type="file" name="file" required accept=".zip,.7z,.rar,.mpq,.patch" {{if not $d.DownloadsWritable}}disabled{{end}}>
       </label>
       <div class="staff-dl-extra" data-dl-for="client" hidden>
         <label>Client name
@@ -273,6 +469,38 @@
     </div>
     {{else}}
     <p class="empty">No files yet. Upload one above.</p>
+    {{end}}
+  </section>
+
+  <section class="panel staff-events">
+    <header class="home-mods-head">
+      <h2>Recent actions</h2>
+    </header>
+    {{if $d.Events}}
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Actor</th>
+            <th>Action</th>
+            <th>Target</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $d.Events}}
+          <tr>
+            <td>{{.At.Format "2006-01-02 15:04"}}</td>
+            <td>{{.Actor}}</td>
+            <td>{{.Action}}</td>
+            <td>{{.Target}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="empty">No recorded actions yet.</p>
     {{end}}
   </section>
 </div>

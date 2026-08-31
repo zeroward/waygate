@@ -1,0 +1,199 @@
+package wg
+
+import (
+	"context"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+func TestGenerateAndServerKeys(t *testing.T) {
+	dir := t.TempDir()
+	a, err := EnsureServerKeys(dir)
+	if err != nil || a.Private == "" || a.Public == "" {
+		t.Fatalf("%v %+v", err, a)
+	}
+	b, err := EnsureServerKeys(dir)
+	if err != nil || b.Private != a.Private || b.Public != a.Public {
+		t.Fatalf("stable keys %v %+v", err, b)
+	}
+}
+
+func TestNextAddress(t *testing.T) {
+	got, err := NextAddress(nil)
+	if err != nil || got != "10.8.0.2/32" {
+		t.Fatalf("%v %s", err, got)
+	}
+	got, err = NextAddress([]string{"10.8.0.2/32", "10.8.0.3/32"})
+	if err != nil || got != "10.8.0.4/32" {
+		t.Fatalf("%v %s", err, got)
+	}
+}
+
+func TestNormalizeAllowedDropsDefaultRoute(t *testing.T) {
+	got := NormalizeAllowed([]string{"0.0.0.0/0", "10.8.0.0/24", "1.2.3.4", "::/0"})
+	for _, c := range got {
+		if c == "0.0.0.0/0" || c == "::/0" {
+			t.Fatalf("%v", got)
+		}
+	}
+	if got[0] != VPNNet {
+		t.Fatalf("vpn first %v", got)
+	}
+}
+
+func TestClientConfAndZip(t *testing.T) {
+	o := ClientOpts{
+		Name:       "Laptop",
+		Realm:      "Icecrown",
+		PrivateKey: "clientpriv",
+		Address:    "10.8.0.2/32",
+		ServerPub:  "serverpub",
+		Endpoint:   "ccraft.example:51820",
+		AllowedIPs: []string{"10.8.0.0/24", "9.9.9.9/32", "0.0.0.0/0"},
+	}
+	conf := ClientConf(o)
+	if !strings.Contains(conf, "[Interface]") || !strings.Contains(conf, "[Peer]") {
+		t.Fatal(conf)
+	}
+	if !strings.Contains(conf, "Endpoint = ccraft.example:51820") {
+		t.Fatal(conf)
+	}
+	if strings.Contains(conf, "0.0.0.0/0") {
+		t.Fatal("full tunnel")
+	}
+	z, err := BundleZip(o)
+	if err != nil || len(z) < 100 {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(z), "set realmlist 10.8.0.1") {
+		t.Fatal("realmlist missing")
+	}
+	if strings.Contains(string(z), "# set realmlist") {
+		t.Fatal("realmlist should only use wg0 IP")
+	}
+}
+
+func TestEnsureForwardRestrictsPorts(t *testing.T) {
+	var cmds []string
+	a := &Agent{
+		Iface: "wg0", AuthPort: 3724, WorldPort: 28085, SitePort: 3080,
+		run: func(name string, args ...string) error {
+			line := name + " " + strings.Join(args, " ")
+			cmds = append(cmds, line)
+			if strings.Contains(line, " -C ") || strings.Contains(line, " -D ") {
+				return fmt.Errorf("missing")
+			}
+			return nil
+		},
+	}
+	if err := a.ensureForward(); err != nil {
+		t.Fatal(err)
+	}
+	joined := strings.Join(cmds, "\n")
+	if !strings.Contains(joined, "--dports 3724,28085,3080") {
+		t.Fatalf("missing dport allow: %s", joined)
+	}
+	if !strings.Contains(joined, "--state ESTABLISHED,RELATED") {
+		t.Fatal("missing established")
+	}
+	var addedCatchAll bool
+	for _, c := range cmds {
+		if strings.Contains(c, "-A FORWARD -i wg0 -j ACCEPT") || strings.Contains(c, "-A FORWARD -o wg0 -j ACCEPT") {
+			addedCatchAll = true
+		}
+	}
+	if addedCatchAll {
+		t.Fatal("must not re-add catch-all FORWARD ACCEPT")
+	}
+}
+
+func TestNormalizeEndpoint(t *testing.T) {
+	got, err := NormalizeEndpoint("vpn.example.com", 51820)
+	if err != nil || got != "vpn.example.com:51820" {
+		t.Fatalf("%v %s", err, got)
+	}
+	got, err = NormalizeEndpoint("203.0.113.9:1234", 51820)
+	if err != nil || got != "203.0.113.9:1234" {
+		t.Fatalf("%v %s", err, got)
+	}
+	if _, err := NormalizeEndpoint("not a host", 51820); err == nil {
+		t.Fatal("expected invalid")
+	}
+	if TunnelIP("10.8.0.1/24") != "10.8.0.1" {
+		t.Fatal(TunnelIP("10.8.0.1/24"))
+	}
+}
+
+func TestPeerFiles(t *testing.T) {
+	dir := t.TempDir()
+	if err := WritePeerFile(dir, 7, 3, "abcd", "10.8.0.5/32"); err != nil {
+		t.Fatal(err)
+	}
+	bodies, err := ReadPeerDir(dir)
+	if err != nil || len(bodies) != 1 || !strings.Contains(bodies[0], "PublicKey = abcd") {
+		t.Fatalf("%v %v", err, bodies)
+	}
+	if err := RemovePeerFile(dir, 7); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "peers", "7.peer")); !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+}
+
+func TestServerConfIncludesPeers(t *testing.T) {
+	conf := ServerConf("serverpriv", 51820, []string{"[Peer]\nPublicKey = peerone\nAllowedIPs = 10.8.0.2/32\n"})
+	if !strings.Contains(conf, "ListenPort = 51820") || !strings.Contains(conf, "peerone") {
+		t.Fatal(conf)
+	}
+}
+
+func TestHealthFreshAndProbe(t *testing.T) {
+	dir := t.TempDir()
+	if HealthFresh(dir, HealthMaxAge) {
+		t.Fatal("missing health should be stale")
+	}
+	confDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(confDir, "wg0.conf"), []byte("[Interface]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !HealthFresh(confDir, HealthMaxAge) {
+		t.Fatal("wg0.conf mtime should count as alive")
+	}
+	if err := WriteHealth(dir); err != nil {
+		t.Fatal(err)
+	}
+	if !HealthFresh(dir, HealthMaxAge) {
+		t.Fatal("fresh write")
+	}
+	stale := filepath.Join(dir, HealthFile)
+	past := time.Now().Add(-time.Minute)
+	if err := os.Chtimes(stale, past, past); err != nil {
+		t.Fatal(err)
+	}
+	if HealthFresh(dir, HealthMaxAge) {
+		t.Fatal("old health should be stale")
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok\n"))
+	}))
+	defer srv.Close()
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !Probe(context.Background(), u.Host, dir) {
+		t.Fatal("http health should succeed when heartbeat is stale")
+	}
+	if Probe(context.Background(), "127.0.0.1:1", t.TempDir()) {
+		t.Fatal("dead listen and empty dir")
+	}
+}

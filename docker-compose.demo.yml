@@ -1,6 +1,8 @@
 services:
   waygate:
-    build: .
+    build:
+      context: .
+      target: waygate
     image: ghcr.io/zeroward/waygate:local
     container_name: waygate-demo
     ports:

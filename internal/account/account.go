@@ -85,6 +85,11 @@ type ListedAccount struct {
 	Expansion uint8
 	GMLevel   uint8
 	Locked    bool
+	Banned    bool
+	BanReason string
+	BanUntil  string
+	Gatehouse string // website username when this Wow.exe login is linked
+	Linked    []string
 }
 
 type Service struct {
@@ -98,13 +103,16 @@ type Service struct {
 }
 
 type memAccount struct {
-	ID       uint32
-	Username string
-	Email    string
-	Salt     []byte
-	Verifier []byte
-	GMLevel  uint8
-	Joined   time.Time
+	ID        uint32
+	Username  string
+	Email     string
+	Salt      []byte
+	Verifier  []byte
+	GMLevel   uint8
+	Joined    time.Time
+	Banned    bool
+	BanReason string
+	BanUntil  time.Time
 }
 
 type resetRec struct {
@@ -121,6 +129,11 @@ func New(cfg config.Config, database *db.DB, soapc *soap.Client) *Service {
 		mem:   make(map[string]*memAccount),
 		reset: make(map[string]resetRec),
 	}
+}
+
+func SignupVerifier(username, password string) (salt, verifier []byte, err error) {
+	username = srp6.UpperLatin(strings.TrimSpace(username))
+	return srp6.MakeRegistrationData(username, password)
 }
 
 func (s *Service) Create(ctx context.Context, username, password, email string, expansion uint8) error {
@@ -145,24 +158,67 @@ func (s *Service) Create(ctx context.Context, username, password, email string, 
 	}
 
 	mode := s.createMode()
+	err = nil
 	switch mode {
 	case "soap":
-		return s.createSOAP(ctx, username, password, email, expansion)
+		err = s.createSOAP(ctx, username, password, email, expansion)
 	case "sql":
-		return s.createSQL(ctx, username, password, email, expansion)
+		err = s.createSQL(ctx, username, password, email, expansion)
 	default: // auto
 		if s.soap != nil && s.cfg.SOAPConfigured() && !s.cfg.DemoMode {
-			err := s.createSOAP(ctx, username, password, email, expansion)
-			if err == nil || errors.Is(err, ErrTaken) {
+			err = s.createSOAP(ctx, username, password, email, expansion)
+			if errors.Is(err, ErrTaken) {
 				return err
 			}
-			if s.db != nil {
-				return s.createSQL(ctx, username, password, email, expansion)
+			if err != nil && s.db != nil {
+				err = s.createSQL(ctx, username, password, email, expansion)
 			}
+		} else {
+			err = s.createSQL(ctx, username, password, email, expansion)
+		}
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := s.waitForAccount(ctx, username); err != nil {
+		if mode != "soap" && s.db != nil && !s.cfg.DemoMode {
+			if sqlErr := s.createSQL(ctx, username, password, email, expansion); sqlErr == nil {
+				_, err = s.waitForAccount(ctx, username)
+			} else if !errors.Is(sqlErr, ErrTaken) {
+				return sqlErr
+			} else {
+				_, err = s.waitForAccount(ctx, username)
+			}
+		}
+		if err != nil {
 			return err
 		}
-		return s.createSQL(ctx, username, password, email, expansion)
 	}
+	return nil
+}
+
+func (s *Service) waitForAccount(ctx context.Context, username string) (uint32, error) {
+	var last error
+	for i := 0; i < 10; i++ {
+		id, err := s.lookupAccountID(ctx, username)
+		if err == nil {
+			return id, nil
+		}
+		last = err
+		if errors.Is(err, ErrNotFound) && i < 9 {
+			select {
+			case <-ctx.Done():
+				return 0, ctx.Err()
+			case <-time.After(150 * time.Millisecond):
+			}
+			continue
+		}
+		return 0, err
+	}
+	if last == nil {
+		last = ErrNotFound
+	}
+	return 0, last
 }
 
 func (s *Service) createMode() string {
@@ -197,6 +253,36 @@ func (s *Service) createSQL(ctx context.Context, username, password, email strin
 	if err != nil {
 		return ErrUnavailable
 	}
+	return s.insertPrepared(ctx, username, email, expansion, salt, verifier)
+}
+
+// CreatePrepared inserts an account from already-computed SRP6 material (email verify).
+func (s *Service) CreatePrepared(ctx context.Context, username, email string, expansion uint8, salt, verifier []byte) error {
+	username = srp6.UpperLatin(strings.TrimSpace(username))
+	email = strings.TrimSpace(email)
+	if username == "" || len(salt) == 0 || len(verifier) == 0 {
+		return ErrUnavailable
+	}
+	taken, err := s.UsernameTaken(ctx, username)
+	if err != nil {
+		return err
+	}
+	if taken {
+		return ErrTaken
+	}
+	if s.cfg.RequireUniqueEmail && email != "" {
+		et, err := s.EmailTaken(ctx, email)
+		if err != nil {
+			return err
+		}
+		if et {
+			return ErrEmailTaken
+		}
+	}
+	return s.insertPrepared(ctx, username, email, expansion, salt, verifier)
+}
+
+func (s *Service) insertPrepared(ctx context.Context, username, email string, expansion uint8, salt, verifier []byte) error {
 	if s.cfg.DemoMode || s.db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
@@ -217,7 +303,7 @@ func (s *Service) createSQL(ctx context.Context, username, password, email strin
 		"INSERT INTO %s (`username`,`salt`,`verifier`,`email`,`reg_mail`,`expansion`) VALUES (?,?,?,?,?,?)",
 		s.db.QAuth("account"),
 	)
-	_, err = s.db.SQL.ExecContext(ctx, q, username, salt, verifier, email, email, expansion)
+	_, err := s.db.SQL.ExecContext(ctx, q, username, salt, verifier, email, email, expansion)
 	if err != nil {
 		if isDup(err) {
 			return ErrTaken
@@ -235,6 +321,13 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 		a, ok := s.mem[username]
 		if !ok || !srp6.CheckLogin(username, password, a.Salt, a.Verifier) {
 			return nil, ErrBadPassword
+		}
+		if a.Banned {
+			if !a.BanUntil.IsZero() && time.Now().UTC().After(a.BanUntil) {
+				a.Banned = false
+			} else {
+				return nil, ErrBanned
+			}
 		}
 		return &Account{ID: a.ID, Username: a.Username, Email: a.Email, GMLevel: a.GMLevel}, nil
 	}
@@ -255,6 +348,9 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 	}
 	if !srp6.CheckLogin(user, password, salt, verifier) {
 		return nil, ErrBadPassword
+	}
+	if _, ok := s.activeBan(ctx, id); ok {
+		return nil, ErrBanned
 	}
 	return &Account{ID: id, Username: user, Email: email, GMLevel: s.lookupGMLevel(ctx, id)}, nil
 }
@@ -294,10 +390,22 @@ func (s *Service) SetGMLevel(ctx context.Context, actorGM uint8, actorUser, targ
 		return err
 	}
 
+	return s.ApplyGMLevel(ctx, target, level)
+}
+
+// ApplyGMLevel writes account_access for a Wow.exe login. Never grants Super GM (4).
+func (s *Service) ApplyGMLevel(ctx context.Context, username string, level uint8) error {
+	username = srp6.UpperLatin(strings.TrimSpace(username))
+	if username == "" {
+		return ErrNotFound
+	}
+	if level > RankAdmin {
+		return ErrBadRank
+	}
 	if s.cfg.DemoMode || s.db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		a, ok := s.mem[target]
+		a, ok := s.mem[username]
 		if !ok {
 			return ErrNotFound
 		}
@@ -305,18 +413,18 @@ func (s *Service) SetGMLevel(ctx context.Context, actorGM uint8, actorUser, targ
 		return nil
 	}
 
-	if _, err := s.lookupAccountID(ctx, target); err != nil {
+	if _, err := s.lookupAccountID(ctx, username); err != nil {
 		return err
 	}
 
 	if s.soap != nil && s.cfg.SOAPConfigured() && !s.cfg.DemoMode {
-		if err := s.soap.SetGMLevel(ctx, target, level); err == nil {
+		if err := s.soap.SetGMLevel(ctx, username, level); err == nil {
 			return nil
 		} else if s.createMode() == "soap" {
 			return err
 		}
 	}
-	return s.setGMLevelSQL(ctx, target, level)
+	return s.setGMLevelSQL(ctx, username, level)
 }
 
 func (s *Service) lookupAccountID(ctx context.Context, username string) (uint32, error) {
@@ -422,7 +530,8 @@ func (s *Service) listMem(f ListFilter) ([]ListedAccount, int, error) {
 		if q != "" && !strings.Contains(a.Username, q) && !strings.Contains(strings.ToUpper(a.Email), q) {
 			continue
 		}
-		all = append(all, ListedAccount{
+		banned := a.Banned && (a.BanUntil.IsZero() || !time.Now().UTC().After(a.BanUntil))
+		row := ListedAccount{
 			ID:        a.ID,
 			Username:  a.Username,
 			Email:     a.Email,
@@ -430,7 +539,13 @@ func (s *Service) listMem(f ListFilter) ([]ListedAccount, int, error) {
 			LastLogin: "—",
 			Expansion: 2,
 			GMLevel:   a.GMLevel,
-		})
+			Banned:    banned,
+			BanReason: a.BanReason,
+		}
+		if banned {
+			row.BanUntil = formatBanUntil(a.BanUntil)
+		}
+		all = append(all, row)
 	}
 	sortListed(all)
 	total := len(all)
@@ -449,16 +564,68 @@ func (s *Service) GetListed(ctx context.Context, username string) (ListedAccount
 	if username == "" {
 		return ListedAccount{}, ErrNotFound
 	}
-	rows, _, err := s.ListAccounts(ctx, ListFilter{Query: username, IncludeBots: true, Limit: 100})
+	if s.cfg.DemoMode || s.db == nil {
+		rows, _, err := s.listMem(ListFilter{Query: username, IncludeBots: true, Limit: 100})
+		if err != nil {
+			return ListedAccount{}, err
+		}
+		for _, row := range rows {
+			if row.Username == username {
+				return row, nil
+			}
+		}
+		return ListedAccount{}, ErrNotFound
+	}
+	q := fmt.Sprintf(`
+		SELECT a.`+"`id`"+`, a.`+"`username`"+`, a.`+"`email`"+`, a.`+"`joindate`"+`,
+		       CAST(a.`+"`last_login`"+` AS CHAR), a.`+"`last_ip`"+`, a.`+"`online`"+`, a.`+"`expansion`"+`, a.`+"`locked`"+`,
+		       COALESCE(g.gmlevel, 0)
+		FROM %s a
+		LEFT JOIN (
+			SELECT `+"`id`"+`, MAX(`+"`gmlevel`"+`) AS gmlevel FROM %s GROUP BY `+"`id`"+`
+		) g ON g.`+"`id`"+` = a.`+"`id`"+`
+		WHERE a.`+"`username`"+` = ?
+		LIMIT 1`, s.db.QAuth("account"), s.db.QAuth("account_access"))
+	var (
+		row    ListedAccount
+		join   time.Time
+		last   sql.NullString
+		online int
+		locked int
+		lastIP string
+	)
+	err := s.db.SQL.QueryRowContext(ctx, q, username).Scan(&row.ID, &row.Username, &row.Email, &join, &last, &lastIP, &online, &row.Expansion, &locked, &row.GMLevel)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ListedAccount{}, ErrNotFound
+	}
 	if err != nil {
 		return ListedAccount{}, err
 	}
-	for _, row := range rows {
-		if row.Username == username {
-			return row, nil
-		}
+	row.JoinDate = join.UTC().Format("2006-01-02 15:04")
+	row.LastLogin = formatLastLogin(last)
+	row.LastIP = lastIP
+	row.Online = online != 0
+	row.Locked = locked != 0
+	out := []ListedAccount{row}
+	s.attachBans(ctx, out)
+	return out[0], nil
+}
+
+func formatLastLogin(last sql.NullString) string {
+	if !last.Valid {
+		return "—"
 	}
-	return ListedAccount{}, ErrNotFound
+	s := strings.TrimSpace(last.String)
+	if s == "" || strings.HasPrefix(s, "0000-00-00") {
+		return "—"
+	}
+	if t, err := time.Parse("2006-01-02 15:04:05", s); err == nil {
+		return t.UTC().Format("2006-01-02 15:04")
+	}
+	if len(s) >= 16 {
+		return s[:16]
+	}
+	return s
 }
 
 func (s *Service) listSQL(ctx context.Context, f ListFilter) ([]ListedAccount, int, error) {
@@ -483,8 +650,8 @@ func (s *Service) listSQL(ctx context.Context, f ListFilter) ([]ListedAccount, i
 		return nil, 0, err
 	}
 	listQ := fmt.Sprintf(`
-		SELECT a.`+"`id`"+`, a.`+"`username`"+`, a.`+"`email`"+`, a.`+"`joindate`"+`, a.`+"`last_login`"+`,
-		       a.`+"`last_ip`"+`, a.`+"`online`"+`, a.`+"`expansion`"+`, a.`+"`locked`"+`,
+		SELECT a.`+"`id`"+`, a.`+"`username`"+`, a.`+"`email`"+`, a.`+"`joindate`"+`,
+		       CAST(a.`+"`last_login`"+` AS CHAR), a.`+"`last_ip`"+`, a.`+"`online`"+`, a.`+"`expansion`"+`, a.`+"`locked`"+`,
 		       COALESCE(g.gmlevel, 0)
 		FROM %s a
 		LEFT JOIN (
@@ -504,7 +671,7 @@ func (s *Service) listSQL(ctx context.Context, f ListFilter) ([]ListedAccount, i
 		var (
 			row    ListedAccount
 			join   time.Time
-			last   sql.NullTime
+			last   sql.NullString
 			online int
 			locked int
 			lastIP string
@@ -513,17 +680,17 @@ func (s *Service) listSQL(ctx context.Context, f ListFilter) ([]ListedAccount, i
 			return nil, 0, err
 		}
 		row.JoinDate = join.UTC().Format("2006-01-02 15:04")
-		if last.Valid {
-			row.LastLogin = last.Time.UTC().Format("2006-01-02 15:04")
-		} else {
-			row.LastLogin = "—"
-		}
+		row.LastLogin = formatLastLogin(last)
 		row.LastIP = lastIP
 		row.Online = online != 0
 		row.Locked = locked != 0
 		out = append(out, row)
 	}
-	return out, total, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, 0, err
+	}
+	s.attachBans(ctx, out)
+	return out, total, nil
 }
 
 func sanitizeSearch(s string) string {
@@ -690,19 +857,25 @@ func (s *Service) IssueResetToken(username string) (plain string, err error) {
 }
 
 func (s *Service) ConsumeResetToken(token, newPassword string, ctx context.Context) error {
+	user, err := s.ConsumeResetTokenUser(token)
+	if err != nil {
+		return err
+	}
+	return s.ResetPassword(ctx, user, newPassword)
+}
+
+func (s *Service) ConsumeResetTokenUser(token string) (string, error) {
 	sum := sha256.Sum256([]byte(token))
 	key := hex.EncodeToString(sum[:])
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	rec, ok := s.reset[key]
 	if !ok || rec.Used || time.Now().After(rec.Expiry) {
-		s.mu.Unlock()
-		return ErrResetToken
+		return "", ErrResetToken
 	}
 	rec.Used = true
 	s.reset[key] = rec
-	user := rec.Username
-	s.mu.Unlock()
-	return s.ResetPassword(ctx, user, newPassword)
+	return rec.Username, nil
 }
 
 func (s *Service) updateEmailExpansion(ctx context.Context, username, email string, expansion uint8) error {

@@ -3,7 +3,7 @@
 <section class="panel narrow">
   <p class="eyebrow">The gates of Icecrown</p>
   <h1>Register</h1>
-  <p class="lede">One account per player. Username and password are what you type in the 3.3.5a client.</p>
+  <p class="lede">One account per player. Username and password are what you type in the 3.3.5a client.{{if .SMTP}} We email a confirmation link; the account stays inactive until you open it.{{end}}</p>
   {{if $f.Error}}<div class="flash flash-error" role="alert">{{$f.Error}}</div>{{end}}
   <form method="post" action="/register" class="form" autocomplete="on">
     <input type="hidden" name="csrf_token" value="{{.CSRF}}">
@@ -21,6 +21,12 @@
     <label>Confirm password
       <input type="password" name="password_confirm" required minlength="8" maxlength="16" autocomplete="new-password">
     </label>
+    {{if $f.NeedKey}}
+    <label>Registration key
+      <input name="register_key" required maxlength="64" autocomplete="off">
+      <span class="hint">Ask a GM for this. Public registration is invite-only.</span>
+    </label>
+    {{end}}
     {{if eq .CaptchaProv "turnstile"}}
     <div class="cf-turnstile" data-sitekey="{{.CaptchaKey}}" data-theme="dark"></div>
     {{end}}

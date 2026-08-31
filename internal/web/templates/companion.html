@@ -1,0 +1,100 @@
+{{template "header" .}}
+{{$d := .Data}}
+<section class="panel companion" data-companion{{if $d.Snap}} data-guid="{{$d.Snap.GUID}}" data-zone="{{$d.Snap.RouteZone}}"{{end}}>
+  <p class="eyebrow">Second screen</p>
+  <h1>Companion</h1>
+  <p class="lede">Recommended quest order for a region, built from this realm’s quest chains (not a published leveling guide). Last saved by the realm (not live GPS).</p>
+
+  {{if $d.Chars}}
+    {{if $d.Snap}}
+    {{$p := $d.Snap}}
+    <form method="get" action="/companion" class="companion-pick" data-companion-pick>
+      {{if gt (len $d.Chars) 1}}
+      <label>Character
+        <select name="guid">
+          {{range $d.Chars}}
+          <option value="{{.GUID}}"{{if .Selected}} selected{{end}}>{{.Name}}{{if .Online}} (online){{end}}</option>
+          {{end}}
+        </select>
+      </label>
+      {{else}}
+      <input type="hidden" name="guid" value="{{$p.GUID}}">
+      {{end}}
+      <label>Region
+        <select name="zone">
+          {{range $p.Zones}}
+          <option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Name}}{{if .Band}} ({{.Band}}){{end}}</option>
+          {{end}}
+        </select>
+      </label>
+      <button type="submit" class="btn">Show</button>
+    </form>
+
+    <div class="companion-hud">
+      <div class="companion-toon">
+        <p class="companion-name class-{{classSlug $p.ClassID}}">{{$p.Name}}</p>
+        <p class="companion-meta">
+          <span>Level {{$p.Level}}</span>
+          <span class="class-{{classSlug $p.ClassID}}">{{$p.Class}}</span>
+          <span>{{$p.Race}}</span>
+          <span class="faction-{{$p.Faction}}">{{$p.Faction}}</span>
+          <span class="companion-online" data-online>{{if $p.Online}}Online{{else}}Offline{{end}}</span>
+        </p>
+        <p class="companion-loc" data-location>{{$p.Location}}</p>
+        <p class="companion-coords" data-coords>{{$p.CoordLabel}}</p>
+        <p class="hint">The list skips quests you have already turned in. Dailies, raids, and dungeons are omitted.</p>
+
+        <section>
+          <h2>Quest log <span class="mod-count" data-quest-count>{{len $p.Quests}}</span></h2>
+          <ul class="quest-list" data-quests>
+            {{range $p.Quests}}
+            <li class="quest quest-{{.Status}}">
+              <div class="quest-head">
+                <a href="{{.Wowhead}}" rel="noopener noreferrer">{{.Title}}</a>
+                <span class="quest-status">{{.StatusLabel}}</span>
+              </div>
+              {{if .Objectives}}
+              <ul class="quest-obj">
+                {{range .Objectives}}
+                <li{{if .Done}} class="is-done"{{end}}>{{.Text}} <span>{{.Have}}/{{.Need}}</span></li>
+                {{end}}
+              </ul>
+              {{end}}
+            </li>
+            {{else}}
+            <li class="empty">No quests in the log. Last saved by the realm — pick some up in-game.</li>
+            {{end}}
+          </ul>
+        </section>
+      </div>
+
+      <div class="companion-lists">
+        <section>
+          <h2>Recommended order <span class="mod-count" data-route-name>{{$p.RouteName}}</span></h2>
+          <ol class="quest-list quest-route" data-route>
+            {{range $p.Route}}
+            <li class="quest quest-{{.Status}}{{if .Now}} is-now{{end}}">
+              <span class="quest-step">{{.Step}}</span>
+              <div class="quest-body">
+                <div class="quest-head">
+                  <a href="{{.Wowhead}}" rel="noopener noreferrer">{{.Title}}</a>
+                  <span class="quest-status">{{.StatusLabel}}</span>
+                </div>
+                {{if .Note}}<p class="quest-note">{{.Note}}</p>{{end}}
+              </div>
+            </li>
+            {{else}}
+            <li class="empty">No leftover quests in this region at your level.</li>
+            {{end}}
+          </ol>
+        </section>
+      </div>
+    </div>
+    {{else}}
+    <p class="empty">Pick a character.</p>
+    {{end}}
+  {{else}}
+  <p class="empty">Log into the realm with a character on this account.</p>
+  {{end}}
+</section>
+{{template "footer" .}}
