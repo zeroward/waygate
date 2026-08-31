@@ -7,36 +7,40 @@ import (
 
 func TestBuildCreateCommand(t *testing.T) {
 	got := BuildCreateCommand("Hero", "Abcd1234", "a@b.com")
-	want := `account create "Hero" "Abcd1234" "a@b.com"`
+	want := `account create Hero Abcd1234 a@b.com`
 	if got != want {
 		t.Fatalf("got %q want %q", got, want)
 	}
 	got = BuildCreateCommand("Hero", "Abcd1234", "")
-	if got != `account create "Hero" "Abcd1234"` {
+	if got != `account create Hero Abcd1234` {
+		t.Fatalf("got %q", got)
+	}
+	got = BuildCreateCommand("Hero", "Ab cd12", "")
+	if got != `account create Hero "Ab cd12"` {
 		t.Fatalf("got %q", got)
 	}
 }
 
 func TestBuildUnstuckCommand(t *testing.T) {
 	got := BuildUnstuckCommand("Frostwarden")
-	if got != `unstuck "Frostwarden" inn` {
+	if got != `unstuck Frostwarden inn` {
 		t.Fatalf("got %q", got)
 	}
 }
 
 func TestBuildBanAccountCommand(t *testing.T) {
 	got := BuildBanAccountCommand("Hero", "-1", "botting")
-	if got != `ban account "Hero" -1 "botting"` {
+	if got != `ban account Hero -1 botting` {
 		t.Fatalf("got %q", got)
 	}
-	if BuildUnbanAccountCommand("Hero") != `unban account "Hero"` {
+	if BuildUnbanAccountCommand("Hero") != `unban account Hero` {
 		t.Fatal("unban")
 	}
 }
 
 func TestBuildSetGMLevelCommand(t *testing.T) {
 	got := BuildSetGMLevelCommand("Hero", 2)
-	if got != `account set gmlevel "Hero" 2 -1` {
+	if got != `account set gmlevel Hero 2 -1` {
 		t.Fatalf("got %q", got)
 	}
 }

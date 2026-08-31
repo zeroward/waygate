@@ -192,7 +192,16 @@ func BuildSetPasswordCommand(username, password string) string {
 }
 
 func quote(s string) string {
-	return `"` + s + `"`
+	return arg(s)
+}
+
+// arg leaves simple tokens unquoted. AzerothCore SOAP does not strip
+// quotes, so account create "DEEVEE" stored the name as "DEEVEE".
+func arg(s string) string {
+	if s == "" || strings.ContainsAny(s, " \t\"") {
+		return `"` + s + `"`
+	}
+	return s
 }
 
 func rejectUnsafe(vals ...string) error {
