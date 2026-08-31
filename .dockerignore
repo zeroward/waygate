@@ -16,3 +16,4 @@ downloads/**/*.rar
 downloads/**/*.mpq
 downloads/**/*.exe
 downloads/**/*.patch
+downloads/.up-*
