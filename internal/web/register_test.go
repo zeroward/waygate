@@ -102,6 +102,9 @@ func TestHomeAndRegisterPages(t *testing.T) {
 	if !strings.Contains(string(body), "How to connect") || !strings.Contains(string(body), `/kb/how-to-connect`) {
 		t.Fatal("home missing latest published KB card")
 	}
+	if strings.Contains(string(body), "WireGuard Server") {
+		t.Fatal("vpn status shown while WG is disabled")
+	}
 	res2, err := http.Get(ts.URL + "/register")
 	if err != nil {
 		t.Fatal(err)

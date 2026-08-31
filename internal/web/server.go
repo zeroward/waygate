@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -55,6 +56,9 @@ type Server struct {
 	companion *companion.Service
 	wa        *webauthn.WebAuthn
 	wgOK      bool
+	wgLiveMu  sync.Mutex
+	wgLive    bool
+	wgLiveAt  time.Time
 }
 
 func New(

@@ -9,9 +9,45 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/zeroward/waygate/internal/wg"
 )
+
+func TestHomeShowsWireGuardStatus(t *testing.T) {
+	ts, srv := testWGWeb(t)
+	defer ts.Close()
+	res, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	html := string(body)
+	if !strings.Contains(html, "WireGuard Server") || !strings.Contains(html, "UDP 51820") {
+		t.Fatalf("missing wg kicker: %s", html)
+	}
+	if !strings.Contains(html, "home-kickers") {
+		t.Fatal("missing stacked kickers")
+	}
+
+	srv.cfg.DemoMode = false
+	srv.wgLiveAt = time.Time{}
+	srv.cfg.WGDir = t.TempDir()
+	res, err = http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	html = string(body)
+	if !strings.Contains(html, "WireGuard Server") {
+		t.Fatal("wg kicker hidden when down")
+	}
+	if !strings.Contains(html, "Offline") {
+		t.Fatalf("expected offline wg: %s", html)
+	}
+}
 
 func TestWGHiddenWhenDisabled(t *testing.T) {
 	ts, srv := testWeb(t)

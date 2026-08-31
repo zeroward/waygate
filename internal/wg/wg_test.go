@@ -1,11 +1,16 @@
 package wg
 
 import (
+	"context"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestGenerateAndServerKeys(t *testing.T) {
@@ -147,5 +152,48 @@ func TestServerConfIncludesPeers(t *testing.T) {
 	conf := ServerConf("serverpriv", 51820, []string{"[Peer]\nPublicKey = peerone\nAllowedIPs = 10.8.0.2/32\n"})
 	if !strings.Contains(conf, "ListenPort = 51820") || !strings.Contains(conf, "peerone") {
 		t.Fatal(conf)
+	}
+}
+
+func TestHealthFreshAndProbe(t *testing.T) {
+	dir := t.TempDir()
+	if HealthFresh(dir, HealthMaxAge) {
+		t.Fatal("missing health should be stale")
+	}
+	confDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(confDir, "wg0.conf"), []byte("[Interface]\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if !HealthFresh(confDir, HealthMaxAge) {
+		t.Fatal("wg0.conf mtime should count as alive")
+	}
+	if err := WriteHealth(dir); err != nil {
+		t.Fatal(err)
+	}
+	if !HealthFresh(dir, HealthMaxAge) {
+		t.Fatal("fresh write")
+	}
+	stale := filepath.Join(dir, HealthFile)
+	past := time.Now().Add(-time.Minute)
+	if err := os.Chtimes(stale, past, past); err != nil {
+		t.Fatal(err)
+	}
+	if HealthFresh(dir, HealthMaxAge) {
+		t.Fatal("old health should be stale")
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("ok\n"))
+	}))
+	defer srv.Close()
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !Probe(context.Background(), u.Host, dir) {
+		t.Fatal("http health should succeed when heartbeat is stale")
+	}
+	if Probe(context.Background(), "127.0.0.1:1", t.TempDir()) {
+		t.Fatal("dead listen and empty dir")
 	}
 }

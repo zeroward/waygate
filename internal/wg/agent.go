@@ -80,6 +80,7 @@ func (a *Agent) Run(ctx context.Context) error {
 		a.Log.Error("wg-agent initial sync", "err", err)
 	} else {
 		a.Log.Info("wg-agent up", "iface", a.Iface, "addr", a.ServerAddr, "port", a.Port)
+		_ = WriteHealth(a.Dir)
 	}
 	go a.serveHealth()
 	t := time.NewTicker(2 * time.Second)
@@ -91,7 +92,9 @@ func (a *Agent) Run(ctx context.Context) error {
 		case <-t.C:
 			if err := a.sync(); err != nil {
 				a.Log.Error("wg-agent sync", "err", err)
+				continue
 			}
+			_ = WriteHealth(a.Dir)
 		}
 	}
 }

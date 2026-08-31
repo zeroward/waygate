@@ -2,14 +2,26 @@
 {{$s := .Data}}
 <div class="home">
   <section class="home-hero">
-    <p class="home-kicker">
-      <span class="live{{if $s.RealmUp}} is-up{{end}}" aria-hidden="true"></span>
-      {{if $s.RealmUp}}Online{{else}}Offline{{end}}
-      <span class="dot">·</span>
-      WotLK 3.3.5a
-      <span class="dot">·</span>
-      Build 12340
-    </p>
+    <div class="home-kickers">
+      <p class="home-kicker">
+        <span class="live{{if $s.RealmUp}} is-up{{end}}" aria-hidden="true"></span>
+        {{if $s.RealmUp}}Online{{else}}Offline{{end}}
+        <span class="dot">·</span>
+        WotLK 3.3.5a
+        <span class="dot">·</span>
+        Build 12340
+      </p>
+      {{if $s.WGEnabled}}
+      <p class="home-kicker">
+        <span class="live{{if $s.WGUp}} is-up{{end}}" aria-hidden="true"></span>
+        {{if $s.WGUp}}Online{{else}}Offline{{end}}
+        <span class="dot">·</span>
+        WireGuard Server
+        <span class="dot">·</span>
+        UDP {{$s.WGPort}}
+      </p>
+      {{end}}
+    </div>
     <h1>{{.RealmName}}</h1>
     <p class="lede">{{$s.Blurb}}</p>
     {{if .User}}

@@ -356,6 +356,14 @@ h2 { font-size: 1.05rem; letter-spacing: -0.02em; color: var(--ice-2); }
 /* —— Home —— */
 .home { display: flex; flex-direction: column; gap: 1.35rem; }
 .home-hero { padding: 0.2rem 0 0.4rem; }
+.home-kickers {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.4rem;
+  margin: 0 0 0.9rem;
+}
+.home-kickers .home-kicker { margin: 0; }
 .home-kicker {
   display: flex;
   align-items: center;

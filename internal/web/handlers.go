@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/zeroward/waygate/internal/account"
@@ -25,7 +26,10 @@ import (
 
 type homeView struct {
 	status.Snapshot
-	LatestKB *kb.Article
+	LatestKB  *kb.Article
+	WGEnabled bool
+	WGUp      bool
+	WGPort    int
 }
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
@@ -33,7 +37,15 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	hv := homeView{Snapshot: s.status.Get(r.Context())}
+	hv := homeView{
+		Snapshot:  s.status.Get(r.Context()),
+		WGEnabled: s.cfg.WGEnabled,
+		WGUp:      s.wireGuardUp(r.Context()),
+		WGPort:    s.cfg.WGPort,
+	}
+	if hv.WGPort <= 0 {
+		hv.WGPort = 51820
+	}
 	if s.kb != nil {
 		art, err := s.kb.LatestPublished(r.Context())
 		if err != nil {
@@ -43,6 +55,30 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.view(w, r, "home.html", "Home", "home", hv)
+}
+
+func (s *Server) wireGuardUp(ctx context.Context) bool {
+	if !s.cfg.WGEnabled {
+		return false
+	}
+	if s.cfg.DemoMode {
+		return true
+	}
+	s.wgLiveMu.Lock()
+	defer s.wgLiveMu.Unlock()
+	ttl := s.cfg.StatusCache
+	if ttl <= 0 {
+		ttl = 20 * time.Second
+	}
+	if !s.wgLiveAt.IsZero() && time.Since(s.wgLiveAt) < ttl {
+		return s.wgLive
+	}
+	pctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	up := wg.Probe(pctx, s.cfg.WGAgentListen, s.cfg.WGDir)
+	s.wgLive = up
+	s.wgLiveAt = time.Now()
+	return up
 }
 
 func (s *Server) requireLogin(w http.ResponseWriter, r *http.Request) *session.Session {
