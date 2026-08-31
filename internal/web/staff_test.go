@@ -121,6 +121,43 @@ func TestMaintenanceBannerAdminOnly(t *testing.T) {
 		t.Fatalf("banner missing %s", home)
 	}
 
+	res, err = admin.Get(ts.URL + "/staff")
+	if err != nil {
+		t.Fatal(err)
+	}
+	staffPage, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	csrf = extractCSRF(string(staffPage))
+	today := time.Now().UTC().Format("2006-01-02")
+	res, err = admin.PostForm(ts.URL+"/staff/events", url.Values{
+		"csrf_token": {csrf},
+		"event_date": {today},
+		"title":      {"Raid night"},
+		"detail":     {"ICC 25, 8pm UTC"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	res, err = admin.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	if !strings.Contains(string(home), "Raid night") || !strings.Contains(string(home), "ICC 25") {
+		t.Fatalf("calendar missing %s", home)
+	}
+	res, err = admin.Get(ts.URL + "/staff?select=ADMINONE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	staffChars, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if !strings.Contains(string(staffChars), ">Login<") || !strings.Contains(string(staffChars), "HEROONE") {
+		t.Fatalf("staff chars %s", staffChars)
+	}
+
 	until := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
 	res, err = admin.Get(ts.URL + "/staff")
 	if err != nil {

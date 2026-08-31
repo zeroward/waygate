@@ -44,6 +44,9 @@ func TestAccountListsCharacters(t *testing.T) {
 	if !strings.Contains(html, "Frostwarden") || !strings.Contains(html, "NorthrendScout") {
 		t.Fatal("missing demo characters")
 	}
+	if !strings.Contains(html, ">Login<") || !strings.Contains(html, "HEROONE") {
+		t.Fatal("missing Wow.exe login column")
+	}
 	if !strings.Contains(html, "Paladin") || !strings.Contains(html, "Hunter") {
 		t.Fatal("missing class")
 	}

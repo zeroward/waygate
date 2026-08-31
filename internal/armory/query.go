@@ -3,6 +3,7 @@ package armory
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -96,7 +97,126 @@ func (s *Service) inspectSQL(ctx context.Context, name string) (Profile, bool) {
 	p.Specs = s.talents(ctx, p.GUID, activeSpec, specCount)
 	p.Achievements = s.achievements(ctx, p.GUID)
 	p.Arena = s.arena(ctx, p.GUID)
+	p.Professions = s.skills(ctx, p.GUID)
+	p.Reputations = s.reputations(ctx, p.GUID)
 	return p, true
+}
+
+func (s *Service) guildSQL(ctx context.Context, name string) (GuildPage, bool) {
+	q := fmt.Sprintf(`
+		SELECT g.`+"`guildid`"+`, g.`+"`name`"+`, COALESCE(g.`+"`motd`"+`, ''), COALESCE(g.`+"`info`"+`, ''),
+		       g.`+"`createdate`"+`, COALESCE(c.`+"`name`"+`, '')
+		FROM %s g
+		LEFT JOIN %s c ON c.`+"`guid`"+` = g.`+"`leaderguid`"+`
+		WHERE g.`+"`name`"+` = ? OR LOWER(g.`+"`name`"+`) = LOWER(?)
+		LIMIT 1`, s.db.QChar("guild"), s.db.QChar("characters"))
+	var g GuildPage
+	var created uint32
+	err := s.db.SQL.QueryRowContext(ctx, q, name, name).Scan(&g.ID, &g.Name, &g.MOTD, &g.Info, &created, &g.Leader)
+	if err != nil {
+		return GuildPage{}, false
+	}
+	g.MOTD = strings.TrimSpace(g.MOTD)
+	g.Info = strings.TrimSpace(g.Info)
+	if created > 0 {
+		g.Created = time.Unix(int64(created), 0).UTC().Format("2006-01-02")
+	}
+	_, roster := s.guildRoster(ctx, g.Name)
+	g.Roster = roster
+	g.Members = len(roster)
+	for _, m := range roster {
+		if m.Online {
+			g.Online++
+		}
+	}
+	return g, true
+}
+
+func (s *Service) skills(ctx context.Context, guid uint32) []Skill {
+	ids := professionIDs()
+	if len(ids) == 0 {
+		return nil
+	}
+	ph := make([]string, len(ids))
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, guid)
+	for i, id := range ids {
+		ph[i] = "?"
+		args = append(args, id)
+	}
+	q := fmt.Sprintf(`SELECT `+"`skill`"+`, `+"`value`"+`, `+"`max`"+` FROM %s WHERE `+"`guid`"+` = ? AND `+"`skill`"+` IN (%s)`,
+		s.db.QChar("character_skills"), strings.Join(ph, ","))
+	rows, err := s.db.SQL.QueryContext(ctx, q, args...)
+	if err != nil {
+		s.log.Error("armory skills query", "guid", guid, "err", err)
+		return nil
+	}
+	defer rows.Close()
+	var out []Skill
+	for rows.Next() {
+		var id, value, max uint32
+		if err := rows.Scan(&id, &value, &max); err != nil {
+			return out
+		}
+		meta, ok := professionSkills[id]
+		if !ok {
+			continue
+		}
+		out = append(out, Skill{ID: id, Name: meta.Name, Value: value, Max: max, Secondary: meta.Secondary})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Secondary != out[j].Secondary {
+			return !out[i].Secondary
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
+}
+
+func (s *Service) reputations(ctx context.Context, guid uint32) []Rep {
+	ids := factionIDs()
+	if len(ids) == 0 {
+		return nil
+	}
+	ph := make([]string, len(ids))
+	args := make([]any, 0, len(ids)+1)
+	args = append(args, guid)
+	for i, id := range ids {
+		ph[i] = "?"
+		args = append(args, id)
+	}
+	q := fmt.Sprintf(`SELECT `+"`faction`"+`, `+"`standing`"+`, `+"`flags`"+` FROM %s WHERE `+"`guid`"+` = ? AND `+"`faction`"+` IN (%s)`,
+		s.db.QChar("character_reputation"), strings.Join(ph, ","))
+	rows, err := s.db.SQL.QueryContext(ctx, q, args...)
+	if err != nil {
+		s.log.Error("armory reputation query", "guid", guid, "err", err)
+		return nil
+	}
+	defer rows.Close()
+	var out []Rep
+	for rows.Next() {
+		var id uint32
+		var standing int32
+		var flags uint32
+		if err := rows.Scan(&id, &standing, &flags); err != nil {
+			return out
+		}
+		if !showReputation(standing, flags) {
+			continue
+		}
+		meta, ok := factions[id]
+		if !ok {
+			continue
+		}
+		out = append(out, Rep{ID: id, Name: meta.Name, Standing: standing, Rank: StandingRank(standing), Group: meta.Group})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Standing != out[j].Standing {
+			return out[i].Standing > out[j].Standing
+		}
+		return out[i].Name < out[j].Name
+	})
+	return out
 }
 
 func (s *Service) guildName(ctx context.Context, guid uint32) string {

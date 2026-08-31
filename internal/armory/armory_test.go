@@ -57,6 +57,25 @@ func TestDemoSearchAndInspect(t *testing.T) {
 	if !foundScout {
 		t.Fatal("NorthrendScout should be in Ashen Verdict")
 	}
+	if len(p.Professions) < 2 || p.Professions[0].Name != "Enchanting" {
+		t.Fatalf("professions %+v", p.Professions)
+	}
+	foundArgent := false
+	for _, r := range p.Reputations {
+		if r.Name == "Argent Crusade" && r.Rank == "Exalted" {
+			foundArgent = true
+		}
+	}
+	if !foundArgent {
+		t.Fatalf("reps %+v", p.Reputations)
+	}
+	g, ok := s.Guild(context.Background(), "Ashen Verdict")
+	if !ok || g.Name != "Ashen Verdict" || g.Leader != "Frostwarden" || len(g.Roster) < 2 {
+		t.Fatalf("guild page %+v ok=%v", g, ok)
+	}
+	if _, ok := s.Guild(context.Background(), "No Such Guild"); ok {
+		t.Fatal("missing guild")
+	}
 	if _, ok := s.Inspect(context.Background(), "NoSuchHero"); ok {
 		t.Fatal("missing char should 404")
 	}
@@ -101,5 +120,20 @@ func TestValidName(t *testing.T) {
 	}
 	if ValidName("Frost-ward") || ValidName("") {
 		t.Fatal("invalid")
+	}
+}
+
+func TestValidGuildName(t *testing.T) {
+	if !ValidGuildName("Ashen Verdict") || !ValidGuildName("Kul'Tiras") || !ValidGuildName("A-OK") {
+		t.Fatal("valid guild")
+	}
+	if ValidGuildName("x") || ValidGuildName("") || ValidGuildName("no_underscore") {
+		t.Fatal("invalid guild")
+	}
+}
+
+func TestStandingRank(t *testing.T) {
+	if StandingRank(42000) != "Exalted" || StandingRank(0) != "Neutral" || StandingRank(-9000) != "Hated" {
+		t.Fatal("bands")
 	}
 }

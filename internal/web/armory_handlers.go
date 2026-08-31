@@ -2,6 +2,7 @@ package web
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/zeroward/waygate/internal/armory"
@@ -51,7 +52,7 @@ func (s *Server) armoryInspect(w http.ResponseWriter, r *http.Request) {
 	}
 	tab := r.URL.Query().Get("tab")
 	switch tab {
-	case "gear", "talents", "achievements", "pvp", "guild":
+	case "gear", "talents", "professions", "reputations", "achievements", "pvp", "guild":
 	default:
 		tab = "sheet"
 	}
@@ -59,4 +60,22 @@ func (s *Server) armoryInspect(w http.ResponseWriter, r *http.Request) {
 		"Tab":     tab,
 		"Profile": p,
 	})
+}
+
+func (s *Server) armoryGuild(w http.ResponseWriter, r *http.Request) {
+	if s.requireLogin(w, r) == nil {
+		return
+	}
+	raw := strings.TrimSpace(r.PathValue("name"))
+	name, err := url.PathUnescape(raw)
+	if err != nil {
+		name = raw
+	}
+	name = strings.ReplaceAll(name, "+", " ")
+	g, ok := s.armory.Guild(r.Context(), name)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	s.view(w, r, "armory_guild.html", g.Name, "armory", g)
 }

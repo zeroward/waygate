@@ -130,6 +130,9 @@ CREATE INDEX IF NOT EXISTS idx_staff_events_at ON staff_events(at DESC);
 	if err := s.migrateSettings(); err != nil {
 		return err
 	}
+	if err := s.migrateEvents(); err != nil {
+		return err
+	}
 	return s.migratePending()
 }
 

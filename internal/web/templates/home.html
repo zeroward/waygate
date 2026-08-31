@@ -47,6 +47,23 @@
     </div>
   </section>
 
+  {{if $s.Calendar}}
+  <section class="panel home-calendar">
+    <h2>Realm calendar</h2>
+    <ul>
+      {{range $s.Calendar}}
+      <li>
+        <time datetime="{{.Date}}">{{.DisplayDate}}</time>
+        <div>
+          <strong>{{.Title}}</strong>
+          {{if .Detail}}<span>{{.Detail}}</span>{{end}}
+        </div>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+
   {{if $s.LatestKB}}
   <section class="panel home-kb">
     <p class="eyebrow">{{$s.LatestKB.Category}}</p>

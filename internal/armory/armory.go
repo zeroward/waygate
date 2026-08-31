@@ -22,8 +22,9 @@ type Service struct {
 	db  *db.DB
 	log *slog.Logger
 
-	mu    sync.Mutex
-	cache map[string]cacheEnt
+	mu     sync.Mutex
+	cache  map[string]cacheEnt
+	guilds map[string]guildEnt
 }
 
 type cacheEnt struct {
@@ -32,11 +33,17 @@ type cacheEnt struct {
 	ok    bool
 }
 
+type guildEnt struct {
+	g     GuildPage
+	until time.Time
+	ok    bool
+}
+
 func New(cfg config.Config, database *db.DB, log *slog.Logger) *Service {
 	if log == nil {
 		log = slog.New(slog.NewTextHandler(io.Discard, nil))
 	}
-	return &Service{cfg: cfg, db: database, log: log, cache: map[string]cacheEnt{}}
+	return &Service{cfg: cfg, db: database, log: log, cache: map[string]cacheEnt{}, guilds: map[string]guildEnt{}}
 }
 
 type SearchHit struct {
@@ -74,6 +81,36 @@ type Profile struct {
 	Specs          []TalentSpec
 	Achievements   []Achievement
 	Arena          []ArenaTeam
+	Professions    []Skill
+	Reputations    []Rep
+}
+
+type GuildPage struct {
+	ID      uint32
+	Name    string
+	MOTD    string
+	Info    string
+	Created string
+	Leader  string
+	Members int
+	Online  int
+	Roster  []GuildMember
+}
+
+type Skill struct {
+	ID        uint32
+	Name      string
+	Value     uint32
+	Max       uint32
+	Secondary bool
+}
+
+type Rep struct {
+	ID       uint32
+	Name     string
+	Standing int32
+	Rank     string
+	Group    string
 }
 
 type GearItem struct {
@@ -161,6 +198,26 @@ func ValidName(s string) bool {
 	return n >= 2 && n <= 12
 }
 
+func NormalizeGuildName(s string) string {
+	return strings.Join(strings.Fields(strings.TrimSpace(s)), " ")
+}
+
+func ValidGuildName(s string) bool {
+	s = NormalizeGuildName(s)
+	n := 0
+	for _, r := range s {
+		switch {
+		case unicode.IsLetter(r) && r <= unicode.MaxASCII:
+		case unicode.IsDigit(r) && r <= unicode.MaxASCII:
+		case r == ' ' || r == '-' || r == '\'':
+		default:
+			return false
+		}
+		n++
+	}
+	return n >= 2 && n <= 24
+}
+
 func (s *Service) Search(ctx context.Context, q string) []SearchHit {
 	q = strings.TrimSpace(q)
 	if q == "" || !ValidName(q) && !validPrefix(q) {
@@ -211,6 +268,36 @@ func (s *Service) Inspect(ctx context.Context, name string) (Profile, bool) {
 	s.cache[key] = cacheEnt{p: p, ok: ok, until: time.Now().Add(ttl)}
 	s.mu.Unlock()
 	return p, ok
+}
+
+func (s *Service) Guild(ctx context.Context, name string) (GuildPage, bool) {
+	name = NormalizeGuildName(name)
+	if !ValidGuildName(name) {
+		return GuildPage{}, false
+	}
+	key := strings.ToLower(name)
+	ttl := s.cfg.StatusCache
+	if ttl < time.Second {
+		ttl = 20 * time.Second
+	}
+	s.mu.Lock()
+	if e, ok := s.guilds[key]; ok && time.Now().Before(e.until) {
+		s.mu.Unlock()
+		return e.g, e.ok
+	}
+	s.mu.Unlock()
+
+	var g GuildPage
+	var ok bool
+	if s.cfg.DemoMode || s.db == nil {
+		g, ok = demoGuildPage(name)
+	} else {
+		g, ok = s.guildSQL(ctx, name)
+	}
+	s.mu.Lock()
+	s.guilds[key] = guildEnt{g: g, ok: ok, until: time.Now().Add(ttl)}
+	s.mu.Unlock()
+	return g, ok
 }
 
 func fillSheet(p *Profile, race, class, gender uint8, money, played, logout uint32, mapID, zone uint32) {

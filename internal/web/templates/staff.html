@@ -24,6 +24,47 @@
     </form>
   </section>
 
+  <section class="panel" id="calendar">
+    <h2>Realm calendar</h2>
+    <p class="hint">Dated notes on the home page: raid nights, weekly reset, “don’t log in”. Past dates drop off the public list automatically.</p>
+    <form method="post" action="/staff/events" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Date
+        <input type="date" name="event_date" required>
+      </label>
+      <label>Title
+        <input name="title" required maxlength="80" placeholder="Raid night — ICC 25">
+      </label>
+      <label>Detail (optional)
+        <input name="detail" maxlength="280" placeholder="8pm UTC. Sign up in Discord.">
+      </label>
+      <button type="submit" class="btn btn-gold">Add event</button>
+    </form>
+    {{if $d.Calendar}}
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Date</th><th>Title</th><th></th></tr></thead>
+        <tbody>
+          {{range $d.Calendar}}
+          <tr>
+            <td>{{.Date}}</td>
+            <td>{{.Title}}{{if .Detail}} <span class="muted">{{.Detail}}</span>{{end}}</td>
+            <td>
+              <form method="post" action="/staff/events/{{.ID}}/delete">
+                <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+                <button type="submit" class="btn btn-ghost">Remove</button>
+              </form>
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="empty">No calendar events yet.</p>
+    {{end}}
+  </section>
+
   <section class="panel staff-tickets" id="tickets">
     <header class="home-mods-head">
       <h2>Open tickets</h2>
@@ -163,6 +204,23 @@
           </div>
           <p class="hint" data-staff-gatehouse-hint{{if not (and $sel $sel.Gatehouse)}} hidden{{end}}>{{if and $sel $sel.Gatehouse}}Gatehouse account {{$sel.Gatehouse}}. Rank and suspend apply to every Wow.exe login on that account.{{end}}</p>
           <p class="hint" data-staff-linked-hint{{if not $d.LinkedLogins}} hidden{{end}}>{{if $d.LinkedLogins}}Wow.exe logins: {{range $i, $n := $d.LinkedLogins}}{{if $i}}, {{end}}<code>{{$n}}</code>{{end}}{{end}}</p>
+          {{if $d.SelChars}}
+          <div class="table-wrap staff-sel-chars">
+            <table>
+              <thead><tr><th>Name</th><th>Login</th><th>Level</th><th>Class</th></tr></thead>
+              <tbody>
+                {{range $d.SelChars}}
+                <tr>
+                  <td class="name"><a href="/armory/{{.Name}}">{{.Name}}</a>{{if .Online}} <span class="char-online">Online</span>{{end}}</td>
+                  <td>{{if .Login}}<code>{{.Login}}</code>{{else}}—{{end}}</td>
+                  <td>{{.Level}}</td>
+                  <td class="class-{{classSlug .ClassID}}">{{.Class}}</td>
+                </tr>
+                {{end}}
+              </tbody>
+            </table>
+          </div>
+          {{end}}
         </header>
 
         {{if and .Flash $sel}}

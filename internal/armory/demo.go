@@ -109,7 +109,56 @@ func demoInspect(name string) (Profile, bool) {
 	if c.guild != "" {
 		p.GuildMOTD, p.GuildRoster = demoGuildRoster(c.guild)
 	}
+	if strings.EqualFold(c.name, "Frostwarden") {
+		p.Professions = []Skill{
+			{ID: 333, Name: "Enchanting", Value: 450, Max: 450},
+			{ID: 755, Name: "Jewelcrafting", Value: 450, Max: 450},
+			{ID: 185, Name: "Cooking", Value: 450, Max: 450, Secondary: true},
+			{ID: 356, Name: "Fishing", Value: 375, Max: 375, Secondary: true},
+		}
+		p.Reputations = []Rep{
+			{ID: 72, Name: "Stormwind", Standing: 42999, Rank: StandingRank(42999), Group: "Alliance"},
+			{ID: 1106, Name: "Argent Crusade", Standing: 42999, Rank: StandingRank(42999), Group: "Northrend"},
+			{ID: 1156, Name: "The Ashen Verdict", Standing: 21000, Rank: StandingRank(21000), Group: "Northrend"},
+			{ID: 1090, Name: "Kirin Tor", Standing: 9000, Rank: StandingRank(9000), Group: "Northrend"},
+		}
+	}
 	return p, true
+}
+
+func demoGuildPage(name string) (GuildPage, bool) {
+	name = NormalizeGuildName(name)
+	var canonical string
+	for _, c := range demoRoster() {
+		if strings.EqualFold(c.guild, name) {
+			canonical = c.guild
+			break
+		}
+	}
+	if canonical == "" {
+		return GuildPage{}, false
+	}
+	motd, roster := demoGuildRoster(canonical)
+	online := 0
+	for _, m := range roster {
+		if m.Online {
+			online++
+		}
+	}
+	leader := ""
+	if len(roster) > 0 {
+		leader = roster[0].Name
+	}
+	return GuildPage{
+		ID:      1,
+		Name:    canonical,
+		MOTD:    motd,
+		Created: "2008-11-13",
+		Leader:  leader,
+		Members: len(roster),
+		Online:  online,
+		Roster:  roster,
+	}, true
 }
 
 func demoGuildRoster(guild string) (string, []GuildMember) {

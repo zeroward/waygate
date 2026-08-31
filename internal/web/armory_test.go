@@ -134,6 +134,45 @@ func TestArmoryRequiresLoginAndDemoInspect(t *testing.T) {
 		t.Fatal("missing talent wowhead link")
 	}
 
+	res, err = client.Get(ts.URL + "/armory/Frostwarden?tab=professions")
+	if err != nil {
+		t.Fatal(err)
+	}
+	prof, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if !strings.Contains(string(prof), "Enchanting") || !strings.Contains(string(prof), "450") {
+		t.Fatalf("professions %s", prof)
+	}
+
+	res, err = client.Get(ts.URL + "/armory/Frostwarden?tab=reputations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reps, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if !strings.Contains(string(reps), "Argent Crusade") || !strings.Contains(string(reps), "Exalted") {
+		t.Fatalf("reputations %s", reps)
+	}
+
+	res, err = client.Get(ts.URL + "/armory/guild/Ashen%20Verdict")
+	if err != nil {
+		t.Fatal(err)
+	}
+	gpageFull, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || !strings.Contains(string(gpageFull), "Ashen Verdict") || !strings.Contains(string(gpageFull), "NorthrendScout") || !strings.Contains(string(gpageFull), "Guild Master") {
+		t.Fatalf("guild page %d %s", res.StatusCode, gpageFull)
+	}
+
+	res, err = noRedir.Get(ts.URL + "/armory/guild/Ashen%20Verdict")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("anon guild %d", res.StatusCode)
+	}
+
 	res, err = client.Get(ts.URL + "/armory/Frostwarden?tab=guild")
 	if err != nil {
 		t.Fatal(err)

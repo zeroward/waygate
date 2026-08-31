@@ -1,0 +1,32 @@
+{{template "header" .}}
+{{$g := .Data}}
+<section class="panel armory-char">
+  <p class="eyebrow">Guild</p>
+  <h1>{{$g.Name}}</h1>
+  <p class="lede">{{$g.Members}} members{{if $g.Online}} · {{$g.Online}} online{{end}}{{if $g.Leader}} · Led by <a href="/armory/{{$g.Leader}}">{{$g.Leader}}</a>{{end}}{{if $g.Created}} · Founded {{$g.Created}}{{end}}</p>
+  {{if $g.MOTD}}<p class="lede">{{$g.MOTD}}</p>{{end}}
+  {{if $g.Info}}<p class="hint">{{$g.Info}}</p>{{end}}
+  {{if $g.Roster}}
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Name</th><th>Level</th><th>Class</th><th>Rank</th><th></th></tr>
+      </thead>
+      <tbody>
+        {{range $g.Roster}}
+        <tr>
+          <td class="name"><a href="/armory/{{.Name}}">{{.Name}}</a>{{if .Online}} <span class="char-online">Online</span>{{end}}</td>
+          <td>{{.Level}}</td>
+          <td class="class-{{classSlug .ClassID}}">{{.Class}}</td>
+          <td>{{if .Rank}}{{.Rank}}{{else}}—{{end}}</td>
+          <td></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+  </div>
+  {{else}}
+  <p class="empty">No members listed.</p>
+  {{end}}
+</section>
+{{template "footer" .}}

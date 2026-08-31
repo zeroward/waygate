@@ -26,6 +26,9 @@ func TestDemoAccountCharacters(t *testing.T) {
 	if chars[0].Name == "" || chars[0].Gold == "" || chars[0].Location == "" {
 		t.Fatalf("incomplete: %+v", chars[0])
 	}
+	if chars[0].Login != "HEROONE" {
+		t.Fatalf("login %q", chars[0].Login)
+	}
 }
 
 func TestDemoUnstuck(t *testing.T) {

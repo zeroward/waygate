@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -30,6 +31,7 @@ type homeView struct {
 	WGEnabled bool
 	WGUp      bool
 	WGPort    int
+	Calendar  []kb.RealmEvent
 }
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
@@ -42,6 +44,7 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		WGEnabled: s.cfg.WGEnabled,
 		WGUp:      s.wireGuardUp(r.Context()),
 		WGPort:    s.cfg.WGPort,
+		Calendar:  s.upcomingCalendar(r.Context()),
 	}
 	if hv.WGPort <= 0 {
 		hv.WGPort = 51820
@@ -444,14 +447,18 @@ func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
 	pages := (total + per - 1) / per
 	actorGM := int(sess.User.GMLevel)
 	s.attachGatehouse(r.Context(), rows)
+	sortStaffAccounts(rows)
 	selected := s.staffSelected(r.Context(), rows, r.URL.Query().Get("select"), q, includeBots)
 	canModify := true
 	canRank := true
 	selRank := 0
 	var linked []string
+	var selChars []status.Character
 	if selected != nil {
+		var ownerID uint32
 		if s.id != nil {
-			gh, _, names := s.id.LinkedWowNames(r.Context(), selected.Username)
+			gh, uid, names := s.id.LinkedWowNames(r.Context(), selected.Username)
+			ownerID = uid
 			if selected.Gatehouse == "" {
 				selected.Gatehouse = gh
 			}
@@ -473,6 +480,15 @@ func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
 			canRank = false
 		}
 		linked = selected.Linked
+		ids := []uint32{selected.ID}
+		if ownerID != 0 {
+			if accIDs, err := s.id.AccountIDs(r.Context(), ownerID); err == nil && len(accIDs) > 0 {
+				ids = accIDs
+			}
+		}
+		if list, err := s.status.AccountCharactersMany(r.Context(), ids); err == nil {
+			selChars = list
+		}
 	}
 	s.view(w, r, "staff.html", "Admin panel", "staff", map[string]any{
 		"Accounts":          rows,
@@ -506,6 +522,24 @@ func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
 		"BannerMessage":     s.bannerMessage(r.Context()),
 		"BannerUntil":       s.bannerUntilLocal(r.Context()),
 		"LinkedLogins":      linked,
+		"Calendar":          s.staffCalendar(r.Context()),
+		"SelChars":          selChars,
+	})
+}
+
+func sortStaffAccounts(rows []account.ListedAccount) {
+	sort.SliceStable(rows, func(i, j int) bool {
+		gi, gj := rows[i].Gatehouse, rows[j].Gatehouse
+		if gi == "" && gj != "" {
+			return false
+		}
+		if gi != "" && gj == "" {
+			return true
+		}
+		if gi != gj {
+			return gi < gj
+		}
+		return rows[i].Username < rows[j].Username
 	})
 }
 

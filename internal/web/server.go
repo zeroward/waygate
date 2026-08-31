@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -81,7 +82,8 @@ func New(
 			}
 			return strings.ToUpper(string(r))
 		},
-		"rankName": account.RankName,
+		"rankName":   account.RankName,
+		"pathEscape": url.PathEscape,
 	}
 	tpl, err := template.New("").Funcs(funcs).ParseFS(embedded, "templates/*.html")
 	if err != nil {
@@ -191,6 +193,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /online", s.online)
 	mux.HandleFunc("GET /leaderboards", s.leaderboards)
 	mux.HandleFunc("GET /armory", s.armorySearch)
+	mux.HandleFunc("GET /armory/guild/{name}", s.armoryGuild)
 	mux.HandleFunc("GET /armory/{name}", s.armoryInspect)
 	mux.HandleFunc("GET /companion", s.companionPage)
 	mux.HandleFunc("GET /companion/live", s.companionLive)
@@ -224,6 +227,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /staff/tickets/{id}", s.staffTicketUpdate)
 	mux.HandleFunc("GET /staff", s.staffGET)
 	mux.HandleFunc("POST /staff/banner", s.staffBannerPOST)
+	mux.HandleFunc("POST /staff/events", s.staffEventPOST)
+	mux.HandleFunc("POST /staff/events/{id}/delete", s.staffEventDeletePOST)
 	mux.HandleFunc("POST /staff/create", s.staffCreatePOST)
 	mux.HandleFunc("POST /staff/reset", s.staffResetPOST)
 	mux.HandleFunc("POST /staff/rank", s.staffRankPOST)

@@ -22,6 +22,8 @@ GRANT SELECT ON acore_characters.guild_member TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.guild_rank TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.arena_team TO 'webreg'@'%';
 GRANT SELECT ON acore_characters.arena_team_member TO 'webreg'@'%';
+GRANT SELECT ON acore_characters.character_skills TO 'webreg'@'%';
+GRANT SELECT ON acore_characters.character_reputation TO 'webreg'@'%';
 -- Account unstuck (hearth/homebind) when SOAP is down. Column-level UPDATE only.
 REVOKE UPDATE ON acore_characters.characters FROM 'webreg'@'%';
 GRANT UPDATE (`position_x`, `position_y`, `position_z`, `orientation`, `map`, `zone`,

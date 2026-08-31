@@ -399,6 +399,52 @@ h2 { font-size: 1.05rem; letter-spacing: -0.02em; color: var(--ice-2); }
 }
 .home-cta-quiet a:hover { color: var(--ice-2); }
 
+.home-calendar ul {
+  list-style: none;
+  margin: 0.65rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.home-calendar li {
+  display: grid;
+  grid-template-columns: 4.5rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: baseline;
+}
+.home-calendar time {
+  color: var(--gold-2);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+.home-calendar strong { display: block; }
+.home-calendar span {
+  display: block;
+  color: var(--muted);
+  font-size: 0.88rem;
+  margin-top: 0.15rem;
+}
+.armory-skills {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1.1rem;
+}
+.armory-skills h2 { margin: 0 0 0.45rem; font-size: 1.05rem; }
+.armory-skills ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.armory-skills li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  border-bottom: 1px solid var(--line);
+  padding: 0.35rem 0;
+}
+.staff-sel-chars { margin-top: 0.75rem; }
+
 .metrics {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
