@@ -141,7 +141,7 @@
     }
   }
 
-  loadScript(CONTENT + "viewer/viewer.min.js").then(function () {
+  loadScript(CONTENT + "viewer/viewer.min.js?v=live").then(function () {
     if (typeof ZamModelViewer !== "function") throw new Error("viewer");
     const race = character.race;
     const gender = character.gender;

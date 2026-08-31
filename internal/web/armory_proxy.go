@@ -83,17 +83,30 @@ func mvCleanPath(p string) (string, bool) {
 	return clean, true
 }
 
-// mvFallback lists same-schema CDN paths to try after a 404.
-// Cloaks: paperdoll slot 15, zamimg stores them under InventoryType 16.
+// mvFallback lists CDN paths to try after a 404.
 func mvFallback(p string) []string {
-	const cloak = "meta/armor/15/"
-	if strings.HasPrefix(p, cloak) && strings.HasSuffix(p, ".json") {
-		alt := "meta/armor/16/" + strings.TrimPrefix(p, cloak)
-		if _, ok := mvCleanPath(alt); ok {
-			return []string{alt}
+	var out []string
+	add := func(alt string) {
+		if _, ok := mvCleanPath(alt); ok && alt != p {
+			out = append(out, alt)
 		}
 	}
-	return nil
+	if strings.HasPrefix(p, "mo3/") && strings.HasSuffix(p, ".mo3") {
+		add("m2/" + strings.TrimSuffix(strings.TrimPrefix(p, "mo3/"), ".mo3") + ".m2")
+	}
+	if rest, ok := strings.CutPrefix(p, "meta/armor/"); ok && strings.HasSuffix(rest, ".json") {
+		slot, file, found := strings.Cut(rest, "/")
+		if found && !strings.Contains(file, "/") {
+			if slot == "15" {
+				add("meta/armor/16/" + file)
+			}
+			add("meta/item/" + file)
+		}
+	}
+	if rest, ok := strings.CutPrefix(p, "meta/item/"); ok && strings.HasSuffix(rest, ".json") && !strings.Contains(rest, "/") {
+		add("meta/armor/16/" + rest)
+	}
+	return out
 }
 
 func (s *Server) armoryModelProxy(w http.ResponseWriter, r *http.Request) {
@@ -131,7 +144,11 @@ func (s *Server) armoryModelProxy(w http.ResponseWriter, r *http.Request) {
 		ct = "application/octet-stream"
 	}
 	w.Header().Set("Content-Type", ct)
-	w.Header().Set("Cache-Control", "private, max-age=86400")
+	if strings.HasSuffix(clean, ".js") {
+		w.Header().Set("Cache-Control", "private, no-cache")
+	} else {
+		w.Header().Set("Cache-Control", "private, max-age=86400")
+	}
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	_, _ = io.Copy(w, io.LimitReader(res.Body, mvMaxBytes))
 }

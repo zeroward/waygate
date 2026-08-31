@@ -114,7 +114,7 @@ func TestArmoryRequiresLoginAndDemoInspect(t *testing.T) {
 	if !strings.Contains(html, "3D models from Wowhead") {
 		t.Fatal("missing wowhead credit")
 	}
-	if !strings.Contains(html, "/static/js/armory-model.js?v=2") || !strings.Contains(html, "jquery-3.5.1.min.js") {
+	if !strings.Contains(html, "/static/js/armory-model.js?v=3") || !strings.Contains(html, "jquery-3.5.1.min.js") {
 		t.Fatal("missing model scripts")
 	}
 
@@ -328,14 +328,35 @@ func TestParseU32(t *testing.T) {
 	}
 }
 
-func TestMvFallbackCloak(t *testing.T) {
+func TestMvFallback(t *testing.T) {
 	got := mvFallback("meta/armor/15/23027.json")
-	if len(got) != 1 || got[0] != "meta/armor/16/23027.json" {
+	if len(got) < 1 || got[0] != "meta/armor/16/23027.json" {
 		t.Fatalf("cloak fallback %v", got)
 	}
-	if mvFallback("meta/armor/5/9177.json") != nil {
-		t.Fatal("chest should not fallback")
+	if !containsStr(got, "meta/item/23027.json") {
+		t.Fatalf("cloak item fallback %v", got)
 	}
+	chest := mvFallback("meta/armor/5/9177.json")
+	if !containsStr(chest, "meta/item/9177.json") {
+		t.Fatalf("chest item fallback %v", chest)
+	}
+	mo3 := mvFallback("mo3/116921.mo3")
+	if len(mo3) != 1 || mo3[0] != "m2/116921.m2" {
+		t.Fatalf("mo3 fallback %v", mo3)
+	}
+	item := mvFallback("meta/item/23027.json")
+	if !containsStr(item, "meta/armor/16/23027.json") {
+		t.Fatalf("item cloak fallback %v", item)
+	}
+}
+
+func containsStr(got []string, want string) bool {
+	for _, s := range got {
+		if s == want {
+			return true
+		}
+	}
+	return false
 }
 
 func TestArmoryModelProxyCloakFallback(t *testing.T) {
@@ -369,6 +390,27 @@ func TestArmoryModelProxyCloakFallback(t *testing.T) {
 	res.Body.Close()
 	if res.StatusCode != 200 || string(body) != `{"cloak":true}` {
 		t.Fatalf("cloak proxy %d %s", res.StatusCode, body)
+	}
+
+	up2 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "m2/116921.m2" || r.URL.Path == "/m2/116921.m2" {
+			w.Header().Set("Content-Type", "application/octet-stream")
+			_, _ = w.Write([]byte("M2OK"))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer up2.Close()
+	mvUpstream = up2.URL + "/"
+
+	res, err = client.Get(ts.URL + "/armory/mv/mo3/116921.mo3")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || string(body) != "M2OK" {
+		t.Fatalf("mo3 proxy %d %s", res.StatusCode, body)
 	}
 }
 
