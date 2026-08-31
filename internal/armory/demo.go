@@ -83,6 +83,12 @@ func demoInspect(name string) (Profile, bool) {
 		Class:          c.class,
 		ClassID:        c.classID,
 		Gender:         c.gender,
+		GenderID:       c.genderID,
+		Skin:           4,
+		Face:           0,
+		HairStyle:      5,
+		HairColor:      1,
+		FacialStyle:    2,
 		Faction:        wow.Faction(c.raceID),
 		Guild:          c.guild,
 		Location:       wow.Location(c.mapID, c.zone),
@@ -188,7 +194,7 @@ func demoGuildRoster(guild string) (string, []GuildMember) {
 func frostwardenGear() []GearItem {
 	g := emptyGear()
 	put := func(slot uint8, entry uint32, name string, q uint8) {
-		g[slot] = GearItem{Slot: slot, SlotName: SlotName(slot), Entry: entry, Name: name, Quality: q}
+		g[slot] = GearItem{Slot: slot, SlotName: SlotName(slot), Entry: entry, Name: name, Quality: q, DisplayID: entry}
 	}
 	put(0, 51272, "Lightsworn Headpiece", 4)
 	put(1, 50647, "Ahn'kahar Onyx Neckguard", 4)

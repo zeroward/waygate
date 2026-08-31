@@ -132,6 +132,46 @@ func TestValidGuildName(t *testing.T) {
 	}
 }
 
+func TestModelJSONSlotMap(t *testing.T) {
+	p := Profile{
+		RaceID: 1, GenderID: 0, Skin: 4, Face: 1, HairStyle: 2, HairColor: 3, FacialStyle: 5,
+		Gear: []GearItem{
+			{Slot: 0, DisplayID: 111, Empty: false},
+			{Slot: 1, DisplayID: 222, Empty: false},
+			{Slot: 4, DisplayID: 333, InvType: 20, Empty: false},
+			{Slot: 15, DisplayID: 444, Empty: false},
+			{Slot: 2, DisplayID: 0, Empty: false},
+		},
+	}
+	m := p.Model()
+	if m.Race != 1 || m.Gender != 1 {
+		t.Fatalf("race/gender %+v", m)
+	}
+	if m.Skin != 4 || m.FacialStyle != 5 {
+		t.Fatalf("appearance %+v", m)
+	}
+	want := map[int]int{1: 111, 20: 333, 16: 444}
+	if len(m.Items) != 3 {
+		t.Fatalf("items %+v", m.Items)
+	}
+	for _, it := range m.Items {
+		if want[it[0]] != it[1] {
+			t.Fatalf("slot %d got %d want %d", it[0], it[1], want[it[0]])
+		}
+	}
+	js := p.ModelJSON()
+	if !strings.Contains(js, `"race":1`) || !strings.Contains(js, `"gender":1`) {
+		t.Fatalf("json %s", js)
+	}
+}
+
+func TestDecodePlayerBytes(t *testing.T) {
+	skin, face, hs, hc, facial := decodePlayerBytes(0x04030201, 0x00000007)
+	if skin != 1 || face != 2 || hs != 3 || hc != 4 || facial != 7 {
+		t.Fatalf("%d %d %d %d %d", skin, face, hs, hc, facial)
+	}
+}
+
 func TestStandingRank(t *testing.T) {
 	if StandingRank(42000) != "Exalted" || StandingRank(0) != "Neutral" || StandingRank(-9000) != "Hated" {
 		t.Fatal("bands")

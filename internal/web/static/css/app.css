@@ -1178,6 +1178,30 @@ tr:hover td { background: rgba(255, 255, 255, 0.02); }
   overflow-wrap: anywhere;
 }
 
+.armory-sheet {
+  display: grid;
+  grid-template-columns: minmax(16rem, 1.1fr) minmax(14rem, 0.9fr);
+  gap: 1.25rem 1.5rem;
+  align-items: start;
+}
+.armory-model {
+  min-height: 22rem;
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  overflow: hidden;
+  position: relative;
+}
+.armory-model-fallback {
+  margin: 0;
+  padding: 5rem 1rem;
+  text-align: center;
+}
+.armory-model canvas {
+  display: block;
+  width: 100% !important;
+  max-width: 100%;
+}
 .armory-gear {
   list-style: none;
   margin: 0;
@@ -1378,4 +1402,5 @@ tr:hover td { background: rgba(255, 255, 255, 0.02); }
 
 @media (max-width: 860px) {
   .companion-hud { grid-template-columns: 1fr; }
+  .armory-sheet { grid-template-columns: 1fr; }
 }

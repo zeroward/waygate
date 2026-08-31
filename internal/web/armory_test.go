@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -102,6 +103,15 @@ func TestArmoryRequiresLoginAndDemoInspect(t *testing.T) {
 	}
 	if !strings.Contains(html, "1234g") {
 		t.Fatal("sheet missing gold")
+	}
+	if !strings.Contains(html, `id="armory-model"`) || !strings.Contains(html, `data-model="`) {
+		t.Fatal("missing 3d model payload")
+	}
+	if !strings.Contains(html, "3D models from Wowhead") {
+		t.Fatal("missing wowhead credit")
+	}
+	if !strings.Contains(html, "/static/js/armory-model.js") || !strings.Contains(html, "jquery-3.5.1.min.js") {
+		t.Fatal("missing model scripts")
 	}
 
 	res, err = client.Get(ts.URL + "/armory/Frostwarden?tab=gear")
@@ -234,5 +244,63 @@ func TestArmoryRequiresLoginAndDemoInspect(t *testing.T) {
 	res.Body.Close()
 	if !strings.Contains(string(acc), "/armory/Frostwarden") {
 		t.Fatal("account should link names")
+	}
+
+	res, err = noRedir.Get(ts.URL + "/armory/mv/viewer/viewer.min.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("anon model proxy %d", res.StatusCode)
+	}
+}
+
+func TestArmoryModelProxy(t *testing.T) {
+	if !mvPathOK("viewer/viewer.min.js") || !mvPathOK("meta/armor/1/123.json") {
+		t.Fatal("ok paths")
+	}
+	if mvPathOK("../etc/passwd") || mvPathOK("foo//bar") || mvPathOK("") || mvPathOK("a?x=1") {
+		t.Fatal("bad paths")
+	}
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/meta/charactercustomization/2.json" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer up.Close()
+	prev := mvUpstream
+	mvUpstream = up.URL + "/"
+	defer func() { mvUpstream = prev }()
+
+	ts, srv := testWeb(t)
+	defer ts.Close()
+	if err := srv.accounts.Create(context.Background(), "HeroOne", "Abcd1234", "h@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	login(t, client, ts.URL, "HeroOne", "Abcd1234")
+
+	res, err := client.Get(ts.URL + "/armory/mv/../secret")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("dotdot %d", res.StatusCode)
+	}
+
+	res, err = client.Get(ts.URL + "/armory/mv/meta/charactercustomization/2.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || string(body) != `{"ok":true}` {
+		t.Fatalf("proxy %d %s", res.StatusCode, body)
 	}
 }

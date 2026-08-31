@@ -17,6 +17,11 @@
   </nav>
 
   {{if eq $d.Tab "sheet"}}
+  <div class="armory-sheet">
+  <div class="armory-model" id="armory-model" data-model="{{$p.ModelJSON}}">
+    <p class="muted armory-model-fallback">Loading 3D model…</p>
+  </div>
+  <div>
   <dl class="kv">
     <dt>Level</dt><dd>{{$p.Level}}</dd>
     <dt>Race</dt><dd>{{$p.Race}}</dd>
@@ -32,7 +37,9 @@
     <dt>Arena points</dt><dd>{{$p.ArenaPoints}}</dd>
     <dt>Honorable kills</dt><dd>{{$p.HonorableKills}}</dd>
   </dl>
-  <p class="hint">Unstuck is on the Account page for characters you own.</p>
+  <p class="hint">3D models from Wowhead. Unstuck is on the Account page for characters you own.</p>
+  </div>
+  </div>
   {{end}}
 
   {{if eq $d.Tab "gear"}}

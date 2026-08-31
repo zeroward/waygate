@@ -52,7 +52,7 @@ func (s *Server) csp() string {
 		script += " https://js.hcaptcha.com https://newassets.hcaptcha.com"
 		frame = "https://newassets.hcaptcha.com https://hcaptcha.com"
 	}
-	return "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; style-src 'self'; script-src " + script + "; frame-src " + frame + "; connect-src 'self'"
+	return "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data: blob:; worker-src 'self' blob:; style-src 'self'; script-src " + script + "; frame-src " + frame + "; connect-src 'self'"
 }
 
 type statusWriter struct {

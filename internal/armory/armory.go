@@ -64,6 +64,12 @@ type Profile struct {
 	Class          string
 	ClassID        uint8
 	Gender         string
+	GenderID       uint8
+	Skin           uint8
+	Face           uint8
+	HairStyle      uint8
+	HairColor      uint8
+	FacialStyle    uint8
 	Faction        string
 	Guild          string
 	GuildMOTD      string
@@ -114,12 +120,14 @@ type Rep struct {
 }
 
 type GearItem struct {
-	Slot     uint8
-	SlotName string
-	Entry    uint32
-	Name     string
-	Quality  uint8
-	Empty    bool
+	Slot      uint8
+	SlotName  string
+	Entry     uint32
+	DisplayID uint32
+	InvType   uint8
+	Name      string
+	Quality   uint8
+	Empty     bool
 }
 
 func (g GearItem) Wowhead() string {
@@ -305,12 +313,17 @@ func fillSheet(p *Profile, race, class, gender uint8, money, played, logout uint
 	p.RaceID = race
 	p.Class = wow.ClassName(class)
 	p.ClassID = class
+	p.GenderID = gender
 	p.Gender = genderName(gender)
 	p.Faction = wow.Faction(race)
 	p.Gold = wow.Gold(money)
 	p.Played = wow.Playtime(played)
 	p.Location = wow.Location(mapID, zone)
 	p.Logout = wow.LogoutLabel(p.Online, logout)
+}
+
+func decodePlayerBytes(pb, pb2 uint32) (skin, face, hairStyle, hairColor, facial uint8) {
+	return uint8(pb), uint8(pb >> 8), uint8(pb >> 16), uint8(pb >> 24), uint8(pb2)
 }
 
 func genderName(g uint8) string {

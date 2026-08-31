@@ -65,7 +65,7 @@ func (s *Service) inspectSQL(ctx context.Context, name string) (Profile, bool) {
 		       c.`+"`level`"+`, c.`+"`money`"+`, c.`+"`totaltime`"+`, c.`+"`logout_time`"+`,
 		       c.`+"`online`"+`, c.`+"`map`"+`, c.`+"`zone`"+`, c.`+"`arenaPoints`"+`,
 		       c.`+"`totalHonorPoints`"+`, c.`+"`totalKills`"+`, c.`+"`activeTalentGroup`"+`,
-		       c.`+"`talentGroupsCount`"+`
+		       c.`+"`talentGroupsCount`"+`, c.`+"`playerBytes`"+`, c.`+"`playerBytes2`"+`
 		FROM %s c
 		INNER JOIN %s a ON a.`+"`id`"+` = c.`+"`account`"+`
 		WHERE c.`+"`deleteDate`"+` IS NULL AND c.`+"`name`"+` = ?%s
@@ -73,11 +73,11 @@ func (s *Service) inspectSQL(ctx context.Context, name string) (Profile, bool) {
 	args := append([]any{name}, botArgs...)
 	var p Profile
 	var race, class, gender, level uint8
-	var money, played, logout, mapID, zone, honor, arena, hk uint32
+	var money, played, logout, mapID, zone, honor, arena, hk, pb, pb2 uint32
 	var online, activeSpec, specCount int
 	err := s.db.SQL.QueryRowContext(ctx, q, args...).Scan(
 		&p.GUID, &p.Name, &race, &class, &gender, &level, &money, &played, &logout,
-		&online, &mapID, &zone, &arena, &honor, &hk, &activeSpec, &specCount,
+		&online, &mapID, &zone, &arena, &honor, &hk, &activeSpec, &specCount, &pb, &pb2,
 	)
 	if err != nil {
 		return Profile{}, false
@@ -89,6 +89,7 @@ func (s *Service) inspectSQL(ctx context.Context, name string) (Profile, bool) {
 	p.HonorableKills = hk
 	p.ActiveSpec = activeSpec
 	fillSheet(&p, race, class, gender, money, played, logout, mapID, zone)
+	p.Skin, p.Face, p.HairStyle, p.HairColor, p.FacialStyle = decodePlayerBytes(pb, pb2)
 	p.Guild = s.guildName(ctx, p.GUID)
 	if p.Guild != "" {
 		p.GuildMOTD, p.GuildRoster = s.guildRoster(ctx, p.Guild)
@@ -282,7 +283,8 @@ func (s *Service) guildRoster(ctx context.Context, guildName string) (string, []
 func (s *Service) gear(ctx context.Context, guid uint32) []GearItem {
 	out := emptyGear()
 	q := fmt.Sprintf(`
-		SELECT ci.`+"`slot`"+`, ii.`+"`itemEntry`"+`, COALESCE(it.`+"`name`"+`, ''), COALESCE(it.`+"`Quality`"+`, 0)
+		SELECT ci.`+"`slot`"+`, ii.`+"`itemEntry`"+`, COALESCE(it.`+"`name`"+`, ''), COALESCE(it.`+"`Quality`"+`, 0),
+		       COALESCE(it.`+"`displayid`"+`, 0), COALESCE(it.`+"`InventoryType`"+`, 0)
 		FROM %s ci
 		INNER JOIN %s ii ON ii.`+"`guid`"+` = ci.`+"`item`"+`
 		LEFT JOIN %s it ON it.`+"`entry`"+` = ii.`+"`itemEntry`"+`
@@ -295,11 +297,10 @@ func (s *Service) gear(ctx context.Context, guid uint32) []GearItem {
 	}
 	defer rows.Close()
 	for rows.Next() {
-		var slot uint8
-		var entry uint32
+		var slot, invType, quality uint8
+		var entry, display uint32
 		var name string
-		var quality uint8
-		if err := rows.Scan(&slot, &entry, &name, &quality); err != nil {
+		if err := rows.Scan(&slot, &entry, &name, &quality, &display, &invType); err != nil {
 			return out
 		}
 		if int(slot) >= len(out) {
@@ -308,7 +309,7 @@ func (s *Service) gear(ctx context.Context, guid uint32) []GearItem {
 		if name == "" {
 			name = fmt.Sprintf("Item %d", entry)
 		}
-		out[slot] = GearItem{Slot: slot, SlotName: SlotName(slot), Entry: entry, Name: name, Quality: quality}
+		out[slot] = GearItem{Slot: slot, SlotName: SlotName(slot), Entry: entry, DisplayID: display, InvType: invType, Name: name, Quality: quality}
 	}
 	return out
 }
