@@ -52,7 +52,10 @@ func (s *Server) csp() string {
 		script += " https://js.hcaptcha.com https://newassets.hcaptcha.com"
 		frame = "https://newassets.hcaptcha.com https://hcaptcha.com"
 	}
-	return "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data: blob:; worker-src 'self' blob:; style-src 'self'; script-src " + script + "; frame-src " + frame + "; connect-src 'self'"
+	// ZamModelViewer loads viewer.css (and related images/fonts) from wow.zamimg.com
+	// even when CONTENT_PATH is our same-origin proxy. Scripts stay 'self'.
+	const zam = "https://wow.zamimg.com"
+	return "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data: blob: " + zam + "; font-src 'self' data: " + zam + "; worker-src 'self' blob:; style-src 'self' " + zam + "; script-src " + script + "; frame-src " + frame + "; connect-src 'self'"
 }
 
 type statusWriter struct {

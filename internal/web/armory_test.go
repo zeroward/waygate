@@ -76,6 +76,10 @@ func TestArmoryRequiresLoginAndDemoInspect(t *testing.T) {
 	}
 	if csp := res.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "script-src 'self'") {
 		t.Fatalf("csp %s", csp)
+	} else if !strings.Contains(csp, "style-src 'self' https://wow.zamimg.com") {
+		t.Fatalf("style-src missing zamimg %s", csp)
+	} else if strings.Contains(csp, "script-src 'self' https://wow.zamimg.com") {
+		t.Fatal("zamimg must not be in script-src")
 	}
 
 	res, err = client.Get(ts.URL + "/armory?q=Frost")
