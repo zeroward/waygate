@@ -114,7 +114,7 @@ func TestArmoryRequiresLoginAndDemoInspect(t *testing.T) {
 	if !strings.Contains(html, "3D models from Wowhead") {
 		t.Fatal("missing wowhead credit")
 	}
-	if !strings.Contains(html, "/static/js/armory-model.js") || !strings.Contains(html, "jquery-3.5.1.min.js") {
+	if !strings.Contains(html, "/static/js/armory-model.js?v=2") || !strings.Contains(html, "jquery-3.5.1.min.js") {
 		t.Fatal("missing model scripts")
 	}
 
@@ -306,5 +306,143 @@ func TestArmoryModelProxy(t *testing.T) {
 	res.Body.Close()
 	if res.StatusCode != 200 || string(body) != `{"ok":true}` {
 		t.Fatalf("proxy %d %s", res.StatusCode, body)
+	}
+}
+
+func TestParseU32(t *testing.T) {
+	if _, ok := parseU32("0"); ok {
+		t.Fatal("zero")
+	}
+	if _, ok := parseU32("01"); ok {
+		t.Fatal("leading zero")
+	}
+	if _, ok := parseU32(""); ok {
+		t.Fatal("empty")
+	}
+	if _, ok := parseU32("4294967296"); ok {
+		t.Fatal("overflow")
+	}
+	n, ok := parseU32("28266")
+	if !ok || n != 28266 {
+		t.Fatalf("got %d %v", n, ok)
+	}
+}
+
+func TestMvFallbackCloak(t *testing.T) {
+	got := mvFallback("meta/armor/15/23027.json")
+	if len(got) != 1 || got[0] != "meta/armor/16/23027.json" {
+		t.Fatalf("cloak fallback %v", got)
+	}
+	if mvFallback("meta/armor/5/9177.json") != nil {
+		t.Fatal("chest should not fallback")
+	}
+}
+
+func TestArmoryModelProxyCloakFallback(t *testing.T) {
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/meta/armor/16/23027.json" {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"cloak":true}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer up.Close()
+	prev := mvUpstream
+	mvUpstream = up.URL + "/"
+	defer func() { mvUpstream = prev }()
+
+	ts, srv := testWeb(t)
+	defer ts.Close()
+	if err := srv.accounts.Create(context.Background(), "HeroOne", "Abcd1234", "h@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	login(t, client, ts.URL, "HeroOne", "Abcd1234")
+
+	res, err := client.Get(ts.URL + "/armory/mv/meta/armor/15/23027.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || string(body) != `{"cloak":true}` {
+		t.Fatalf("cloak proxy %d %s", res.StatusCode, body)
+	}
+}
+
+func TestArmoryDisplayMap(t *testing.T) {
+	displayMapReset()
+	hits := 0
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		hits++
+		if r.URL.Path != "/100/28266" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"newDisplayId":9177}`))
+	}))
+	defer up.Close()
+	prev := displayMapUpstream
+	displayMapUpstream = up.URL
+	defer func() { displayMapUpstream = prev }()
+
+	ts, srv := testWeb(t)
+	defer ts.Close()
+	if err := srv.accounts.Create(context.Background(), "HeroOne", "Abcd1234", "h@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+
+	noRedir := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	res, err := noRedir.Get(ts.URL + "/armory/display/100/28266")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusSeeOther {
+		t.Fatalf("anon display map %d", res.StatusCode)
+	}
+
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	login(t, client, ts.URL, "HeroOne", "Abcd1234")
+
+	res, err = client.Get(ts.URL + "/armory/display/../1/1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("dotdot %d", res.StatusCode)
+	}
+	res, err = client.Get(ts.URL + "/armory/display/01/28266")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if res.StatusCode != http.StatusNotFound {
+		t.Fatalf("leading zero %d", res.StatusCode)
+	}
+
+	res, err = client.Get(ts.URL + "/armory/display/100/28266")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	if res.StatusCode != 200 || !strings.Contains(string(body), `"newDisplayId":9177`) {
+		t.Fatalf("map %d %s", res.StatusCode, body)
+	}
+	res, err = client.Get(ts.URL + "/armory/display/100/28266")
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	if hits != 1 {
+		t.Fatalf("cache hits %d", hits)
 	}
 }

@@ -136,10 +136,10 @@ func TestModelJSONSlotMap(t *testing.T) {
 	p := Profile{
 		RaceID: 1, GenderID: 0, Skin: 4, Face: 1, HairStyle: 2, HairColor: 3, FacialStyle: 5,
 		Gear: []GearItem{
-			{Slot: 0, DisplayID: 111, Empty: false},
+			{Slot: 0, DisplayID: 111, Entry: 10, InvType: 1, Empty: false},
 			{Slot: 1, DisplayID: 222, Empty: false},
-			{Slot: 4, DisplayID: 333, InvType: 20, Empty: false},
-			{Slot: 15, DisplayID: 444, Empty: false},
+			{Slot: 4, DisplayID: 333, Entry: 30, InvType: 20, Empty: false},
+			{Slot: 15, DisplayID: 444, Entry: 40, InvType: 17, Empty: false},
 			{Slot: 2, DisplayID: 0, Empty: false},
 		},
 	}
@@ -155,9 +155,15 @@ func TestModelJSONSlotMap(t *testing.T) {
 		t.Fatalf("items %+v", m.Items)
 	}
 	for _, it := range m.Items {
+		if len(it) != 4 {
+			t.Fatalf("tuple %v", it)
+		}
 		if want[it[0]] != it[1] {
 			t.Fatalf("slot %d got %d want %d", it[0], it[1], want[it[0]])
 		}
+	}
+	if m.Items[0][2] != 10 || m.Items[1][3] != 20 || m.Items[2][2] != 40 {
+		t.Fatalf("entry/invType %+v", m.Items)
 	}
 	js := p.ModelJSON()
 	if !strings.Contains(js, `"race":1`) || !strings.Contains(js, `"gender":1`) {

@@ -47,7 +47,8 @@ func (p Profile) Model() modelChar {
 		if slot == 0 {
 			continue
 		}
-		m.Items = append(m.Items, []int{int(slot), int(g.DisplayID)})
+		// [viewerSlot, displayId, itemEntry, inventoryType]
+		m.Items = append(m.Items, []int{int(slot), int(g.DisplayID), int(g.Entry), int(g.InvType)})
 	}
 	return m
 }

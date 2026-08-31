@@ -194,6 +194,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /leaderboards", s.leaderboards)
 	mux.HandleFunc("GET /armory", s.armorySearch)
 	mux.HandleFunc("GET /armory/mv/{path...}", s.armoryModelProxy)
+	mux.HandleFunc("GET /armory/display/{entry}/{displayId}", s.armoryDisplayMap)
 	mux.HandleFunc("GET /armory/guild/{name}", s.armoryGuild)
 	mux.HandleFunc("GET /armory/{name}", s.armoryInspect)
 	mux.HandleFunc("GET /companion", s.companionPage)
