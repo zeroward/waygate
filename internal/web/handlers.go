@@ -407,19 +407,36 @@ func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
 	}
 	pages := (total + per - 1) / per
 	actorGM := int(sess.User.GMLevel)
+	s.attachGatehouse(r.Context(), rows)
 	selected := s.staffSelected(r.Context(), rows, r.URL.Query().Get("select"), q, includeBots)
 	canModify := true
 	canRank := true
 	selRank := 0
+	var linked []string
 	if selected != nil {
+		if s.id != nil {
+			gh, _, names := s.id.LinkedWowNames(r.Context(), selected.Username)
+			if selected.Gatehouse == "" {
+				selected.Gatehouse = gh
+			}
+			if len(names) > 0 {
+				selected.Linked = names
+			}
+		}
 		selRank = int(selected.GMLevel)
+		if selected.Gatehouse != "" && s.id != nil {
+			if u, err := s.id.GetByUsername(r.Context(), selected.Gatehouse); err == nil {
+				selRank = int(u.StaffLevel)
+			}
+		}
 		if selRank > actorGM {
 			canModify = false
 			canRank = false
 		}
-		if selected.Username == sess.User.Username {
+		if selected.Username == sess.User.Username || strings.EqualFold(selected.Gatehouse, sess.User.Username) {
 			canRank = false
 		}
+		linked = selected.Linked
 	}
 	s.view(w, r, "staff.html", "Admin panel", "staff", map[string]any{
 		"Accounts":          rows,
@@ -452,7 +469,30 @@ func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
 		"RegisterKey":       s.registerKey(),
 		"BannerMessage":     s.bannerMessage(r.Context()),
 		"BannerUntil":       s.bannerUntilLocal(r.Context()),
+		"LinkedLogins":      linked,
 	})
+}
+
+func (s *Server) attachGatehouse(ctx context.Context, rows []account.ListedAccount) {
+	if s.id == nil || len(rows) == 0 {
+		return
+	}
+	ids := make([]uint32, 0, len(rows))
+	for _, r := range rows {
+		ids = append(ids, r.ID)
+	}
+	owners := s.id.Store().GatehouseByAccountIDs(ctx, ids)
+	for i := range rows {
+		o, ok := owners[rows[i].ID]
+		if !ok {
+			continue
+		}
+		rows[i].Gatehouse = o.Username
+		rows[i].Linked = o.Linked
+		if o.StaffLevel <= account.RankAdmin && rows[i].GMLevel <= account.RankAdmin {
+			rows[i].GMLevel = o.StaffLevel
+		}
+	}
 }
 
 func (s *Server) registerKeyPOST(w http.ResponseWriter, r *http.Request) {
@@ -684,37 +724,75 @@ func (s *Server) staffRankPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", err.Error())
 		return
 	}
-	if err := s.accounts.SetGMLevel(r.Context(), sess.User.GMLevel, sess.User.Username, target, level); err != nil {
+	gh, userID, names := s.linkedWowNames(r.Context(), target)
+	if userID != 0 && userID == sess.User.ID {
+		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "You cannot change your own rank.")
+		return
+	}
+	if len(names) == 0 {
+		names = []string{strings.ToUpper(target)}
+	}
+	current := s.accountsGM(r, names[0])
+	for _, n := range names {
+		if g := s.accountsGM(r, n); g > current {
+			current = g
+		}
+	}
+	if userID != 0 {
+		if u, err := s.id.GetByID(r.Context(), userID); err == nil && u.StaffLevel > current {
+			current = u.StaffLevel
+		}
+	}
+	if err := account.CanGrantRank(sess.User.GMLevel, current, level); err != nil {
 		switch {
 		case errors.Is(err, account.ErrBadRank) && level == account.RankSuperGM:
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Super GM cannot be granted from this panel.")
 		case errors.Is(err, account.ErrBadRank):
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "You can only assign a rank below your own (GM or Admin, never Super GM).")
-		case errors.Is(err, account.ErrForbidden):
-			if strings.EqualFold(target, sess.User.Username) {
-				s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "You cannot change your own rank.")
-			} else {
-				s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Cannot modify "+account.RankName(s.accountsGM(r, target))+".")
-			}
-		case errors.Is(err, account.ErrNotFound):
-			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "account not found")
 		default:
-			s.log.Error("staff rank", "err", err, "actor", sess.User.Username, "target", target, "rank", level)
-			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "could not update rank")
+			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Cannot modify "+account.RankName(current)+".")
 		}
 		return
 	}
-	s.syncWebsiteStaffLevel(r.Context(), target, level)
-	if level == account.RankPlayer {
-		if listed, err := s.accounts.GetListed(r.Context(), target); err == nil {
-			if ln, err := s.id.Store().LinkByAccount(r.Context(), listed.ID); err == nil {
-				s.sessions.RevokeUser(ln.UserID, "")
-			}
+	var last error
+	applied := 0
+	for _, n := range names {
+		if g := s.accountsGM(r, n); g > account.RankAdmin {
+			continue
 		}
+		if err := s.accounts.ApplyGMLevel(r.Context(), n, level); err != nil {
+			last = err
+			continue
+		}
+		applied++
 	}
-	s.log.Info("staff rank", "actor", sess.User.Username, "target", strings.ToUpper(target), "rank", level)
-	s.logStaff(sess.User.Username, "rank", strings.ToUpper(target)+"="+account.RankName(level))
-	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Set "+target+" to "+account.RankName(level)+".")
+	if applied == 0 {
+		s.log.Error("staff rank", "err", last, "actor", sess.User.Username, "target", target, "rank", level)
+		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "could not update rank")
+		return
+	}
+	if userID != 0 {
+		_ = s.id.Store().SetStaffLevel(r.Context(), userID, level)
+		if level == account.RankPlayer {
+			s.sessions.RevokeUser(userID, "")
+		}
+	} else {
+		s.syncWebsiteStaffLevel(r.Context(), target, level)
+	}
+	label := strings.ToUpper(target)
+	if gh != "" {
+		label = gh
+	}
+	s.log.Info("staff rank", "actor", sess.User.Username, "target", label, "rank", level, "logins", applied)
+	s.logStaff(sess.User.Username, "rank", label+"="+account.RankName(level))
+	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Set "+label+" to "+account.RankName(level)+" on "+strconv.Itoa(applied)+" Wow.exe login(s).")
+}
+
+func (s *Server) linkedWowNames(ctx context.Context, wowUsername string) (gatehouse string, userID uint32, names []string) {
+	if s.id == nil {
+		return "", 0, []string{strings.ToUpper(strings.TrimSpace(wowUsername))}
+	}
+	return s.id.LinkedWowNames(ctx, wowUsername)
 }
 
 func (s *Server) syncWebsiteStaffLevel(ctx context.Context, wowUsername string, level uint8) {
@@ -753,27 +831,51 @@ func (s *Server) staffBanPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Pick a suspension length.")
 		return
 	}
-	if err := s.accounts.Ban(r.Context(), sess.User.GMLevel, sess.User.Username, target, dur, reason); err != nil {
+	gh, userID, names := s.linkedWowNames(r.Context(), target)
+	if userID != 0 && userID == sess.User.ID {
+		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "You cannot suspend your own account.")
+		return
+	}
+	if len(names) == 0 {
+		names = []string{strings.ToUpper(target)}
+	}
+	var last error
+	banned := 0
+	for _, n := range names {
+		if err := s.accounts.Ban(r.Context(), sess.User.GMLevel, sess.User.Username, n, dur, reason); err != nil {
+			last = err
+			continue
+		}
+		banned++
+	}
+	if banned == 0 {
 		switch {
-		case errors.Is(err, account.ErrForbidden):
-			if strings.EqualFold(target, sess.User.Username) {
+		case errors.Is(last, account.ErrForbidden):
+			if strings.EqualFold(target, sess.User.Username) || strings.EqualFold(gh, sess.User.Username) {
 				s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "You cannot suspend your own account.")
 			} else {
 				s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Cannot modify "+account.RankName(s.accountsGM(r, target))+".")
 			}
-		case errors.Is(err, account.ErrInvalidBan):
+		case errors.Is(last, account.ErrInvalidBan):
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Give a reason (at least 3 characters).")
-		case errors.Is(err, account.ErrNotFound):
+		case errors.Is(last, account.ErrNotFound):
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "account not found")
 		default:
-			s.log.Error("staff ban", "err", err, "actor", sess.User.Username, "target", target)
+			s.log.Error("staff ban", "err", last, "actor", sess.User.Username, "target", target)
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "could not suspend the account")
 		}
 		return
 	}
-	s.log.Info("staff ban", "actor", sess.User.Username, "target", strings.ToUpper(target), "duration", label)
-	s.logStaff(sess.User.Username, "ban", strings.ToUpper(target)+"="+label)
-	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Suspended "+target+" ("+label+").")
+	if userID != 0 {
+		s.sessions.RevokeUser(userID, "")
+	}
+	who := strings.ToUpper(target)
+	if gh != "" {
+		who = gh
+	}
+	s.log.Info("staff ban", "actor", sess.User.Username, "target", who, "duration", label, "logins", banned)
+	s.logStaff(sess.User.Username, "ban", who+"="+label)
+	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Suspended "+who+" ("+label+") on "+strconv.Itoa(banned)+" Wow.exe login(s).")
 }
 
 func (s *Server) staffUnbanPOST(w http.ResponseWriter, r *http.Request) {
@@ -789,21 +891,42 @@ func (s *Server) staffUnbanPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", err.Error())
 		return
 	}
-	if err := s.accounts.Unban(r.Context(), sess.User.GMLevel, sess.User.Username, target); err != nil {
+	gh, userID, names := s.linkedWowNames(r.Context(), target)
+	if userID != 0 && userID == sess.User.ID {
+		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "You cannot change your own suspension.")
+		return
+	}
+	if len(names) == 0 {
+		names = []string{strings.ToUpper(target)}
+	}
+	var last error
+	n := 0
+	for _, name := range names {
+		if err := s.accounts.Unban(r.Context(), sess.User.GMLevel, sess.User.Username, name); err != nil {
+			last = err
+			continue
+		}
+		n++
+	}
+	if n == 0 {
 		switch {
-		case errors.Is(err, account.ErrForbidden):
+		case errors.Is(last, account.ErrForbidden):
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Cannot modify "+account.RankName(s.accountsGM(r, target))+".")
-		case errors.Is(err, account.ErrNotFound):
+		case errors.Is(last, account.ErrNotFound):
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "account not found")
 		default:
-			s.log.Error("staff unban", "err", err, "actor", sess.User.Username, "target", target)
+			s.log.Error("staff unban", "err", last, "actor", sess.User.Username, "target", target)
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "could not lift the suspension")
 		}
 		return
 	}
-	s.log.Info("staff unban", "actor", sess.User.Username, "target", strings.ToUpper(target))
-	s.logStaff(sess.User.Username, "unban", strings.ToUpper(target))
-	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Lifted suspension for "+target+".")
+	who := strings.ToUpper(target)
+	if gh != "" {
+		who = gh
+	}
+	s.log.Info("staff unban", "actor", sess.User.Username, "target", who, "logins", n)
+	s.logStaff(sess.User.Username, "unban", who)
+	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Lifted suspension for "+who+" on "+strconv.Itoa(n)+" Wow.exe login(s).")
 }
 
 func (s *Server) accountsGM(r *http.Request, username string) uint8 {

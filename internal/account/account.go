@@ -88,6 +88,8 @@ type ListedAccount struct {
 	Banned    bool
 	BanReason string
 	BanUntil  string
+	Gatehouse string // website username when this Wow.exe login is linked
+	Linked    []string
 }
 
 type Service struct {
@@ -388,10 +390,22 @@ func (s *Service) SetGMLevel(ctx context.Context, actorGM uint8, actorUser, targ
 		return err
 	}
 
+	return s.ApplyGMLevel(ctx, target, level)
+}
+
+// ApplyGMLevel writes account_access for a Wow.exe login. Never grants Super GM (4).
+func (s *Service) ApplyGMLevel(ctx context.Context, username string, level uint8) error {
+	username = srp6.UpperLatin(strings.TrimSpace(username))
+	if username == "" {
+		return ErrNotFound
+	}
+	if level > RankAdmin {
+		return ErrBadRank
+	}
 	if s.cfg.DemoMode || s.db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
-		a, ok := s.mem[target]
+		a, ok := s.mem[username]
 		if !ok {
 			return ErrNotFound
 		}
@@ -399,18 +413,18 @@ func (s *Service) SetGMLevel(ctx context.Context, actorGM uint8, actorUser, targ
 		return nil
 	}
 
-	if _, err := s.lookupAccountID(ctx, target); err != nil {
+	if _, err := s.lookupAccountID(ctx, username); err != nil {
 		return err
 	}
 
 	if s.soap != nil && s.cfg.SOAPConfigured() && !s.cfg.DemoMode {
-		if err := s.soap.SetGMLevel(ctx, target, level); err == nil {
+		if err := s.soap.SetGMLevel(ctx, username, level); err == nil {
 			return nil
 		} else if s.createMode() == "soap" {
 			return err
 		}
 	}
-	return s.setGMLevelSQL(ctx, target, level)
+	return s.setGMLevelSQL(ctx, username, level)
 }
 
 func (s *Service) lookupAccountID(ctx context.Context, username string) (uint32, error) {

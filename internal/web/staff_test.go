@@ -519,6 +519,109 @@ func TestStaffRankSyncsWebsitePrivilege(t *testing.T) {
 	}
 }
 
+func TestStaffRankAndBanFanOutToLinkedLogins(t *testing.T) {
+	ts, srv := testWeb(t)
+	defer ts.Close()
+	ctx := context.Background()
+	if err := srv.accounts.Create(ctx, "Admin", "Abcd1234", "a@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	srv.accounts.GrantGM("Admin", 3)
+	u, err := srv.id.Register(ctx, "PlayerA", "Abcd1234", "p@example.com", "", "Abcd1234", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := srv.id.AddCredential(ctx, u.ID, "PlayerAlt", "Abcd1234", "", 2); err != nil {
+		t.Fatal(err)
+	}
+
+	ajar, _ := cookiejar.New(nil)
+	admin := &http.Client{Jar: ajar}
+	login(t, admin, ts.URL, "Admin", "Abcd1234")
+	res, err := admin.Get(ts.URL + "/staff?select=PLAYERA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(res.Body)
+	res.Body.Close()
+	html := string(body)
+	if !strings.Contains(html, "Gatehouse") || !strings.Contains(html, "PLAYERALT") {
+		t.Fatalf("expected linked logins on staff page: %s", html)
+	}
+	form := url.Values{"csrf_token": {extractCSRF(html)}, "username": {"PlayerAlt"}, "rank": {"2"}}
+	res, err = admin.PostForm(ts.URL+"/staff/rank", form)
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+
+	main, err := srv.accounts.GetListed(ctx, "PlayerA")
+	if err != nil || main.GMLevel != 2 {
+		t.Fatalf("main rank %+v %v", main, err)
+	}
+	alt, err := srv.accounts.GetListed(ctx, "PlayerAlt")
+	if err != nil || alt.GMLevel != 2 {
+		t.Fatalf("alt rank %+v %v", alt, err)
+	}
+	site, err := srv.id.GetByID(ctx, u.ID)
+	if err != nil || site.StaffLevel != 2 {
+		t.Fatalf("site staff %v %+v", err, site)
+	}
+
+	res, err = admin.Get(ts.URL + "/staff?select=PLAYERALT")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	res, err = admin.PostForm(ts.URL+"/staff/ban", url.Values{
+		"csrf_token": {extractCSRF(string(body))}, "username": {"PlayerAlt"}, "duration": {"perm"}, "reason": {"botting"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	main, _ = srv.accounts.GetListed(ctx, "PlayerA")
+	alt, _ = srv.accounts.GetListed(ctx, "PlayerAlt")
+	if !main.Banned || !alt.Banned {
+		t.Fatalf("ban fan-out main=%v alt=%v", main.Banned, alt.Banned)
+	}
+
+	pjar, _ := cookiejar.New(nil)
+	player := &http.Client{Jar: pjar, CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	login(t, player, ts.URL, "PlayerA", "Abcd1234")
+	accPage, err := player.Get(ts.URL + "/account")
+	if err != nil {
+		t.Fatal(err)
+	}
+	accBody, _ := io.ReadAll(accPage.Body)
+	accPage.Body.Close()
+	if !strings.Contains(string(accBody), "suspended") {
+		t.Fatalf("website login should be blocked: %s", accBody)
+	}
+
+	res, err = admin.Get(ts.URL + "/staff?select=PLAYERA")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ = io.ReadAll(res.Body)
+	res.Body.Close()
+	res, err = admin.PostForm(ts.URL+"/staff/unban", url.Values{
+		"csrf_token": {extractCSRF(string(body))}, "username": {"PlayerA"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res.Body.Close()
+	main, _ = srv.accounts.GetListed(ctx, "PlayerA")
+	alt, _ = srv.accounts.GetListed(ctx, "PlayerAlt")
+	if main.Banned || alt.Banned {
+		t.Fatalf("unban fan-out main=%v alt=%v", main.Banned, alt.Banned)
+	}
+}
+
 func TestStaffBanAndUnban(t *testing.T) {
 	ts, acc := staffTestServer(t)
 	defer ts.Close()

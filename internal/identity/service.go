@@ -300,6 +300,7 @@ func (s *Service) AddCredential(ctx context.Context, userID uint32, wowUser, wow
 	if err := s.store.Link(ctx, userID, listed.ID, wowUser); err != nil {
 		return Link{}, err
 	}
+	s.SyncWowPrivilege(ctx, userID)
 	return Link{UserID: userID, AccountID: listed.ID, Username: wowUser}, nil
 }
 
@@ -349,6 +350,67 @@ func (s *Service) AccountIDs(ctx context.Context, userID uint32) ([]uint32, erro
 
 func (s *Service) Links(ctx context.Context, userID uint32) ([]Link, error) {
 	return s.store.Links(ctx, userID)
+}
+
+// LinkedWowNames returns the Gatehouse user and every Wow.exe login on that
+// identity. Unlinked game accounts return only the given username.
+func (s *Service) LinkedWowNames(ctx context.Context, wowUsername string) (gatehouse string, userID uint32, names []string) {
+	wowUsername = srp6.UpperLatin(strings.TrimSpace(wowUsername))
+	if wowUsername == "" {
+		return "", 0, nil
+	}
+	listed, err := s.ac.GetListed(ctx, wowUsername)
+	if err != nil {
+		return "", 0, []string{wowUsername}
+	}
+	ln, err := s.store.LinkByAccount(ctx, listed.ID)
+	if err != nil {
+		return "", 0, []string{wowUsername}
+	}
+	u, err := s.store.GetByID(ctx, ln.UserID)
+	if err != nil {
+		return "", 0, []string{wowUsername}
+	}
+	links, err := s.store.Links(ctx, u.ID)
+	if err != nil || len(links) == 0 {
+		return u.Username, u.ID, []string{wowUsername}
+	}
+	names = make([]string, 0, len(links))
+	for _, l := range links {
+		names = append(names, l.Username)
+	}
+	return u.Username, u.ID, names
+}
+
+func (s *Service) SyncWowPrivilege(ctx context.Context, userID uint32) {
+	if s.ac == nil || userID == 0 {
+		return
+	}
+	u, err := s.store.GetByID(ctx, userID)
+	if err != nil {
+		return
+	}
+	lvl := u.StaffLevel
+	if lvl > account.RankAdmin {
+		return
+	}
+	links, err := s.store.Links(ctx, userID)
+	if err != nil {
+		return
+	}
+	for _, l := range links {
+		listed, err := s.ac.GetListed(ctx, l.Username)
+		if err != nil {
+			continue
+		}
+		if listed.GMLevel > account.RankAdmin {
+			continue
+		}
+		if listed.GMLevel == lvl {
+			continue
+		}
+		_ = s.ac.ApplyGMLevel(ctx, l.Username, lvl)
+	}
 }
 
 func (s *Service) GetByUsername(ctx context.Context, username string) (User, error) {

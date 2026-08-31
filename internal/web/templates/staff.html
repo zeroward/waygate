@@ -103,6 +103,7 @@
           <thead>
             <tr>
               <th>Username</th>
+              <th>Gatehouse</th>
               <th>Email</th>
               <th>Joined</th>
               <th>Last login</th>
@@ -117,12 +118,15 @@
                 data-user="{{.Username}}"
                 data-email="{{.Email}}"
                 data-gm="{{.GMLevel}}"
+                data-gatehouse="{{.Gatehouse}}"
+                data-linked="{{range $i, $n := .Linked}}{{if $i}},{{end}}{{$n}}{{end}}"
                 data-online="{{if .Online}}1{{else}}0{{end}}"
                 data-banned="{{if .Banned}}1{{else}}0{{end}}"
                 data-ban-reason="{{.BanReason}}"
                 data-ban-until="{{.BanUntil}}"
                 aria-selected="{{if and $sel (eq .Username $sel.Username)}}true{{else}}false{{end}}">
               <td class="name">{{.Username}}</td>
+              <td>{{if .Gatehouse}}{{.Gatehouse}}{{else}}—{{end}}</td>
               <td>{{if .Email}}{{.Email}}{{else}}—{{end}}</td>
               <td>{{.JoinDate}}</td>
               <td>{{.LastLogin}}</td>
@@ -157,6 +161,8 @@
             <span class="badge{{if and $sel $sel.GMLevel}} badge-gold{{end}}" data-staff-gm-badge>{{if $sel}}{{rankName $sel.GMLevel}}{{end}}</span>
             <span class="staff-status{{if and $sel $sel.Banned}} is-banned{{else if and $sel $sel.Online}} is-online{{else}} is-offline{{end}}" data-staff-status>{{if $sel}}{{$sel.StatusLabel}}{{end}}</span>
           </div>
+          <p class="hint" data-staff-gatehouse-hint{{if not (and $sel $sel.Gatehouse)}} hidden{{end}}>{{if and $sel $sel.Gatehouse}}Gatehouse account {{$sel.Gatehouse}}. Rank and suspend apply to every Wow.exe login on that account.{{end}}</p>
+          <p class="hint" data-staff-linked-hint{{if not $d.LinkedLogins}} hidden{{end}}>{{if $d.LinkedLogins}}Wow.exe logins: {{range $i, $n := $d.LinkedLogins}}{{if $i}}, {{end}}<code>{{$n}}</code>{{end}}{{end}}</p>
         </header>
 
         {{if and .Flash $sel}}
@@ -192,7 +198,7 @@
 
         <form method="post" action="/staff/rank" class="staff-rank" data-staff-rank{{if not $d.CanRank}} aria-disabled="true"{{end}}>
           <h3>Rank</h3>
-          <p class="hint">GM or Admin only. Super GM cannot be granted. You can only assign a rank below your own.</p>
+          <p class="hint">GM or Admin only. Super GM cannot be granted. Rank applies to every Wow.exe login on this Gatehouse account. You can only assign a rank below your own.</p>
           <input type="hidden" name="csrf_token" value="{{.CSRF}}">
           <input type="hidden" name="username" value="{{if $sel}}{{$sel.Username}}{{end}}" data-staff-user-field autocomplete="off">
           {{if $d.Query}}<input type="hidden" name="q" value="{{$d.Query}}">{{end}}
@@ -217,7 +223,7 @@
 
         <form method="post" action="/staff/ban" class="staff-ban" data-staff-ban{{if or (not $d.CanModify) (and $sel $sel.Banned)}} aria-disabled="true"{{end}}{{if and $sel $sel.Banned}} hidden{{end}}>
           <h3>Suspend account</h3>
-          <p class="hint">Blocks website and game login. SOAP kicks them if the world is up; otherwise they stay out on the next login.</p>
+          <p class="hint">Blocks website login and every Wow.exe login on this Gatehouse account. SOAP kicks them if the world is up; otherwise they stay out on the next login.</p>
           <input type="hidden" name="csrf_token" value="{{.CSRF}}">
           <input type="hidden" name="username" value="{{if $sel}}{{$sel.Username}}{{end}}" data-staff-user-field autocomplete="off">
           {{if $d.Query}}<input type="hidden" name="q" value="{{$d.Query}}">{{end}}

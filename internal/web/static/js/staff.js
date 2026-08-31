@@ -33,6 +33,8 @@
   const banMeta = root.querySelector("[data-staff-ban-meta]");
   const copyBtn = root.querySelector("[data-staff-copy]");
   const clearBtn = root.querySelector("[data-staff-clear]");
+  const gatehouseHint = root.querySelector("[data-staff-gatehouse-hint]");
+  const linkedHint = root.querySelector("[data-staff-linked-hint]");
 
   function rows() {
     return tbody ? Array.from(tbody.querySelectorAll("tr.staff-row")) : [];
@@ -44,11 +46,18 @@
     return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || tag === "BUTTON" || tag === "A" || el.isContentEditable;
   }
 
+  function parseLinked(raw) {
+    if (!raw) return [];
+    return raw.split(",").map(function (s) { return s.trim(); }).filter(Boolean);
+  }
+
   function parseRow(tr) {
     return {
       username: tr.getAttribute("data-user") || "",
       email: tr.getAttribute("data-email") || "",
       gm: Number(tr.getAttribute("data-gm") || "0"),
+      gatehouse: tr.getAttribute("data-gatehouse") || "",
+      linked: parseLinked(tr.getAttribute("data-linked") || ""),
       online: tr.getAttribute("data-online") === "1",
       banned: tr.getAttribute("data-banned") === "1",
       banreason: tr.getAttribute("data-ban-reason") || "",
@@ -151,8 +160,33 @@
       el.value = acc.username;
     });
     if (searchSelect) searchSelect.value = acc.username;
+    if (gatehouseHint) {
+      if (acc.gatehouse) {
+        gatehouseHint.hidden = false;
+        gatehouseHint.textContent = "Gatehouse account " + acc.gatehouse + ". Rank and suspend apply to every Wow.exe login on that account.";
+      } else {
+        gatehouseHint.hidden = true;
+        gatehouseHint.textContent = "";
+      }
+    }
+    if (linkedHint) {
+      linkedHint.textContent = "";
+      if (acc.linked && acc.linked.length) {
+        linkedHint.hidden = false;
+        linkedHint.appendChild(document.createTextNode("Wow.exe logins: "));
+        acc.linked.forEach(function (n, i) {
+          if (i) linkedHint.appendChild(document.createTextNode(", "));
+          const code = document.createElement("code");
+          code.textContent = n;
+          linkedHint.appendChild(code);
+        });
+      } else {
+        linkedHint.hidden = true;
+      }
+    }
     const blocked = acc.gm > actorGM;
-    const self = acc.username.toUpperCase() === actorUser;
+    const self = acc.username.toUpperCase() === actorUser ||
+      (acc.gatehouse && acc.gatehouse.toUpperCase() === actorUser);
     if (blocked) {
       blockedEl.hidden = false;
       blockedEl.textContent = "Cannot modify " + rankName(acc.gm);
@@ -338,7 +372,7 @@
         : "this rank";
       const who = (rankForm.querySelector("[data-staff-user-field]") || userField);
       const name = who ? who.value : "this account";
-      if (rankConfirmText) rankConfirmText.textContent = "Set " + name + " to " + label + "?";
+      if (rankConfirmText) rankConfirmText.textContent = "Set " + name + " to " + label + "? This applies to every Wow.exe login on that Gatehouse account.";
       if (rankConfirm) rankConfirm.hidden = false;
     });
   }
@@ -364,7 +398,7 @@
       e.preventDefault();
       const who = banForm.querySelector("[data-staff-user-field]") || userField;
       const name = who ? who.value : "this account";
-      if (banConfirmText) banConfirmText.textContent = "Suspend " + name + "? They will not be able to log in.";
+      if (banConfirmText) banConfirmText.textContent = "Suspend " + name + "? Website login and every Wow.exe login on that Gatehouse account will be blocked.";
       if (banConfirm) banConfirm.hidden = false;
     });
   }

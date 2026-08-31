@@ -283,6 +283,59 @@ func (s *Store) CountLinks(ctx context.Context, userID uint32) (int, error) {
 	return n, err
 }
 
+// AccountOwner is the Gatehouse user that owns a Wow.exe login, plus every
+// client username on that identity.
+type AccountOwner struct {
+	UserID     uint32
+	Username   string
+	StaffLevel uint8
+	Linked     []string
+}
+
+func (s *Store) GatehouseByAccountIDs(ctx context.Context, ids []uint32) map[uint32]AccountOwner {
+	out := map[uint32]AccountOwner{}
+	if len(ids) == 0 {
+		return out
+	}
+	ph := make([]string, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		ph[i] = "?"
+		args[i] = id
+	}
+	q := `SELECT l.account_id, u.id, u.username, u.staff_level, sib.username
+		FROM wow_links l
+		INNER JOIN users u ON u.id = l.user_id
+		INNER JOIN wow_links sib ON sib.user_id = u.id
+		WHERE l.account_id IN (` + strings.Join(ph, ",") + `)
+		ORDER BY sib.username`
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return out
+	}
+	defer rows.Close()
+	seen := map[uint32]map[string]struct{}{}
+	for rows.Next() {
+		var accID, userID uint32
+		var gh, sib string
+		var staff int
+		if err := rows.Scan(&accID, &userID, &gh, &staff, &sib); err != nil {
+			return out
+		}
+		o, ok := out[accID]
+		if !ok {
+			o = AccountOwner{UserID: userID, Username: gh, StaffLevel: uint8(staff)}
+			seen[accID] = map[string]struct{}{}
+		}
+		if _, dup := seen[accID][sib]; !dup {
+			seen[accID][sib] = struct{}{}
+			o.Linked = append(o.Linked, sib)
+		}
+		out[accID] = o
+	}
+	return out
+}
+
 func (s *Store) OwnsAccount(ctx context.Context, userID, accountID uint32) bool {
 	var n int
 	err := s.db.QueryRowContext(ctx, `SELECT 1 FROM wow_links WHERE user_id = ? AND account_id = ?`, userID, accountID).Scan(&n)

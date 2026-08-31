@@ -85,6 +85,52 @@ func TestAuthRejectsBannedWowAccount(t *testing.T) {
 	}
 }
 
+func TestAuthRejectsBannedLinkedWowAccount(t *testing.T) {
+	id, ac := testID(t)
+	ctx := context.Background()
+	if err := ac.Create(ctx, "ADMIN", "Abcd1234", "a@example.com", 2); err != nil {
+		t.Fatal(err)
+	}
+	ac.GrantGM("ADMIN", 3)
+	u, err := id.Register(ctx, "HeroOne", "Abcd1234", "h@example.com", "", "Abcd1234", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := id.AddCredential(ctx, u.ID, "HeroAlt", "Abcd1234", "", 2); err != nil {
+		t.Fatal(err)
+	}
+	if err := ac.Ban(ctx, 3, "ADMIN", "HEROALT", "perm", "test"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := id.Authenticate(ctx, "HeroOne", "Abcd1234"); !errors.Is(err, account.ErrBanned) {
+		t.Fatalf("want banned via alt, got %v", err)
+	}
+}
+
+func TestNewWowLoginInheritsStaffRank(t *testing.T) {
+	id, ac := testID(t)
+	ctx := context.Background()
+	u, err := id.Register(ctx, "Staffer", "Abcd1234", "s@example.com", "", "Abcd1234", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ac.GrantGM("STAFFER", 3)
+	if err := id.Store().SetStaffLevel(ctx, u.ID, 3); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := id.AddCredential(ctx, u.ID, "StaffAlt", "Abcd1234", "", 2); err != nil {
+		t.Fatal(err)
+	}
+	alt, err := ac.GetListed(ctx, "StaffAlt")
+	if err != nil || alt.GMLevel != 3 {
+		t.Fatalf("inherit %+v %v", alt, err)
+	}
+	gh, uid, names := id.LinkedWowNames(ctx, "StaffAlt")
+	if gh != "STAFFER" || uid != u.ID || len(names) != 2 {
+		t.Fatalf("linked %q %d %v", gh, uid, names)
+	}
+}
+
 func TestWowSecretRoundTrip(t *testing.T) {
 	id, _ := testID(t)
 	ctx := context.Background()
