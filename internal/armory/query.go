@@ -65,21 +65,24 @@ func (s *Service) inspectSQL(ctx context.Context, name string) (Profile, bool) {
 		       c.`+"`level`"+`, c.`+"`money`"+`, c.`+"`totaltime`"+`, c.`+"`logout_time`"+`,
 		       c.`+"`online`"+`, c.`+"`map`"+`, c.`+"`zone`"+`, c.`+"`arenaPoints`"+`,
 		       c.`+"`totalHonorPoints`"+`, c.`+"`totalKills`"+`, c.`+"`activeTalentGroup`"+`,
-		       c.`+"`talentGroupsCount`"+`, c.`+"`playerBytes`"+`, c.`+"`playerBytes2`"+`
+		       c.`+"`talentGroupsCount`"+`, c.`+"`skin`"+`, c.`+"`face`"+`, c.`+"`hairStyle`"+`,
+		       c.`+"`hairColor`"+`, c.`+"`facialStyle`"+`
 		FROM %s c
 		INNER JOIN %s a ON a.`+"`id`"+` = c.`+"`account`"+`
-		WHERE c.`+"`deleteDate`"+` IS NULL AND c.`+"`name`"+` = ?%s
+		WHERE c.`+"`deleteDate`"+` IS NULL AND LOWER(c.`+"`name`"+`) = LOWER(?)%s
 		LIMIT 1`, s.db.QChar("characters"), s.db.QAuth("account"), botSQL)
 	args := append([]any{name}, botArgs...)
 	var p Profile
 	var race, class, gender, level uint8
-	var money, played, logout, mapID, zone, honor, arena, hk, pb, pb2 uint32
+	var money, played, logout, mapID, zone, honor, arena, hk uint32
 	var online, activeSpec, specCount int
 	err := s.db.SQL.QueryRowContext(ctx, q, args...).Scan(
 		&p.GUID, &p.Name, &race, &class, &gender, &level, &money, &played, &logout,
-		&online, &mapID, &zone, &arena, &honor, &hk, &activeSpec, &specCount, &pb, &pb2,
+		&online, &mapID, &zone, &arena, &honor, &hk, &activeSpec, &specCount,
+		&p.Skin, &p.Face, &p.HairStyle, &p.HairColor, &p.FacialStyle,
 	)
 	if err != nil {
+		s.log.Error("armory inspect", "err", err, "name", name)
 		return Profile{}, false
 	}
 	p.Level = level
@@ -89,7 +92,6 @@ func (s *Service) inspectSQL(ctx context.Context, name string) (Profile, bool) {
 	p.HonorableKills = hk
 	p.ActiveSpec = activeSpec
 	fillSheet(&p, race, class, gender, money, played, logout, mapID, zone)
-	p.Skin, p.Face, p.HairStyle, p.HairColor, p.FacialStyle = decodePlayerBytes(pb, pb2)
 	p.Guild = s.guildName(ctx, p.GUID)
 	if p.Guild != "" {
 		p.GuildMOTD, p.GuildRoster = s.guildRoster(ctx, p.Guild)
