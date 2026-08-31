@@ -156,24 +156,67 @@ func (s *Service) Create(ctx context.Context, username, password, email string, 
 	}
 
 	mode := s.createMode()
+	err = nil
 	switch mode {
 	case "soap":
-		return s.createSOAP(ctx, username, password, email, expansion)
+		err = s.createSOAP(ctx, username, password, email, expansion)
 	case "sql":
-		return s.createSQL(ctx, username, password, email, expansion)
+		err = s.createSQL(ctx, username, password, email, expansion)
 	default: // auto
 		if s.soap != nil && s.cfg.SOAPConfigured() && !s.cfg.DemoMode {
-			err := s.createSOAP(ctx, username, password, email, expansion)
-			if err == nil || errors.Is(err, ErrTaken) {
+			err = s.createSOAP(ctx, username, password, email, expansion)
+			if errors.Is(err, ErrTaken) {
 				return err
 			}
-			if s.db != nil {
-				return s.createSQL(ctx, username, password, email, expansion)
+			if err != nil && s.db != nil {
+				err = s.createSQL(ctx, username, password, email, expansion)
 			}
+		} else {
+			err = s.createSQL(ctx, username, password, email, expansion)
+		}
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := s.waitForAccount(ctx, username); err != nil {
+		if mode != "soap" && s.db != nil && !s.cfg.DemoMode {
+			if sqlErr := s.createSQL(ctx, username, password, email, expansion); sqlErr == nil {
+				_, err = s.waitForAccount(ctx, username)
+			} else if !errors.Is(sqlErr, ErrTaken) {
+				return sqlErr
+			} else {
+				_, err = s.waitForAccount(ctx, username)
+			}
+		}
+		if err != nil {
 			return err
 		}
-		return s.createSQL(ctx, username, password, email, expansion)
 	}
+	return nil
+}
+
+func (s *Service) waitForAccount(ctx context.Context, username string) (uint32, error) {
+	var last error
+	for i := 0; i < 10; i++ {
+		id, err := s.lookupAccountID(ctx, username)
+		if err == nil {
+			return id, nil
+		}
+		last = err
+		if errors.Is(err, ErrNotFound) && i < 9 {
+			select {
+			case <-ctx.Done():
+				return 0, ctx.Err()
+			case <-time.After(150 * time.Millisecond):
+			}
+			continue
+		}
+		return 0, err
+	}
+	if last == nil {
+		last = ErrNotFound
+	}
+	return 0, last
 }
 
 func (s *Service) createMode() string {
@@ -507,16 +550,68 @@ func (s *Service) GetListed(ctx context.Context, username string) (ListedAccount
 	if username == "" {
 		return ListedAccount{}, ErrNotFound
 	}
-	rows, _, err := s.ListAccounts(ctx, ListFilter{Query: username, IncludeBots: true, Limit: 100})
+	if s.cfg.DemoMode || s.db == nil {
+		rows, _, err := s.listMem(ListFilter{Query: username, IncludeBots: true, Limit: 100})
+		if err != nil {
+			return ListedAccount{}, err
+		}
+		for _, row := range rows {
+			if row.Username == username {
+				return row, nil
+			}
+		}
+		return ListedAccount{}, ErrNotFound
+	}
+	q := fmt.Sprintf(`
+		SELECT a.`+"`id`"+`, a.`+"`username`"+`, a.`+"`email`"+`, a.`+"`joindate`"+`,
+		       CAST(a.`+"`last_login`"+` AS CHAR), a.`+"`last_ip`"+`, a.`+"`online`"+`, a.`+"`expansion`"+`, a.`+"`locked`"+`,
+		       COALESCE(g.gmlevel, 0)
+		FROM %s a
+		LEFT JOIN (
+			SELECT `+"`id`"+`, MAX(`+"`gmlevel`"+`) AS gmlevel FROM %s GROUP BY `+"`id`"+`
+		) g ON g.`+"`id`"+` = a.`+"`id`"+`
+		WHERE a.`+"`username`"+` = ?
+		LIMIT 1`, s.db.QAuth("account"), s.db.QAuth("account_access"))
+	var (
+		row    ListedAccount
+		join   time.Time
+		last   sql.NullString
+		online int
+		locked int
+		lastIP string
+	)
+	err := s.db.SQL.QueryRowContext(ctx, q, username).Scan(&row.ID, &row.Username, &row.Email, &join, &last, &lastIP, &online, &row.Expansion, &locked, &row.GMLevel)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ListedAccount{}, ErrNotFound
+	}
 	if err != nil {
 		return ListedAccount{}, err
 	}
-	for _, row := range rows {
-		if row.Username == username {
-			return row, nil
-		}
+	row.JoinDate = join.UTC().Format("2006-01-02 15:04")
+	row.LastLogin = formatLastLogin(last)
+	row.LastIP = lastIP
+	row.Online = online != 0
+	row.Locked = locked != 0
+	out := []ListedAccount{row}
+	s.attachBans(ctx, out)
+	return out[0], nil
+}
+
+func formatLastLogin(last sql.NullString) string {
+	if !last.Valid {
+		return "—"
 	}
-	return ListedAccount{}, ErrNotFound
+	s := strings.TrimSpace(last.String)
+	if s == "" || strings.HasPrefix(s, "0000-00-00") {
+		return "—"
+	}
+	if t, err := time.Parse("2006-01-02 15:04:05", s); err == nil {
+		return t.UTC().Format("2006-01-02 15:04")
+	}
+	if len(s) >= 16 {
+		return s[:16]
+	}
+	return s
 }
 
 func (s *Service) listSQL(ctx context.Context, f ListFilter) ([]ListedAccount, int, error) {
@@ -541,8 +636,8 @@ func (s *Service) listSQL(ctx context.Context, f ListFilter) ([]ListedAccount, i
 		return nil, 0, err
 	}
 	listQ := fmt.Sprintf(`
-		SELECT a.`+"`id`"+`, a.`+"`username`"+`, a.`+"`email`"+`, a.`+"`joindate`"+`, a.`+"`last_login`"+`,
-		       a.`+"`last_ip`"+`, a.`+"`online`"+`, a.`+"`expansion`"+`, a.`+"`locked`"+`,
+		SELECT a.`+"`id`"+`, a.`+"`username`"+`, a.`+"`email`"+`, a.`+"`joindate`"+`,
+		       CAST(a.`+"`last_login`"+` AS CHAR), a.`+"`last_ip`"+`, a.`+"`online`"+`, a.`+"`expansion`"+`, a.`+"`locked`"+`,
 		       COALESCE(g.gmlevel, 0)
 		FROM %s a
 		LEFT JOIN (
@@ -562,7 +657,7 @@ func (s *Service) listSQL(ctx context.Context, f ListFilter) ([]ListedAccount, i
 		var (
 			row    ListedAccount
 			join   time.Time
-			last   sql.NullTime
+			last   sql.NullString
 			online int
 			locked int
 			lastIP string
@@ -571,11 +666,7 @@ func (s *Service) listSQL(ctx context.Context, f ListFilter) ([]ListedAccount, i
 			return nil, 0, err
 		}
 		row.JoinDate = join.UTC().Format("2006-01-02 15:04")
-		if last.Valid {
-			row.LastLogin = last.Time.UTC().Format("2006-01-02 15:04")
-		} else {
-			row.LastLogin = "—"
-		}
+		row.LastLogin = formatLastLogin(last)
 		row.LastIP = lastIP
 		row.Online = online != 0
 		row.Locked = locked != 0

@@ -55,6 +55,21 @@ func TestEnvelopeEscapesXML(t *testing.T) {
 	}
 }
 
+func TestCreateResultErr(t *testing.T) {
+	if err := createResultErr("Account created: HERO"); err != nil {
+		t.Fatal(err)
+	}
+	if err := createResultErr(""); err != nil {
+		t.Fatal(err)
+	}
+	if wrapAccountErr(createResultErr("Account with this name already exist!")) == nil {
+		t.Fatal("taken")
+	}
+	if createResultErr("You do not have permission to perform that function") == nil {
+		t.Fatal("permission")
+	}
+}
+
 func TestRejectUnsafe(t *testing.T) {
 	if err := rejectUnsafe(`pw"x`); err == nil {
 		t.Fatal("quote should fail")

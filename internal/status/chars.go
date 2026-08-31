@@ -116,20 +116,27 @@ func (c *Cache) AccountStats(ctx context.Context, accountIDs []uint32) map[uint3
 		args[i] = id
 	}
 	in := strings.Join(ph, ",")
-	lq := fmt.Sprintf(`SELECT a.`+"`id`"+`, a.`+"`last_login`"+` FROM %s a WHERE a.`+"`id`"+` IN (%s)`, c.db.QAuth("account"), in)
+	lq := fmt.Sprintf(`SELECT a.`+"`id`"+`, CAST(a.`+"`last_login`"+` AS CHAR) FROM %s a WHERE a.`+"`id`"+` IN (%s)`, c.db.QAuth("account"), in)
 	rows, err := c.db.SQL.QueryContext(ctx, lq, args...)
 	if err != nil {
 		return out
 	}
 	for rows.Next() {
 		var id uint32
-		var last sql.NullTime
+		var last sql.NullString
 		if err := rows.Scan(&id, &last); err != nil {
 			break
 		}
 		st := AccountStat{LastLogin: "—"}
-		if last.Valid && !last.Time.IsZero() {
-			st.LastLogin = last.Time.UTC().Format("2006-01-02 15:04")
+		if last.Valid {
+			v := strings.TrimSpace(last.String)
+			if v != "" && !strings.HasPrefix(v, "0000-00-00") {
+				if len(v) >= 16 {
+					st.LastLogin = v[:16]
+				} else {
+					st.LastLogin = v
+				}
+			}
 		}
 		out[id] = st
 	}

@@ -43,9 +43,12 @@ func (c *Client) CreateAccount(ctx context.Context, username, password, email st
 		return err
 	}
 	cmd := BuildCreateCommand(username, password, email)
-	_, err := c.Execute(ctx, cmd)
+	result, err := c.Execute(ctx, cmd)
 	if err != nil && email != "" && looksLikeArgError(err) {
-		_, err = c.Execute(ctx, BuildCreateCommand(username, password, ""))
+		result, err = c.Execute(ctx, BuildCreateCommand(username, password, ""))
+	}
+	if err == nil {
+		err = createResultErr(result)
 	}
 	return wrapAccountErr(err)
 }
@@ -212,6 +215,23 @@ func looksLikeArgError(err error) bool {
 	}
 	s := strings.ToLower(err.Error())
 	return strings.Contains(s, "syntax") || strings.Contains(s, "incorrect") || strings.Contains(s, "expected")
+}
+
+func createResultErr(result string) error {
+	s := strings.ToLower(strings.TrimSpace(result))
+	switch {
+	case s == "":
+		return nil
+	case strings.Contains(s, "already") || strings.Contains(s, "exist"):
+		return fmt.Errorf("already exists")
+	case strings.Contains(s, "created") || strings.Contains(s, "success"):
+		return nil
+	case strings.Contains(s, "error") || strings.Contains(s, "fail") || strings.Contains(s, "syntax") ||
+		strings.Contains(s, "unknown") || strings.Contains(s, "permission") || strings.Contains(s, "not have"):
+		return fmt.Errorf("%s", strings.TrimSpace(result))
+	default:
+		return nil
+	}
 }
 
 func wrapAccountErr(err error) error {

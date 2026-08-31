@@ -914,9 +914,12 @@ func (s *Server) wowCredentialPOST(w http.ResponseWriter, r *http.Request) {
 			s.flashRedirect(w, r, "/account", "error", "that client username is taken")
 		case errors.Is(err, identity.ErrTooMany):
 			s.flashRedirect(w, r, "/account", "error", "you already have the maximum number of WoW client logins")
+		case errors.Is(err, account.ErrNotFound):
+			s.log.Error("wow credential", "err", err, "user", sess.User.Username)
+			s.flashRedirect(w, r, "/account#wow", "error", "The realm did not finish creating that login. Try again in a moment.")
 		default:
 			s.log.Error("wow credential", "err", err, "user", sess.User.Username)
-			s.flashRedirect(w, r, "/account", "error", "could not create the client login")
+			s.flashRedirect(w, r, "/account#wow", "error", "could not create the client login")
 		}
 		return
 	}
