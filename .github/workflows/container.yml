@@ -2,14 +2,17 @@ name: container
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
     tags: ["v*"]
   pull_request:
-    branches: [main]
+    branches: [main, dev]
+
+concurrency:
+  group: container-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
-  packages: write
 
 env:
   IMAGE: ghcr.io/${{ github.repository }}
@@ -23,10 +26,15 @@ jobs:
         with:
           go-version: "1.23.x"
       - run: go test ./...
+      - run: go vet ./...
+      - run: python3 -m unittest discover -s scripts -p 'test_*.py'
 
   docker:
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
 
@@ -53,6 +61,7 @@ jobs:
       - uses: docker/build-push-action@v6
         with:
           context: .
+          target: waygate
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}

@@ -234,13 +234,15 @@ Versioning is SemVer. This tree is **0.x alpha** (`v0.1.0-alpha.1`) until it has
 
 ## Container
 
-CI on `main` builds and pushes `ghcr.io/zeroward/waygate` (also `latest` and `sha-*`). Pull requests run tests and a docker build without pushing.
+Pushes to `dev` and `main` run Go tests, `go vet`, and the deployment-helper tests, then build and publish the Waygate image to `ghcr.io/zeroward/waygate`. Pull requests targeting either branch run the checks and container build without publishing.
+
+Images from `dev` receive the `dev` and `sha-*` tags. Images from `main` receive `main`, `latest`, and `sha-*` tags. Version tags (`v*`) publish versioned images; prereleases do not update `latest`.
 
 ```bash
-docker pull ghcr.io/zeroward/waygate:latest
+docker pull ghcr.io/zeroward/waygate:dev
 ```
 
-The GitHub Actions token needs `packages: write` (this workflow sets that). The GHCR package should be linked to this repository.
+Publishing uses the automatic GitHub Actions token with `packages: write`; no separate registry secret is needed. The GHCR package must grant this repository Actions write access, including if the package survived a repository deletion and recreation. Publishing an image does not restart the running application; use the deployment procedure above to update this host.
 
 ## Tests
 
