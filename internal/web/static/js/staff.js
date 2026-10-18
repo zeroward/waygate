@@ -36,6 +36,44 @@
   const gatehouseHint = root.querySelector("[data-staff-gatehouse-hint]");
   const linkedHint = root.querySelector("[data-staff-linked-hint]");
 
+  const smallScreen = window.matchMedia("(max-width: 900px)");
+  let returnFocus = null;
+
+  function mobileDrawerOpen() {
+    return drawer && smallScreen.matches && drawer.classList.contains("is-open") && drawer.getClientRects().length > 0;
+  }
+  function syncDrawerRole() {
+    if (!drawer) return;
+    if (mobileDrawerOpen()) {
+      drawer.setAttribute("role", "dialog");
+      drawer.setAttribute("aria-modal", "true");
+    } else {
+      drawer.removeAttribute("role");
+      drawer.removeAttribute("aria-modal");
+    }
+  }
+  function focusDrawer() {
+    syncDrawerRole();
+    if (!mobileDrawerOpen()) return;
+    const heading = drawer.querySelector("h2");
+    if (heading) { heading.tabIndex = -1; heading.focus(); }
+  }
+  smallScreen.addEventListener("change", syncDrawerRole);
+  window.addEventListener("hashchange", syncDrawerRole);
+  document.addEventListener("keydown", function (event) {
+    if (event.key !== "Tab" || !mobileDrawerOpen()) return;
+    const controls = Array.from(drawer.querySelectorAll("a[href], button, input, select, textarea, [tabindex='0']")).filter(function (el) {
+      return !el.disabled && el.getClientRects().length > 0;
+    });
+    if (!controls.length) return;
+    const first = controls[0], last = controls[controls.length - 1];
+    if (event.shiftKey && (document.activeElement === first || !controls.includes(document.activeElement))) {
+      event.preventDefault(); last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !controls.includes(document.activeElement))) {
+      event.preventDefault(); first.focus();
+    }
+  });
+
   function rows() {
     return tbody ? Array.from(tbody.querySelectorAll("tr.staff-row")) : [];
   }
@@ -70,7 +108,7 @@
     if (user) url.searchParams.set("select", user);
     else url.searchParams.delete("select");
     const qs = url.searchParams.toString();
-    history.replaceState(null, "", url.pathname + (qs ? "?" + qs : ""));
+    history.replaceState(null, "", url.pathname + (qs ? "?" + qs : "") + url.hash);
   }
 
   function copyFallback(text) {
@@ -251,8 +289,11 @@
       hideRankConfirm();
       showFlash("", "");
       if (updateUrl) replaceSelect("");
+      syncDrawerRole();
+      if (returnFocus && returnFocus.isConnected) returnFocus.focus({ preventScroll: true });
       return;
     }
+    returnFocus = tr;
     tr.classList.add("is-selected");
     tr.setAttribute("aria-selected", "true");
     fillPanel(parseRow(tr));
@@ -263,15 +304,16 @@
     if (backdrop) backdrop.hidden = false;
     if (!opts || opts.clearFlash !== false) showFlash("", "");
     if (updateUrl) replaceSelect(tr.getAttribute("data-user") || "");
+    focusDrawer();
   }
 
   if (tbody) {
     tbody.addEventListener("click", function (e) {
       const tr = e.target.closest("tr.staff-row");
-      if (!tr) return;
+      if (!tr || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return;
       e.preventDefault();
       selectRow(tr, { clearFlash: true });
-      tr.focus({ preventScroll: true });
+      if (!smallScreen.matches) tr.focus({ preventScroll: true });
     });
   }
 
@@ -282,7 +324,7 @@
         e.preventDefault();
         return;
       }
-      if (drawer && drawer.classList.contains("is-open") && !isEditable(e.target)) {
+      if (drawer && drawer.classList.contains("is-open") && (smallScreen.matches || !isEditable(e.target))) {
         selectRow(null);
         e.preventDefault();
       }
@@ -452,6 +494,9 @@
     if (work) work.classList.add("has-selection");
     if (backdrop) backdrop.hidden = false;
   }
+
+  if (selected) returnFocus = selected;
+  focusDrawer();
 
   const dlForm = root.querySelector("[data-dl-form]");
   if (dlForm) {

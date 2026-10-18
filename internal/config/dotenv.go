@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"fmt"
 	"os"
 	"strings"
 )
@@ -9,6 +10,19 @@ import (
 // LoadDotEnv reads KEY=VALUE lines into the process environment if the key is
 // not already set. Existing env vars win so Docker/compose injection works.
 func LoadDotEnv(path string) error {
+	info, err := os.Lstat(path)
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if !info.Mode().IsRegular() {
+		return fmt.Errorf("environment file must be regular")
+	}
+	if err = os.Chmod(path, 0600); err != nil {
+		return err
+	}
 	f, err := os.Open(path)
 	if err != nil {
 		if os.IsNotExist(err) {

@@ -9,6 +9,8 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+
+	"github.com/zeroward/waygate/internal/session"
 )
 
 func TestAccountListsCharacters(t *testing.T) {
@@ -53,7 +55,7 @@ func TestAccountListsCharacters(t *testing.T) {
 	if !strings.Contains(html, "1234g") || !strings.Contains(html, "Icecrown") {
 		t.Fatal("missing gold or location")
 	}
-	if !strings.Contains(html, "Change password") {
+	if !strings.Contains(html, `action="/account/password"`) {
 		t.Fatal("password form missing")
 	}
 	if strings.Contains(html, "<textarea") {
@@ -97,10 +99,10 @@ func TestWowUnlockAndSavePassword(t *testing.T) {
 		req.AddCookie(c)
 	}
 	sess := srv.sessions.GetOrCreate(httptest.NewRecorder(), req)
-	if len(sess.CredentialKey) != 32 {
+	if len(sess.Snapshot().CredentialKey) != 32 {
 		t.Fatal("login should unwrap DEK")
 	}
-	sess.CredentialKey = nil
+	sess.Update(func(d *session.Data) { d.CredentialKey = nil })
 
 	res, err := client.Get(ts.URL + "/account")
 	if err != nil {

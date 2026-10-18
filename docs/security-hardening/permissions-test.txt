@@ -1,0 +1,2 @@
+Synthetic fixture: initial permissive files rejected; repair and subsequent check passed.
+PASS: 4 private paths; files 0600, directories 0700; owner 1000:1000

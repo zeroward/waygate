@@ -349,7 +349,9 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 	if !srp6.CheckLogin(user, password, salt, verifier) {
 		return nil, ErrBadPassword
 	}
-	if _, ok := s.activeBan(ctx, id); ok {
+	if _, ok, err := s.activeBan(ctx, id); err != nil {
+		return nil, err
+	} else if ok {
 		return nil, ErrBanned
 	}
 	return &Account{ID: id, Username: user, Email: email, GMLevel: s.lookupGMLevel(ctx, id)}, nil

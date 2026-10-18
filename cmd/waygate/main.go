@@ -3,12 +3,11 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"log/slog"
-	"net"
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -17,20 +16,33 @@ import (
 	"github.com/zeroward/waygate/internal/captcha"
 	"github.com/zeroward/waygate/internal/config"
 	"github.com/zeroward/waygate/internal/db"
+	"github.com/zeroward/waygate/internal/identity"
+	"github.com/zeroward/waygate/internal/kb"
 	"github.com/zeroward/waygate/internal/logx"
 	"github.com/zeroward/waygate/internal/mail"
 	"github.com/zeroward/waygate/internal/soap"
 	"github.com/zeroward/waygate/internal/status"
 	"github.com/zeroward/waygate/internal/web"
-	"github.com/zeroward/waygate/internal/wg"
 )
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "wg-agent" {
-		runWGAgent()
+	syscall.Umask(0077)
+	if len(os.Args) > 1 && os.Args[1] == "migrate" {
+		flags := flag.NewFlagSet("migrate", flag.ExitOnError)
+		path := flags.String("db", "data/kb.sqlite", "SQLite path; all other database clients must be stopped")
+		flags.Parse(os.Args[2:])
+		if err := migrateDatabase(*path); err != nil {
+			slog.Error("migration failed; keep services stopped", "err", err)
+			os.Exit(1)
+		}
+		slog.Info("database migration complete")
 		return
 	}
 
+	if len(os.Args) > 1 {
+		slog.Error("unsupported command; use waygate or waygate migrate")
+		os.Exit(2)
+	}
 	cfg, err := config.Load()
 	log := logx.New(envLogLevel(cfg))
 	if err != nil {
@@ -105,28 +117,15 @@ func main() {
 	_ = httpSrv.Shutdown(shctx)
 }
 
-func runWGAgent() {
-	cfg, err := config.Load()
-	log := logx.New(envLogLevel(cfg))
+// migrateDatabase runs offline, without loading realm credentials or opening HTTP.
+func migrateDatabase(path string) error {
+	store, err := kb.Open(path)
 	if err != nil {
-		log.Error("config", "err", err)
-		os.Exit(1)
+		return err
 	}
-	port := 3080
-	if _, p, err := net.SplitHostPort(cfg.ListenAddr); err == nil {
-		if n, err := strconv.Atoi(p); err == nil && n > 0 {
-			port = n
-		}
-	} else if n, err := strconv.Atoi(strings.TrimPrefix(cfg.ListenAddr, ":")); err == nil && n > 0 {
-		port = n
-	}
-	agent := wg.NewAgent(cfg.WGDir, cfg.WGInterface, cfg.WGServerAddr, cfg.WGAgentListen, cfg.WGPort, cfg.PublicAuthPort, cfg.PublicWorldPort, port, log)
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-	if err := agent.Run(ctx); err != nil {
-		log.Error("wg-agent", "err", err)
-		os.Exit(1)
-	}
+	defer store.Close()
+	_, err = identity.NewStore(store.SQL())
+	return err
 }
 
 func envLogLevel(cfg config.Config) string {

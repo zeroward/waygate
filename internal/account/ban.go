@@ -2,6 +2,7 @@ package account
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"strings"
@@ -178,30 +179,30 @@ func (s *Service) unbanSQL(ctx context.Context, target string) error {
 	return nil
 }
 
-func (s *Service) IsBanned(ctx context.Context, username string) (bool, BanInfo) {
+func (s *Service) IsBanned(ctx context.Context, username string) (bool, BanInfo, error) {
 	username = srp6.UpperLatin(strings.TrimSpace(username))
 	if s.cfg.DemoMode || s.db == nil {
 		s.mu.Lock()
 		defer s.mu.Unlock()
 		a, ok := s.mem[username]
 		if !ok || !a.Banned {
-			return false, BanInfo{}
+			return false, BanInfo{}, nil
 		}
 		if !a.BanUntil.IsZero() && time.Now().UTC().After(a.BanUntil) {
 			a.Banned = false
-			return false, BanInfo{}
+			return false, BanInfo{}, nil
 		}
-		return true, BanInfo{Reason: a.BanReason, Until: formatBanUntil(a.BanUntil)}
+		return true, BanInfo{Reason: a.BanReason, Until: formatBanUntil(a.BanUntil)}, nil
 	}
 	id, err := s.lookupAccountID(ctx, username)
 	if err != nil {
-		return false, BanInfo{}
+		return false, BanInfo{}, err
 	}
-	info, ok := s.activeBan(ctx, id)
-	return ok, info
+	info, ok, err := s.activeBan(ctx, id)
+	return ok, info, err
 }
 
-func (s *Service) activeBan(ctx context.Context, id uint32) (BanInfo, bool) {
+func (s *Service) activeBan(ctx context.Context, id uint32) (BanInfo, bool, error) {
 	q := fmt.Sprintf(`
 		SELECT `+"`banreason`"+`, `+"`bandate`"+`, `+"`unbandate`"+`
 		FROM %s
@@ -212,13 +213,16 @@ func (s *Service) activeBan(ctx context.Context, id uint32) (BanInfo, bool) {
 	var bandate, unbandate int64
 	err := s.db.SQL.QueryRowContext(ctx, q, id).Scan(&reason, &bandate, &unbandate)
 	if err != nil {
-		return BanInfo{}, false
+		if errors.Is(err, sql.ErrNoRows) {
+			return BanInfo{}, false, nil
+		}
+		return BanInfo{}, false, err
 	}
 	until := "permanent"
 	if unbandate > 0 && unbandate != bandate {
 		until = time.Unix(unbandate, 0).UTC().Format("2006-01-02 15:04")
 	}
-	return BanInfo{Reason: reason, Until: until}, true
+	return BanInfo{Reason: reason, Until: until}, true, nil
 }
 
 func (s *Service) attachBans(ctx context.Context, rows []ListedAccount) {

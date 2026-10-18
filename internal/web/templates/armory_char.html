@@ -6,14 +6,14 @@
   <h1>{{$p.Name}}</h1>
   <p class="lede">Level {{$p.Level}}{{if $p.Guild}} · <a href="/armory/guild/{{pathEscape $p.Guild}}">{{$p.Guild}}</a>{{end}} · {{if $p.Online}}Online{{else}}{{$p.Logout}}{{end}}</p>
   <nav class="tabs">
-    <a href="/armory/{{$p.Name}}?tab=sheet" {{if eq $d.Tab "sheet"}}class="is-active"{{end}}>Sheet</a>
-    <a href="/armory/{{$p.Name}}?tab=gear" {{if eq $d.Tab "gear"}}class="is-active"{{end}}>Gear</a>
-    <a href="/armory/{{$p.Name}}?tab=talents" {{if eq $d.Tab "talents"}}class="is-active"{{end}}>Talents</a>
-    <a href="/armory/{{$p.Name}}?tab=professions" {{if eq $d.Tab "professions"}}class="is-active"{{end}}>Professions</a>
-    <a href="/armory/{{$p.Name}}?tab=reputations" {{if eq $d.Tab "reputations"}}class="is-active"{{end}}>Reputations</a>
-    <a href="/armory/{{$p.Name}}?tab=achievements" {{if eq $d.Tab "achievements"}}class="is-active"{{end}}>Achievements</a>
-    <a href="/armory/{{$p.Name}}?tab=pvp" {{if eq $d.Tab "pvp"}}class="is-active"{{end}}>PvP</a>
-    {{if $p.Guild}}<a href="/armory/{{$p.Name}}?tab=guild" {{if eq $d.Tab "guild"}}class="is-active"{{end}}>Guild</a>{{end}}
+    <a href="/armory/{{$p.Name}}?tab=sheet" {{if eq $d.Tab "sheet"}}class="is-active" aria-current="page"{{end}}>Sheet</a>
+    <a href="/armory/{{$p.Name}}?tab=gear" {{if eq $d.Tab "gear"}}class="is-active" aria-current="page"{{end}}>Gear</a>
+    <a href="/armory/{{$p.Name}}?tab=talents" {{if eq $d.Tab "talents"}}class="is-active" aria-current="page"{{end}}>Talents</a>
+    <a href="/armory/{{$p.Name}}?tab=professions" {{if eq $d.Tab "professions"}}class="is-active" aria-current="page"{{end}}>Professions</a>
+    <a href="/armory/{{$p.Name}}?tab=reputations" {{if eq $d.Tab "reputations"}}class="is-active" aria-current="page"{{end}}>Reputations</a>
+    <a href="/armory/{{$p.Name}}?tab=achievements" {{if eq $d.Tab "achievements"}}class="is-active" aria-current="page"{{end}}>Achievements</a>
+    <a href="/armory/{{$p.Name}}?tab=pvp" {{if eq $d.Tab "pvp"}}class="is-active" aria-current="page"{{end}}>PvP</a>
+    {{if $p.Guild}}<a href="/armory/{{$p.Name}}?tab=guild" {{if eq $d.Tab "guild"}}class="is-active" aria-current="page"{{end}}>Guild</a>{{end}}
   </nav>
 
   {{if eq $d.Tab "sheet"}}
@@ -116,7 +116,7 @@
 
   {{if eq $d.Tab "reputations"}}
   {{if $p.Reputations}}
-  <div class="table-wrap">
+  <div class="table-wrap" role="region" aria-label="Details" tabindex="0">
     <table>
       <thead><tr><th>Faction</th><th>Standing</th><th></th></tr></thead>
       <tbody>
@@ -137,7 +137,7 @@
 
   {{if eq $d.Tab "achievements"}}
   {{if $p.Achievements}}
-  <div class="table-wrap">
+  <div class="table-wrap" role="region" aria-label="Details" tabindex="0">
     <table>
       <thead><tr><th>Achievement</th><th>Date</th></tr></thead>
       <tbody>
@@ -162,7 +162,7 @@
     <dt>Honorable kills</dt><dd>{{$p.HonorableKills}}</dd>
   </dl>
   {{if $p.Arena}}
-  <div class="table-wrap">
+  <div class="table-wrap" role="region" aria-label="Details" tabindex="0">
     <table>
       <thead>
         <tr><th>Bracket</th><th>Team</th><th>Rating</th><th>Season</th><th>Personal</th></tr>
@@ -191,7 +191,7 @@
   {{if $p.GuildMOTD}}<p class="lede">{{$p.GuildMOTD}}</p>{{end}}
   <p class="hint"><a href="/armory/guild/{{pathEscape $p.Guild}}">Open guild page</a></p>
   {{if $p.GuildRoster}}
-  <div class="table-wrap">
+  <div class="table-wrap" role="region" aria-label="Details" tabindex="0">
     <table>
       <thead>
         <tr><th>Name</th><th>Level</th><th>Class</th><th>Rank</th><th></th></tr>

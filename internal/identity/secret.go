@@ -19,7 +19,9 @@ func newDEK() ([]byte, error) {
 	return k, nil
 }
 
-func seal(key, plaintext []byte) (nonce, blob []byte, err error) {
+func seal(key, plaintext []byte) (nonce, blob []byte, err error) { return sealAAD(key, plaintext, nil) }
+
+func sealAAD(key, plaintext, aad []byte) (nonce, blob []byte, err error) {
 	if len(key) != dekLen {
 		return nil, nil, errors.New("bad key")
 	}
@@ -35,11 +37,13 @@ func seal(key, plaintext []byte) (nonce, blob []byte, err error) {
 	if _, err := io.ReadFull(rand.Reader, nonce); err != nil {
 		return nil, nil, err
 	}
-	blob = gcm.Seal(nil, nonce, plaintext, nil)
+	blob = gcm.Seal(nil, nonce, plaintext, aad)
 	return nonce, blob, nil
 }
 
-func open(key, nonce, blob []byte) ([]byte, error) {
+func open(key, nonce, blob []byte) ([]byte, error) { return openAAD(key, nonce, blob, nil) }
+
+func openAAD(key, nonce, blob, aad []byte) ([]byte, error) {
 	if len(key) != dekLen || len(blob) == 0 {
 		return nil, errors.New("bad secret")
 	}
@@ -54,5 +58,7 @@ func open(key, nonce, blob []byte) ([]byte, error) {
 	if len(nonce) != gcm.NonceSize() {
 		return nil, fmt.Errorf("bad nonce")
 	}
-	return gcm.Open(nil, nonce, blob, nil)
+	return gcm.Open(nil, nonce, blob, aad)
 }
+
+func wrapAAD(userID uint32) []byte { return []byte(fmt.Sprintf("waygate:dek-wrap:v2:user:%d", userID)) }

@@ -45,31 +45,6 @@ services:
       - ac-network
       - cf-tunnel
 
-  # Player WireGuard. Replaces host wg-quick@wg0 (disable that unit first).
-  # host netns so game traffic can return via the docker bridge on this CoreOS box.
-  wireguard:
-    build:
-      context: .
-      target: wireguard
-    image: ghcr.io/zeroward/waygate:wg
-    container_name: waygate-wg
-    restart: unless-stopped
-    network_mode: host
-    cap_add:
-      - NET_ADMIN
-    devices:
-      - /dev/net/tun
-    env_file:
-      - .env
-    environment:
-      WG_DIR: /app/data/wg
-      WG_INTERFACE: wg0
-      WG_SERVER_ADDR: 10.8.0.1/24
-      WG_PORT: "51820"
-      WG_AGENT_LISTEN: "127.0.0.1:9180"
-    volumes:
-      - ./data/wg:/app/data/wg:z
-
   clamav:
     image: clamav/clamav:1.4
     container_name: ac-clamav
@@ -90,10 +65,11 @@ services:
     networks:
       - ac-network
   
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: waygate-cftun
-    command: tunnel --no-autoupdate run --token ${CF_TOKEN}
+  pangolin-site:
+    image: fosrl/pangolin-cli
+    container_name: pangolin-site
+    restart: unless-stopped
+    env_file: .pangolin.env
     networks:
       - cf-tunnel
 
@@ -102,6 +78,7 @@ networks:
     external: true
     name: ${AC_NETWORK:-azerothcore-wotlk_ac-network}
   cf-tunnel:
+    external: true
 
 volumes:
   clamav-db:

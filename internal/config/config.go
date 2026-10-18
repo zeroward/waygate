@@ -9,11 +9,12 @@ import (
 )
 
 type Config struct {
-	ListenAddr string
-	DemoMode   bool
-	LogLevel   string
-	TrustProxy bool
-	SiteURL    string
+	ListenAddr         string
+	DemoMode           bool
+	LogLevel           string
+	TrustProxy         bool
+	SiteURL            string
+	ManagementAPIToken string
 
 	SessionSecure bool
 	SessionTTL    time.Duration
@@ -87,15 +88,9 @@ type Config struct {
 	WebAuthnRPID      string
 	WebAuthnOrigins   []string
 
-	WGEnabled     bool
-	WGDir         string
-	WGEndpoint    string
-	WGPort        int
-	WGPeerMax     int
-	WGExtraNets   []string
-	WGInterface   string
-	WGServerAddr  string
-	WGAgentListen string
+	SSOEnabled                                                                   bool
+	OIDCIssuer, OIDCClientID, OIDCClientSecret, OIDCDisplayName, SSOVaultKeyFile string
+	NetBirdSetupURL                                                              string
 
 	RegisterKey string
 
@@ -111,7 +106,9 @@ type Config struct {
 }
 
 func Load() (Config, error) {
-	_ = LoadDotEnv(".env")
+	if err := LoadDotEnv(".env"); err != nil {
+		return Config{}, err
+	}
 
 	siteURL := strings.TrimRight(env("SITE_URL", "http://127.0.0.1:3080"), "/")
 	secureDefault := strings.HasPrefix(strings.ToLower(siteURL), "https://")
@@ -122,6 +119,7 @@ func Load() (Config, error) {
 		LogLevel:           strings.ToLower(env("LOG_LEVEL", "info")),
 		TrustProxy:         envBool("TRUST_PROXY", false),
 		SiteURL:            siteURL,
+		ManagementAPIToken: env("MANAGEMENT_API_TOKEN", ""),
 		SessionSecure:      envBool("SESSION_SECURE_COOKIE", secureDefault),
 		SessionTTL:         time.Duration(envInt("SESSION_TTL_HOURS", 24)) * time.Hour,
 		CoreName:           env("CORE_NAME", "AzerothCore WotLK 3.3.5a"),
@@ -182,14 +180,13 @@ func Load() (Config, error) {
 		RateDownloads:      envInt("RATE_LIMIT_DOWNLOADS", 8),
 		WowCredentialsMax:  envInt("WOW_CREDENTIALS_MAX", 5),
 		WebAuthnRPID:       strings.TrimSpace(env("WEBAUTHN_RP_ID", "")),
-		WGEnabled:          envBool("WG_ENABLED", false),
-		WGDir:              env("WG_DIR", "data/wg"),
-		WGEndpoint:         strings.TrimSpace(env("WG_ENDPOINT", "")),
-		WGPort:             envInt("WG_PORT", 51820),
-		WGPeerMax:          envInt("WG_PEER_MAX", 5),
-		WGInterface:        env("WG_INTERFACE", "wg0"),
-		WGServerAddr:       env("WG_SERVER_ADDR", "10.8.0.1/24"),
-		WGAgentListen:      env("WG_AGENT_LISTEN", "127.0.0.1:9180"),
+		SSOEnabled:         envBool("SSO_ENABLED", false),
+		OIDCIssuer:         strings.TrimSpace(env("OIDC_ISSUER", "")),
+		OIDCClientID:       strings.TrimSpace(env("OIDC_CLIENT_ID", "")),
+		OIDCClientSecret:   env("OIDC_CLIENT_SECRET", ""),
+		OIDCDisplayName:    env("OIDC_DISPLAY_NAME", "Single sign-on"),
+		SSOVaultKeyFile:    env("SSO_VAULT_KEY_FILE", "data/sso-keys.json"),
+		NetBirdSetupURL:    strings.TrimSpace(env("NETBIRD_SETUP_URL", "")),
 		RegisterKey:        strings.TrimSpace(env("REGISTER_KEY", "")),
 		HowToConnectFile:   env("HOW_TO_CONNECT_FILE", "content/how-to-connect.md"),
 		KBPath:             env("KB_PATH", "data/kb.sqlite"),
@@ -211,14 +208,6 @@ func Load() (Config, error) {
 			}
 		}
 	}
-	if raw := env("WG_EXTRA_NETS", ""); raw != "" {
-		for _, p := range strings.Split(raw, ",") {
-			p = strings.TrimSpace(p)
-			if p != "" {
-				c.WGExtraNets = append(c.WGExtraNets, p)
-			}
-		}
-	}
 
 	if err := c.validate(); err != nil {
 		return Config{}, err
@@ -227,6 +216,12 @@ func Load() (Config, error) {
 }
 
 func (c *Config) validate() error {
+	if err := c.ValidateManagementAPI(); err != nil {
+		return err
+	}
+	if err := c.ValidateSSO(); err != nil {
+		return err
+	}
 	if !identOK(c.AuthDB) || !identOK(c.CharactersDB) {
 		return fmt.Errorf("database names must be alphanumeric/underscore")
 	}
@@ -288,47 +283,23 @@ func (c *Config) validate() error {
 	if c.WowCredentialsMax > 20 {
 		c.WowCredentialsMax = 20
 	}
-	if c.WGPort < 1 || c.WGPort > 65535 {
-		c.WGPort = 51820
-	}
-	if c.WGPeerMax < 1 {
-		c.WGPeerMax = 5
-	}
-	if c.WGPeerMax > 20 {
-		c.WGPeerMax = 20
-	}
-	if strings.TrimSpace(c.WGInterface) == "" {
-		c.WGInterface = "wg0"
-	}
-	if strings.TrimSpace(c.WGServerAddr) == "" {
-		c.WGServerAddr = "10.8.0.1/24"
-	}
-	if strings.TrimSpace(c.WGDir) == "" {
-		c.WGDir = "data/wg"
-	}
 	return nil
 }
 
-func (c Config) WGEndpointHost() string {
-	raw := strings.TrimSpace(c.WGEndpoint)
-	if raw == "" {
-		raw = strings.TrimSpace(c.PublicHost)
+// ValidateManagementAPI also runs in web.New for callers constructing Config directly.
+func (c Config) ValidateManagementAPI() error {
+	if c.ManagementAPIToken == "" {
+		return nil
 	}
-	if raw == "" {
-		raw = "127.0.0.1"
+	if len(c.ManagementAPIToken) < 32 {
+		return fmt.Errorf("MANAGEMENT_API_TOKEN must contain at least 32 ASCII characters")
 	}
-	if _, _, err := splitHostPort(raw); err == nil {
-		return raw
+	for _, ch := range c.ManagementAPIToken {
+		if ch < 33 || ch > 126 {
+			return fmt.Errorf("MANAGEMENT_API_TOKEN must contain printable ASCII characters without spaces")
+		}
 	}
-	return fmt.Sprintf("%s:%d", raw, c.WGPort)
-}
-
-func splitHostPort(hostport string) (host, port string, err error) {
-	i := strings.LastIndex(hostport, ":")
-	if i < 0 || strings.Contains(hostport[i+1:], "]") {
-		return "", "", fmt.Errorf("no port")
-	}
-	return hostport[:i], hostport[i+1:], nil
+	return nil
 }
 
 func (c Config) SMTPConfigured() bool {

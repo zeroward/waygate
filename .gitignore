@@ -1,11 +1,13 @@
 .env
-/data/wg/
+.env.*
+*.env
+*.env.*
+!.env.example
+!*.env.example
+/data/*
+!/data/.gitkeep
 /*.key
 /*.pub
-/data/*.sqlite
-/data/*.sqlite-wal
-/data/*.sqlite-shm
-/data/*.db
 *.exe
 *.exe~
 /webreg
@@ -39,3 +41,8 @@ downloads/**/*.tmp
 downloads/**/*.part
 downloads/**/*.uploading
 !downloads/**/.gitkeep
+
+/.deployment-backups/
+/.deploy.lock
+
+__pycache__/

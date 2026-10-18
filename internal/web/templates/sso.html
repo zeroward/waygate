@@ -1,0 +1,37 @@
+{{template "header" .}}
+{{$d := .Data}}
+<section class="panel narrow">
+  <h1>Single sign-on</h1>
+  {{if $d.LinkUsername}}
+  <h2>Link {{$d.LinkUsername}}</h2>
+  <p>Link this website account to {{.SSOName}}{{if $d.Flow.Email}} ({{$d.Flow.Email}}){{end}}?</p>
+  <p>Future website logins will use SSO. Your website password, passkeys, authenticator and recovery codes will be removed. Your WoW logins and saved game passwords will stay available. Recover SSO access through your identity provider.</p>
+  <form method="post" action="/account/sso/confirm" class="form">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <button type="submit" class="btn btn-gold">Confirm link and use SSO only</button>
+  </form>
+  {{else}}
+  <p>Signed in with {{.SSOName}}{{if $d.Flow.Email}} as {{$d.Flow.Email}}{{end}}. Choose how to continue.</p>
+  <h2>Link an existing account</h2>
+  <p>Verify your website account, then sign in to your provider again to confirm the link.</p>
+  <form method="post" action="/account/sso/link" class="form">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <label>Website username<input name="username" required maxlength="16" autocomplete="username"></label>
+    <label>Website password<input type="password" name="current_password" required maxlength="16" autocomplete="current-password"></label>
+    <label>Authenticator or recovery code (if enabled)<input name="code" maxlength="20" autocomplete="one-time-code"></label>
+    <button type="submit" class="btn">Verify existing account</button>
+  </form>
+  <h2>Create a new account</h2>
+  <p>Create your website account now; add WoW client logins from Account afterward.</p>
+  <form method="post" action="/auth/oidc/signup" class="form">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <label>Website username<input name="username" required minlength="3" maxlength="16" pattern="[A-Za-z0-9]{3,16}" autocomplete="username"></label>
+    {{if $d.NeedKey}}<label>Registration key<input name="register_key" required maxlength="64" autocomplete="off"></label>{{end}}
+    {{if eq .CaptchaProv "turnstile"}}<div class="cf-turnstile" data-sitekey="{{.CaptchaKey}}" data-theme="dark"></div>{{end}}
+    {{if eq .CaptchaProv "hcaptcha"}}<div class="h-captcha" data-sitekey="{{.CaptchaKey}}" data-theme="dark"></div>{{end}}
+    <button type="submit" class="btn btn-gold">Create SSO account</button>
+  </form>
+  {{end}}
+  <p><a href="/account">Back to Account</a></p>
+</section>
+{{template "footer" .}}

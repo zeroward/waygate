@@ -1,0 +1,68 @@
+package downloads
+
+import (
+	"context"
+	"errors"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+type assessmentRejectScanner struct{ calls int }
+
+func (s *assessmentRejectScanner) Scan(context.Context, io.Reader) error {
+	s.calls++
+	return errors.New("fixture scanner unavailable")
+}
+func TestAssessmentOversizeBypassesScanner(t *testing.T) {
+	root := t.TempDir()
+	s := New(root, "")
+	sc := &assessmentRejectScanner{}
+	s.SetScanner(sc)
+	s.SetScanMax(4)
+	it, err := s.Add(context.Background(), UploadInput{FileName: "audit.zip", Category: CatMods}, strings.NewReader("synthetic-payload"))
+	if err != nil || !it.Ready || sc.calls != 0 {
+		t.Fatal("scan bypass not reproduced")
+	}
+	t.Log("Confirmed: above-threshold upload published without calling unavailable scanner")
+}
+func TestAssessmentDownloadSymlinkEscapesRoot(t *testing.T) {
+	parent := t.TempDir()
+	root := filepath.Join(parent, "downloads")
+	if err := os.MkdirAll(filepath.Join(root, "mods"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	secret := filepath.Join(parent, "synthetic-secret")
+	if err := os.WriteFile(secret, []byte("fixture-only"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(secret, filepath.Join(root, "mods", "leak.zip")); err != nil {
+		t.Fatal(err)
+	}
+	s := New(root, "")
+	items := s.List("")
+	if len(items) != 1 || !items[0].Ready {
+		t.Fatal("symlink not cataloged")
+	}
+	body, err := os.ReadFile(items[0].AbsPath)
+	if err != nil || string(body) != "fixture-only" {
+		t.Fatal("symlink not followed")
+	}
+	t.Log("Confirmed: auto-discovered symlink exposes a file outside download root; requires filesystem write")
+}
+func FuzzAssessmentSafeRelPath(f *testing.F) {
+	for _, s := range []string{"mods/a.zip", "../secret", "a/../../b", "/etc/passwd", "a\\b", "a/../b"} {
+		f.Add(s)
+	}
+	f.Fuzz(func(t *testing.T, s string) {
+		rel, err := SafeRelPath(s)
+		if err != nil {
+			return
+		}
+		if filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, "../") {
+			t.Fatalf("escape accepted")
+		}
+	})
+}

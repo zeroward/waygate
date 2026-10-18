@@ -1,0 +1,8 @@
+{
+  "commit": "c87fe43dc24b0f996bf92e3073598bb74641a586",
+  "modified": {
+    "downloads/catalog.json": "6f6b7ed494fc839727c1fe713671e2f32300a95b576078b2deea5a790f2b9f9b",
+    "internal/wg/agent.go": "69c0802c15d9fbc4012c69175bec45b2144f6c1195ed261eeac294f6b1d33d80",
+    "internal/wg/agent_test.go": "2b9c98c6517add68318b24a0c6afe48abbfbb7105efb2ff236c0768c32352884"
+  }
+}

@@ -15,7 +15,7 @@ func (s *Server) ticketsList(w http.ResponseWriter, r *http.Request) {
 	if sess == nil {
 		return
 	}
-	list, err := s.kb.ListTicketsForAccount(r.Context(), sess.User.ID)
+	list, err := s.kb.ListTicketsForAccount(r.Context(), sess.Snapshot().User.ID)
 	if err != nil {
 		s.log.Error("tickets list", "err", err)
 		s.flashRedirect(w, r, "/account", "error", "Could not load tickets.")
@@ -29,7 +29,7 @@ func (s *Server) ticketsNew(w http.ResponseWriter, r *http.Request) {
 	if sess == nil {
 		return
 	}
-	chars, _ := s.status.AccountCharactersMany(r.Context(), s.wowAccountIDs(r.Context(), sess.User.ID))
+	chars, _ := s.status.AccountCharactersMany(r.Context(), s.wowAccountIDs(r.Context(), sess.Snapshot().User.ID))
 	s.view(w, r, "ticket_new.html", "New ticket", "tickets", map[string]any{
 		"Categories": kb.TicketCategories,
 		"Characters": chars,
@@ -47,19 +47,19 @@ func (s *Server) ticketsCreate(w http.ResponseWriter, r *http.Request) {
 	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
 		return
 	}
-	if !s.ticketRL.Allow(s.ip(r) + ":" + sess.User.Username) {
+	if !s.ticketRL.Allow(s.ip(r) + ":" + sess.Snapshot().User.Username) {
 		s.flashRedirect(w, r, "/tickets/new", "error", "Too many tickets. Wait and try again.")
 		return
 	}
 	t := kb.Ticket{
-		AccountID: sess.User.ID,
-		Username:  sess.User.Username,
+		AccountID: sess.Snapshot().User.ID,
+		Username:  sess.Snapshot().User.Username,
 		Category:  strings.TrimSpace(r.FormValue("category")),
 		Title:     strings.TrimSpace(r.FormValue("title")),
 	}
 	body := strings.TrimSpace(r.FormValue("body"))
 	if guid, err := strconv.ParseUint(strings.TrimSpace(r.FormValue("character_guid")), 10, 32); err == nil && guid > 0 {
-		ch, ok := s.ownedCharacter(r, sess.User.ID, uint32(guid))
+		ch, ok := s.ownedCharacter(r, sess.Snapshot().User.ID, uint32(guid))
 		if !ok {
 			s.ticketFormError(w, r, t, body, "Choose one of your characters.")
 			return
@@ -78,7 +78,7 @@ func (s *Server) ticketsCreate(w http.ResponseWriter, r *http.Request) {
 		s.ticketFormError(w, r, t, body, msg)
 		return
 	}
-	s.logStaff(sess.User.Username, "ticket-open", saved.PublicRef)
+	s.logStaff(sess.Snapshot().User.Username, "ticket-open", saved.PublicRef)
 	s.notifyNewTicket(saved)
 	s.flashRedirect(w, r, "/tickets/"+strconv.FormatInt(saved.ID, 10), "success", "Ticket "+saved.PublicRef+" opened.")
 }
@@ -100,7 +100,7 @@ func (s *Server) ticketsView(w http.ResponseWriter, r *http.Request) {
 	if sess == nil {
 		return
 	}
-	t, ok := s.loadOwnTicket(w, r, sess.User.ID)
+	t, ok := s.loadOwnTicket(w, r, sess.Snapshot().User.ID)
 	if !ok {
 		return
 	}
@@ -115,11 +115,11 @@ func (s *Server) ticketsComment(w http.ResponseWriter, r *http.Request) {
 	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
 		return
 	}
-	t, ok := s.loadOwnTicket(w, r, sess.User.ID)
+	t, ok := s.loadOwnTicket(w, r, sess.Snapshot().User.ID)
 	if !ok {
 		return
 	}
-	if err := s.kb.AddTicketMessage(r.Context(), t.ID, sess.User.Username, false, r.FormValue("body")); err != nil {
+	if err := s.kb.AddTicketMessage(r.Context(), t.ID, sess.Snapshot().User.Username, false, r.FormValue("body")); err != nil {
 		switch {
 		case errors.Is(err, kb.ErrTicketClosed):
 			s.flashRedirect(w, r, "/tickets/"+strconv.FormatInt(t.ID, 10), "error", "This ticket is closed.")
@@ -173,15 +173,15 @@ func (s *Server) staffTicketUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	var notes []string
 	if st := strings.TrimSpace(r.FormValue("status")); st != "" && st != t.Status {
-		if err := s.kb.SetTicketStatus(r.Context(), t.ID, st, sess.User.Username); err != nil {
+		if err := s.kb.SetTicketStatus(r.Context(), t.ID, st, sess.Snapshot().User.Username); err != nil {
 			s.flashRedirect(w, r, "/staff/tickets/"+strconv.FormatInt(t.ID, 10), "error", "Could not update status.")
 			return
 		}
-		s.logStaff(sess.User.Username, "ticket-status", t.PublicRef+"="+st)
+		s.logStaff(sess.Snapshot().User.Username, "ticket-status", t.PublicRef+"="+st)
 		notes = append(notes, "Staff changed the status.")
 	}
 	if body := strings.TrimSpace(r.FormValue("body")); body != "" {
-		if err := s.kb.AddTicketMessage(r.Context(), t.ID, sess.User.Username, true, body); err != nil {
+		if err := s.kb.AddTicketMessage(r.Context(), t.ID, sess.Snapshot().User.Username, true, body); err != nil {
 			s.flashRedirect(w, r, "/staff/tickets/"+strconv.FormatInt(t.ID, 10), "error", "Could not add comment.")
 			return
 		}

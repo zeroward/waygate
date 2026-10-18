@@ -54,13 +54,13 @@ func (s *Server) staffEventPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, "/staff#calendar", "error", "Give the event a title.")
 		return
 	}
-	ev, err := s.kb.CreateEvent(r.Context(), date, title, detail, sess.User.Username)
+	ev, err := s.kb.CreateEvent(r.Context(), date, title, detail, sess.Snapshot().User.Username)
 	if err != nil {
 		s.log.Error("calendar add", "err", err)
 		s.flashRedirect(w, r, "/staff#calendar", "error", "Could not save the event.")
 		return
 	}
-	s.logStaff(sess.User.Username, "event-add", ev.Date+" "+ev.Title)
+	s.logStaff(sess.Snapshot().User.Username, "event-add", ev.Date+" "+ev.Title)
 	s.flashRedirect(w, r, "/staff#calendar", "success", "Added "+ev.Title+".")
 }
 
@@ -81,6 +81,6 @@ func (s *Server) staffEventDeletePOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, "/staff#calendar", "error", "Could not remove the event.")
 		return
 	}
-	s.logStaff(sess.User.Username, "event-delete", r.PathValue("id"))
+	s.logStaff(sess.Snapshot().User.Username, "event-delete", r.PathValue("id"))
 	s.flashRedirect(w, r, "/staff#calendar", "success", "Removed the event.")
 }

@@ -1,0 +1,18 @@
+{
+  "verified_at": "2026-09-06T21:55:38.641129+00:00",
+  "migration": "complete",
+  "remaining_legacy_password_records": 0,
+  "accounts_requiring_saved_password_reentry": 0,
+  "http_health_status": 200,
+  "wireguard": "fresh successful synchronization verified",
+  "services_running": [
+    "waygate",
+    "wireguard",
+    "clamav",
+    "cloudflared"
+  ],
+  "private_paths_verified": 14,
+  "backup": "/var/home/core/waygate/.deployment-backups/deploy-agp97aac",
+  "command": "python3 scripts/deploy.py",
+  "tests": "7 deployment orchestration tests and offline migration/idempotence test passed; go vet ./cmd/waygate passed"
+}

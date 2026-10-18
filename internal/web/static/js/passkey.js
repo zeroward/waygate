@@ -117,6 +117,41 @@
     return !window.PublicKeyCredential || !navigator.credentials;
   }
 
+  function verify(purpose) {
+    return new Promise(function (resolve, reject) {
+      var dialog = $("#security-verify"), done = false;
+      var password = $("[data-verify-password]", dialog), code = $("[data-verify-code]", dialog);
+      var status = $("[data-verify-status]", dialog);
+      status.textContent = "";
+      function complete(data) {
+        if (!data.ok) throw new Error(data.error || "Verification failed.");
+        done = true; dialog.close(); resolve();
+      }
+      function failed(err) { status.textContent = err.message || "Verification cancelled."; }
+      $("[data-verify-submit]", dialog).onclick = function () {
+        postJSON("/account/reauth/password", {purpose:purpose, password:password.value, code:code ? code.value : ""}).then(complete).catch(failed);
+        password.value = ""; if (code) code.value = "";
+      };
+      var passkey = $("[data-verify-passkey]", dialog);
+      if (passkey) passkey.onclick = function () {
+        postJSON("/account/reauth/passkey/begin", {purpose:purpose}).then(function (opts) {
+          if (opts.error) throw new Error(opts.error);
+          return navigator.credentials.get({publicKey:publicKeyFrom(opts)});
+        }).then(function (cred) { return postJSON("/account/reauth/passkey/finish", credToJSON(cred)); }).then(complete).catch(failed);
+      };
+      dialog.onclose = function () { password.value=""; if(code) code.value=""; if(!done) reject(new Error("Verification cancelled.")); };
+      dialog.showModal();
+    });
+  }
+  document.querySelectorAll("form[data-sensitive-purpose]").forEach(function (form) {
+    // Verification happens in the dialog. Native submission carries the one-use grant.
+    form.querySelectorAll("input:not([type=hidden])").forEach(function (input) { input.required = false; input.closest("label").hidden = true; });
+    form.addEventListener("submit", function (event) {
+      event.preventDefault();
+      verify(form.getAttribute("data-sensitive-purpose")).then(function () { HTMLFormElement.prototype.submit.call(form); }).catch(function () {});
+    });
+  });
+
   function register() {
     if (unsupported()) {
       setStatus("This browser does not support passkeys.", true);
@@ -126,7 +161,7 @@
     var btn = $("[data-passkey-register]");
     if (btn) btn.disabled = true;
     setStatus("Waiting for your authenticator…", false);
-    postJSON("/account/passkey/register/begin", { name: nameEl ? nameEl.value : "" })
+    verify("passkey-add").then(function () { return postJSON("/account/passkey/register/begin", { name: nameEl ? nameEl.value : "" }); })
       .then(function (opts) {
         if (opts.error) throw new Error(opts.error);
         return navigator.credentials.create({ publicKey: publicKeyFrom(opts) });

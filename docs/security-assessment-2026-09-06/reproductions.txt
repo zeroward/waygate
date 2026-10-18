@@ -1,0 +1,47 @@
+=== RUN   TestAssessmentStoredHashDecryptsClientPassword
+    assessment_test.go:25: Confirmed: stored password verifier alone unwraps the client credential key
+--- PASS: TestAssessmentStoredHashDecryptsClientPassword (0.04s)
+=== RUN   TestAssessmentTOTPReplayAndRecoveryWriteFailure
+    assessment_test.go:38: Confirmed: TOTP replay; recovery accepted twice despite persistence failure
+--- PASS: TestAssessmentTOTPReplayAndRecoveryWriteFailure (0.00s)
+=== RUN   TestAssessmentTOTPStatusFailsOpen
+    assessment_test.go:47: Confirmed: missing MFA table is reported as disabled with no error
+--- PASS: TestAssessmentTOTPStatusFailsOpen (0.00s)
+PASS
+ok  	github.com/zeroward/waygate/internal/identity	(cached)
+=== RUN   TestAssessmentPendingSessionSurvivesRevocation
+    assessment_test.go:9: Confirmed: pending authentication survives user revocation in memory and SQLite
+--- PASS: TestAssessmentPendingSessionSurvivesRevocation (0.00s)
+=== RUN   TestAssessmentConcurrentSessionMutation
+--- PASS: TestAssessmentConcurrentSessionMutation (0.00s)
+PASS
+ok  	github.com/zeroward/waygate/internal/session	(cached)
+=== RUN   TestAssessmentOversizeBypassesScanner
+    assessment_test.go:9: Confirmed: above-threshold upload published without calling unavailable scanner
+--- PASS: TestAssessmentOversizeBypassesScanner (0.00s)
+=== RUN   TestAssessmentDownloadSymlinkEscapesRoot
+    assessment_test.go:17: Confirmed: auto-discovered symlink exposes a file outside download root; requires filesystem write
+--- PASS: TestAssessmentDownloadSymlinkEscapesRoot (0.00s)
+PASS
+ok  	github.com/zeroward/waygate/internal/downloads	(cached)
+=== RUN   TestAssessmentPasskeyWithoutUserVerification
+--- PASS: TestAssessmentPasskeyWithoutUserVerification (0.08s)
+=== RUN   TestAssessmentKBRetainsDemotedPrivilege
+    assessment_test.go:13: Confirmed: demotion to GM2 leaves cached GM3 authorized for KB edits
+--- PASS: TestAssessmentKBRetainsDemotedPrivilege (0.00s)
+=== RUN   TestAssessmentMultipartLeaksEarlierFiles
+    assessment_test.go:23: Confirmed: rejected two-file upload leaves first staged file on disk
+--- PASS: TestAssessmentMultipartLeaksEarlierFiles (0.00s)
+=== RUN   TestAssessmentResetTokenLogged
+    assessment_test.go:30: Confirmed: middleware includes reset-token path in access log
+--- PASS: TestAssessmentResetTokenLogged (0.00s)
+=== RUN   TestAssessmentPendingMFACompletesAfterBan
+    assessment_test.go:43: Confirmed: pending MFA session completes login after ban and revocation
+--- PASS: TestAssessmentPendingMFACompletesAfterBan (0.02s)
+PASS
+ok  	github.com/zeroward/waygate/internal/web	0.124s
+=== RUN   TestAssessmentForwardRulesLackDestinationAndInputPolicy
+    assessment_test.go:8: Confirmed: allow rule covers all destinations on selected ports; no host INPUT restriction
+--- PASS: TestAssessmentForwardRulesLackDestinationAndInputPolicy (0.00s)
+PASS
+ok  	github.com/zeroward/waygate/internal/wg	(cached)

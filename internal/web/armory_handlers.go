@@ -18,9 +18,9 @@ func (s *Server) armorySearch(w http.ResponseWriter, r *http.Request) {
 	if q != "" {
 		hits = s.armory.Search(r.Context(), q)
 	} else {
-		chars, err := s.status.AccountCharactersMany(r.Context(), s.wowAccountIDs(r.Context(), sess.User.ID))
+		chars, err := s.status.AccountCharactersMany(r.Context(), s.wowAccountIDs(r.Context(), sess.Snapshot().User.ID))
 		if err != nil {
-			s.log.Error("armory account characters", "err", err, "account", sess.User.ID)
+			s.log.Error("armory account characters", "err", err, "account", sess.Snapshot().User.ID)
 		}
 		for _, ch := range chars {
 			mine = append(mine, armory.SearchHit{

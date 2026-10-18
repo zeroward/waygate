@@ -10,7 +10,6 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -26,14 +25,16 @@ import (
 	"github.com/zeroward/waygate/internal/mail"
 	"github.com/zeroward/waygate/internal/ratelimit"
 	"github.com/zeroward/waygate/internal/session"
+	"github.com/zeroward/waygate/internal/sso"
 	"github.com/zeroward/waygate/internal/status"
-	"github.com/zeroward/waygate/internal/wg"
 	"github.com/zeroward/waygate/internal/wow"
 
 	"github.com/go-webauthn/webauthn/webauthn"
 )
 
 type Server struct {
+	oidc      *sso.Client
+	vault     *identity.Vault
 	cfg       config.Config
 	log       *slog.Logger
 	tpl       *template.Template
@@ -56,10 +57,6 @@ type Server struct {
 	armory    *armory.Service
 	companion *companion.Service
 	wa        *webauthn.WebAuthn
-	wgOK      bool
-	wgLiveMu  sync.Mutex
-	wgLive    bool
-	wgLiveAt  time.Time
 }
 
 func New(
@@ -70,6 +67,12 @@ func New(
 	cap *captcha.Verifier,
 	mailer *mail.Sender,
 ) (*Server, error) {
+	if err := cfg.ValidateManagementAPI(); err != nil {
+		return nil, err
+	}
+	if err := cfg.ValidateSSO(); err != nil {
+		return nil, err
+	}
 	funcs := template.FuncMap{
 		"playtime":  wow.Playtime,
 		"classSlug": func(id uint8) string { return wow.ClassSlug(id) },
@@ -114,6 +117,23 @@ func New(
 		_ = kbStore.Close()
 		return nil, err
 	}
+	hasSSO, err := idStore.HasSSO(context.Background())
+	if err != nil {
+		_ = kbStore.Close()
+		return nil, err
+	}
+	var vault *identity.Vault
+	if cfg.SSOEnabled || hasSSO {
+		vault, err = identity.LoadVault(cfg.SSOVaultKeyFile)
+		if err != nil {
+			_ = kbStore.Close()
+			return nil, err
+		}
+	}
+	if err := idStore.ValidateVault(context.Background(), vault); err != nil {
+		_ = kbStore.Close()
+		return nil, err
+	}
 	idSvc := identity.New(idStore, accounts, cfg.WowCredentialsMax)
 	if !cfg.DemoMode {
 		if err := idSvc.MigrateFromAC(context.Background(), log); err != nil {
@@ -125,15 +145,6 @@ func New(
 		log.Error("webauthn disabled", "err", waErr)
 	} else if wa != nil {
 		log.Info("webauthn", "rp", wa.Config.RPID, "origins", wa.Config.RPOrigins, "realm", cfg.PublicHost)
-	}
-	wgOK := false
-	if cfg.WGEnabled {
-		if _, err := wg.EnsureServerKeys(cfg.WGDir); err != nil {
-			log.Error("wireguard keys", "err", err)
-		} else {
-			wgOK = true
-			log.Info("wireguard", "dir", cfg.WGDir, "endpoint", cfg.WGEndpointHost())
-		}
 	}
 	sessStore, err := session.NewStore(kbStore.SQL(), cfg.SessionTTL, cfg.SessionSecure)
 	if err != nil {
@@ -163,7 +174,10 @@ func New(
 		armory:    armory.New(cfg, st.Database(), log),
 		companion: companion.New(cfg, st.Database(), log),
 		wa:        wa,
-		wgOK:      wgOK,
+	}
+	s.vault = vault
+	if cfg.SSOEnabled {
+		s.oidc = sso.New(cfg.OIDCIssuer, cfg.OIDCClientID, cfg.OIDCClientSecret, strings.TrimRight(cfg.SiteURL, "/")+"/auth/oidc/callback")
 	}
 	if err := s.seedHowToConnect(); err != nil {
 		_ = kbStore.Close()
@@ -179,6 +193,13 @@ func New(
 
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /auth/oidc/start", s.ssoStart)
+	mux.HandleFunc("GET /auth/oidc/callback", s.ssoCallback)
+	mux.HandleFunc("GET /auth/oidc/onboard", s.ssoOnboardGET)
+	mux.HandleFunc("POST /auth/oidc/signup", s.ssoSignupPOST)
+	mux.HandleFunc("POST /account/sso/link", s.ssoLinkPOST)
+	mux.HandleFunc("POST /account/sso/confirm", s.ssoConfirmPOST)
+	mux.HandleFunc("POST /account/sso/reauth", s.ssoReauthPOST)
 	mux.HandleFunc("GET /healthz", s.health)
 	mux.HandleFunc("GET /", s.home)
 	mux.HandleFunc("GET /register", s.registerGET)
@@ -211,14 +232,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /account/passkey/login/finish", s.passkeyLoginFinish)
 	mux.HandleFunc("POST /account/passkey/delete", s.passkeyDeletePOST)
 	mux.HandleFunc("POST /account/logout", s.logoutPOST)
+	mux.HandleFunc("POST /account/reauth/password", s.reauthPasswordPOST)
+	mux.HandleFunc("POST /account/reauth/passkey/begin", s.reauthPasskeyBegin)
+	mux.HandleFunc("POST /account/reauth/passkey/finish", s.reauthPasskeyFinish)
 	mux.HandleFunc("POST /account/password", s.passwordPOST)
 	mux.HandleFunc("POST /account/unstuck", s.unstuckPOST)
 	mux.HandleFunc("POST /account/wow", s.wowCredentialPOST)
 	mux.HandleFunc("POST /account/wow/unlock", s.wowUnlockPOST)
 	mux.HandleFunc("POST /account/wow/password", s.wowPasswordPOST)
-	mux.HandleFunc("POST /account/wg", s.wgCreatePOST)
-	mux.HandleFunc("POST /account/wg/{id}/delete", s.wgDeletePOST)
-	mux.HandleFunc("GET /account/wg/{id}/{kind}", s.wgDownload)
 	mux.HandleFunc("GET /tickets", s.ticketsList)
 	mux.HandleFunc("GET /tickets/new", s.ticketsNew)
 	mux.HandleFunc("POST /tickets", s.ticketsCreate)
@@ -236,7 +257,6 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /staff/rank", s.staffRankPOST)
 	mux.HandleFunc("POST /staff/ban", s.staffBanPOST)
 	mux.HandleFunc("POST /staff/unban", s.staffUnbanPOST)
-	mux.HandleFunc("POST /staff/wg", s.wgEndpointPOST)
 	mux.HandleFunc("POST /staff/register-key", s.registerKeyPOST)
 	mux.HandleFunc("POST /staff/downloads", s.staffDownloadPOST)
 	mux.HandleFunc("POST /staff/downloads/delete", s.staffDownloadDeletePOST)
@@ -314,44 +334,47 @@ func loadConnect(cfg config.Config) string {
 }
 
 type page struct {
-	Title        string
-	Active       string
-	CSRF         string
-	Flash        *session.Flash
-	User         *session.User
-	Staff        bool
-	Mod          bool
-	Banner       string
-	Demo         bool
-	RealmName    string
-	CoreName     string
-	CanEditKB    bool
-	SMTP         bool
-	DiscordURL   string
-	ContactEmail string
-	CaptchaProv  string
-	CaptchaKey   string
-	PublicHost   string
-	PublicAuth   int
-	PublicWorld  int
-	Year         int
-	Next         string
-	Data         any
+	SSOEnabled               bool
+	SSOName, NetBirdSetupURL string
+	Title                    string
+	Active                   string
+	CSRF                     string
+	Flash                    *session.Flash
+	User                     *session.User
+	Staff                    bool
+	Mod                      bool
+	Banner                   string
+	Demo                     bool
+	RealmName                string
+	CoreName                 string
+	CanEditKB                bool
+	SMTP                     bool
+	DiscordURL               string
+	ContactEmail             string
+	CaptchaProv              string
+	CaptchaKey               string
+	PublicHost               string
+	PublicAuth               int
+	PublicWorld              int
+	Year                     int
+	Next                     string
+	Data                     any
 }
 
 func (s *Server) view(w http.ResponseWriter, r *http.Request, name, title, active string, data any) {
 	sess := s.sessions.GetOrCreate(w, r)
 	s.applyStaffLevel(r.Context(), sess)
 	p := page{
+		SSOEnabled: s.cfg.SSOEnabled, SSOName: s.cfg.OIDCDisplayName, NetBirdSetupURL: s.cfg.NetBirdSetupURL,
 		Title:        title,
 		Active:       active,
-		CSRF:         sess.CSRF,
+		CSRF:         sess.Snapshot().CSRF,
 		Flash:        sess.TakeFlash(),
-		User:         sess.User,
-		Staff:        sess.User.IsStaff(s.staffMin()),
-		Mod:          sess.User.IsStaff(s.modMin()),
+		User:         sess.Snapshot().User,
+		Staff:        sess.Snapshot().User.IsStaff(s.staffMin()),
+		Mod:          sess.Snapshot().User.IsStaff(s.modMin()),
 		Banner:       s.maintenanceBanner(r.Context()),
-		CanEditKB:    s.canEditKB(sess.User),
+		CanEditKB:    s.canEditKB(sess.Snapshot().User),
 		Demo:         s.cfg.DemoMode,
 		RealmName:    s.cfg.RealmName,
 		CoreName:     s.cfg.CoreName,

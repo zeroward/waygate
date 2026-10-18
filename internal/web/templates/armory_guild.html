@@ -7,7 +7,7 @@
   {{if $g.MOTD}}<p class="lede">{{$g.MOTD}}</p>{{end}}
   {{if $g.Info}}<p class="hint">{{$g.Info}}</p>{{end}}
   {{if $g.Roster}}
-  <div class="table-wrap">
+  <div class="table-wrap" role="region" aria-label="Guild roster" tabindex="0">
     <table>
       <thead>
         <tr><th>Name</th><th>Level</th><th>Class</th><th>Rank</th><th></th></tr>

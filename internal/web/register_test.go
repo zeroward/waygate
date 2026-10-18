@@ -99,7 +99,7 @@ func TestHomeAndRegisterPages(t *testing.T) {
 	if !strings.Contains(string(body), "Installed modules") || !strings.Contains(string(body), "Playerbots") {
 		t.Fatal("home missing installed modules")
 	}
-	if !strings.Contains(string(body), "How to connect") || !strings.Contains(string(body), `/kb/how-to-connect`) {
+	if !strings.Contains(string(body), "How to connect") || !strings.Contains(string(body), `class="panel home-kb"`) {
 		t.Fatal("home missing latest published KB card")
 	}
 	if strings.Contains(string(body), "WireGuard Server") {
@@ -167,7 +167,7 @@ func TestHomeOKWithoutPublishedKB(t *testing.T) {
 	if res.StatusCode != 200 {
 		t.Fatalf("home %d", res.StatusCode)
 	}
-	if strings.Contains(string(body), `/kb/how-to-connect`) {
+	if strings.Contains(string(body), `class="panel home-kb"`) {
 		t.Fatal("deleted article still on home")
 	}
 }

@@ -1,0 +1,95 @@
+Synthetic test directory: /tmp/waygate-security-repro-6s_dijqr
+?   	github.com/zeroward/waygate/internal/captcha	[no test files]
+?   	github.com/zeroward/waygate/internal/db	[no test files]
+testing: warning: no tests to run
+PASS
+ok  	github.com/zeroward/waygate/internal/account	0.003s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/zeroward/waygate/internal/acmod	0.002s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/zeroward/waygate/internal/armory	0.004s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/zeroward/waygate/internal/clamav	0.003s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/zeroward/waygate/internal/companion	0.002s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/zeroward/waygate/internal/config	0.010s [no tests to run]
+=== RUN   TestAssessmentOversizeBypassesScanner
+    assessment_downloads_test.go:29: Confirmed: above-threshold upload published without calling unavailable scanner
+--- PASS: TestAssessmentOversizeBypassesScanner (0.00s)
+=== RUN   TestAssessmentDownloadSymlinkEscapesRoot
+    assessment_downloads_test.go:53: Confirmed: auto-discovered symlink exposes a file outside download root; requires filesystem write
+--- PASS: TestAssessmentDownloadSymlinkEscapesRoot (0.00s)
+PASS
+ok  	github.com/zeroward/waygate/internal/downloads	0.005s
+?   	github.com/zeroward/waygate/internal/logx	[no test files]
+?   	github.com/zeroward/waygate/internal/mail	[no test files]
+?   	github.com/zeroward/waygate/internal/privatefs	[no test files]
+=== RUN   TestAssessmentStoredHashDecryptsClientPassword
+    assessment_identity_test.go:35: Fixed: stored verifier cannot unwrap credential key
+--- PASS: TestAssessmentStoredHashDecryptsClientPassword (0.05s)
+=== RUN   TestAssessmentTOTPReplayAndRecoveryWriteFailure
+    assessment_identity_test.go:71: Fixed: TOTP replay and failed recovery consumption rejected
+--- PASS: TestAssessmentTOTPReplayAndRecoveryWriteFailure (0.01s)
+=== RUN   TestAssessmentTOTPStatusFailsOpen
+    assessment_identity_test.go:89: Fixed: missing MFA table returns error
+--- PASS: TestAssessmentTOTPStatusFailsOpen (0.01s)
+PASS
+ok  	github.com/zeroward/waygate/internal/identity	0.077s
+testing: warning: no tests to run
+PASS
+ok  	github.com/zeroward/waygate/internal/kb	0.002s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/zeroward/waygate/internal/md	0.003s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/zeroward/waygate/internal/ratelimit	0.003s [no tests to run]
+=== RUN   TestAssessmentPendingSessionSurvivesRevocation
+    assessment_session_test.go:29: Fixed: pending authentication revoked in memory and SQLite
+--- PASS: TestAssessmentPendingSessionSurvivesRevocation (0.00s)
+=== RUN   TestAssessmentConcurrentSessionMutation
+--- PASS: TestAssessmentConcurrentSessionMutation (0.00s)
+PASS
+ok  	github.com/zeroward/waygate/internal/session	0.006s
+testing: warning: no tests to run
+PASS
+ok  	github.com/zeroward/waygate/internal/soap	0.002s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/zeroward/waygate/internal/srp6	0.008s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/zeroward/waygate/internal/status	0.005s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/zeroward/waygate/internal/validate	0.010s [no tests to run]
+=== RUN   TestAssessmentPasskeyWithoutUserVerification
+--- PASS: TestAssessmentPasskeyWithoutUserVerification (0.10s)
+=== RUN   TestAssessmentKBRetainsDemotedPrivilege
+    assessment_web_test.go:43: Fixed: KB rejects demoted session
+--- PASS: TestAssessmentKBRetainsDemotedPrivilege (0.01s)
+=== RUN   TestAssessmentMultipartLeaksEarlierFiles
+    assessment_web_test.go:76: Confirmed: rejected two-file upload leaves first staged file on disk
+--- PASS: TestAssessmentMultipartLeaksEarlierFiles (0.01s)
+=== RUN   TestAssessmentResetTokenLogged
+    assessment_web_test.go:89: Confirmed: middleware includes reset-token path in access log
+--- PASS: TestAssessmentResetTokenLogged (0.01s)
+=== RUN   TestAssessmentPendingMFACompletesAfterBan
+    assessment_web_test.go:133: Fixed: pending MFA cannot complete after ban and revocation
+--- PASS: TestAssessmentPendingMFACompletesAfterBan (0.04s)
+PASS
+ok  	github.com/zeroward/waygate/internal/web	0.175s
+=== RUN   TestAssessmentForwardRulesLackDestinationAndInputPolicy
+    assessment_wg_test.go:38: Confirmed: allow rule covers all destinations on selected ports; no host INPUT restriction
+--- PASS: TestAssessmentForwardRulesLackDestinationAndInputPolicy (0.00s)
+PASS
+ok  	github.com/zeroward/waygate/internal/wg	0.001s
+testing: warning: no tests to run
+PASS
+ok  	github.com/zeroward/waygate/internal/wow	0.001s [no tests to run]

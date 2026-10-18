@@ -112,6 +112,9 @@ func (s *Store) WAUser(ctx context.Context, userID uint32) (WAUser, error) {
 	if err != nil {
 		return WAUser{}, err
 	}
+	if u.AuthMode == AuthSSO {
+		return WAUser{}, ErrSSOOnly
+	}
 	creds, err := s.webAuthnCreds(ctx, userID)
 	if err != nil {
 		return WAUser{}, err
@@ -167,11 +170,23 @@ func parseStoredCred(credJSON, credID string, pub []byte, sign uint32, aaguid st
 	}, true
 }
 
-func (s *Store) InsertPasskey(ctx context.Context, userID uint32, name string, cred *webauthn.Credential) error {
+func (s *Store) InsertPasskey(ctx context.Context, userID uint32, name string, cred *webauthn.Credential, expected ...uint64) error {
 	if cred == nil || len(cred.ID) == 0 || len(cred.PublicKey) == 0 {
 		return fmt.Errorf("invalid passkey")
 	}
-	n, err := s.CountPasskeys(ctx, userID)
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := checkLocal(ctx, tx, userID); err != nil {
+		return err
+	}
+	if err := checkVersion(ctx, tx, userID, expected); err != nil {
+		return err
+	}
+	var n int
+	err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM webauthn_credentials WHERE user_id=?`, userID).Scan(&n)
 	if err != nil {
 		return err
 	}
@@ -184,14 +199,20 @@ func (s *Store) InsertPasskey(ctx context.Context, userID uint32, name string, c
 		return err
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err = s.db.ExecContext(ctx, `INSERT INTO webauthn_credentials (user_id, credential_id, public_key, sign_count, aaguid, name, cred_json, created_at)
+	_, err = tx.ExecContext(ctx, `INSERT INTO webauthn_credentials (user_id, credential_id, public_key, sign_count, aaguid, name, cred_json, created_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 		userID, credIDString(cred.ID), cred.PublicKey, int(cred.Authenticator.SignCount),
 		hex.EncodeToString(cred.Authenticator.AAGUID), name, string(raw), now)
 	if err != nil && strings.Contains(strings.ToLower(err.Error()), "unique") {
 		return fmt.Errorf("that passkey is already registered")
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	if _, err = tx.ExecContext(ctx, `UPDATE users SET auth_version=auth_version+1,auth_changed_at=? WHERE id=?`, time.Now().UnixNano(), userID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) UpdatePasskey(ctx context.Context, cred *webauthn.Credential) error {
@@ -207,8 +228,19 @@ func (s *Store) UpdatePasskey(ctx context.Context, cred *webauthn.Credential) er
 	return err
 }
 
-func (s *Store) DeletePasskey(ctx context.Context, userID uint32, id int64) error {
-	res, err := s.db.ExecContext(ctx, `DELETE FROM webauthn_credentials WHERE id = ? AND user_id = ?`, id, userID)
+func (s *Store) DeletePasskey(ctx context.Context, userID uint32, id int64, expected ...uint64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := checkLocal(ctx, tx, userID); err != nil {
+		return err
+	}
+	if err := checkVersion(ctx, tx, userID, expected); err != nil {
+		return err
+	}
+	res, err := tx.ExecContext(ctx, `DELETE FROM webauthn_credentials WHERE id = ? AND user_id = ?`, id, userID)
 	if err != nil {
 		return err
 	}
@@ -216,7 +248,10 @@ func (s *Store) DeletePasskey(ctx context.Context, userID uint32, id int64) erro
 	if n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	if _, err = tx.ExecContext(ctx, `UPDATE users SET auth_version=auth_version+1,auth_changed_at=? WHERE id=?`, time.Now().UnixNano(), userID); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *Store) UserIDByPasskey(ctx context.Context, credID []byte) (uint32, error) {

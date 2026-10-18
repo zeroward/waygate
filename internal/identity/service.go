@@ -33,6 +33,9 @@ func (s *Service) Authenticate(ctx context.Context, username, password string) (
 	if err != nil {
 		return User{}, err
 	}
+	if u.AuthMode == AuthSSO {
+		return User{}, ErrSSOOnly
+	}
 	if NeedsLegacy(u.PasswordHash) {
 		return s.claimLegacyExisting(ctx, u, password)
 	}
@@ -50,36 +53,44 @@ func (s *Service) UnlockDEK(ctx context.Context, userID uint32, password string)
 	if err != nil {
 		return nil, err
 	}
+	if u.AuthMode == AuthSSO {
+		return nil, ErrSSOOnly
+	}
 	kek, ok := VerifyAndKey(u.PasswordHash, password)
 	if !ok {
 		return nil, ErrBadPassword
 	}
-	return s.unwrapOrInit(ctx, userID, kek)
+	return s.unwrapOrInit(ctx, userID, kek, u.PasswordHash)
 }
 
-func (s *Service) unwrapOrInit(ctx context.Context, userID uint32, kek []byte) ([]byte, error) {
+func (s *Service) unwrapOrInit(ctx context.Context, userID uint32, kek []byte, hash string) ([]byte, error) {
 	wrap, nonce, err := s.store.DEKWrap(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
 	if len(wrap) > 0 && len(nonce) > 0 {
-		return open(kek, nonce, wrap)
+		return openAAD(kek, nonce, wrap, wrapAAD(userID))
 	}
 	dek, err := newDEK()
 	if err != nil {
 		return nil, err
 	}
-	n, b, err := seal(kek, dek)
+	n, b, err := sealAAD(kek, dek, wrapAAD(userID))
 	if err != nil {
 		return nil, err
 	}
-	if err := s.store.SetDEKWrap(ctx, userID, b, n); err != nil {
+	if _, err := s.store.db.ExecContext(ctx, `UPDATE users SET dek_wrap=?,dek_wrap_nonce=?,dek_wrap_version=2 WHERE id=? AND password_hash=? AND (dek_wrap IS NULL OR length(dek_wrap)=0)`, b, n, userID, hash); err != nil {
 		return nil, err
 	}
-	return dek, nil
+	clear(dek)
+	wrap, nonce, err = s.store.DEKWrap(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return openAAD(kek, nonce, wrap, wrapAAD(userID))
 }
 
-func (s *Service) SealClientPassword(ctx context.Context, userID uint32, wowUser, password string, dek []byte) error {
+func (s *Service) SealClientPassword(ctx context.Context, userID uint32, wowUser, password string, dek []byte, expected ...uint64) error {
 	if len(dek) != dekLen || password == "" {
 		return errors.New("missing key")
 	}
@@ -87,7 +98,7 @@ func (s *Service) SealClientPassword(ctx context.Context, userID uint32, wowUser
 	if err != nil {
 		return err
 	}
-	return s.store.SetLinkSecret(ctx, userID, wowUser, blob, nonce)
+	return s.store.SetLinkSecret(ctx, userID, wowUser, blob, nonce, expected...)
 }
 
 func (s *Service) OpenClientPassword(l Link, dek []byte) (string, error) {
@@ -149,10 +160,13 @@ func (s *Service) setPassword(ctx context.Context, id uint32, password string) e
 	if err != nil {
 		return err
 	}
-	return s.store.SetPassword(ctx, id, h)
+	return s.store.ClaimPassword(ctx, id, h)
 }
 
 func (s *Service) ChangePassword(ctx context.Context, user User, old, nw string) error {
+	if user.AuthMode == AuthSSO {
+		return ErrSSOOnly
+	}
 	var dek []byte
 	if NeedsLegacy(user.PasswordHash) {
 		if _, err := s.ac.Authenticate(ctx, user.Username, old); err != nil {
@@ -164,7 +178,7 @@ func (s *Service) ChangePassword(ctx context.Context, user User, old, nw string)
 			return ErrBadPassword
 		}
 		var err error
-		dek, err = s.unwrapOrInit(ctx, user.ID, kek)
+		dek, err = s.unwrapOrInit(ctx, user.ID, kek, user.PasswordHash)
 		if err != nil {
 			return err
 		}
@@ -173,20 +187,17 @@ func (s *Service) ChangePassword(ctx context.Context, user User, old, nw string)
 	if err != nil {
 		return err
 	}
-	if err := s.store.SetPassword(ctx, user.ID, hash); err != nil {
-		return err
-	}
 	if len(dek) == 0 {
 		dek, err = newDEK()
 		if err != nil {
 			return err
 		}
 	}
-	nonce, wrap, err := seal(kekNew, dek)
+	nonce, wrap, err := sealAAD(kekNew, dek, wrapAAD(user.ID))
 	if err != nil {
 		return err
 	}
-	return s.store.SetDEKWrap(ctx, user.ID, wrap, nonce)
+	return s.store.ReplacePassword(ctx, user.ID, user.PasswordHash, hash, wrap, nonce, false, user.AuthVersion)
 }
 
 func (s *Service) SetPassword(ctx context.Context, username, password string) error {
@@ -194,7 +205,14 @@ func (s *Service) SetPassword(ctx context.Context, username, password string) er
 	if err != nil {
 		return err
 	}
-	return s.setPassword(ctx, u.ID, password)
+	if u.AuthMode == AuthSSO {
+		return ErrSSOOnly
+	}
+	h, err := HashPassword(password)
+	if err != nil {
+		return err
+	}
+	return s.store.ReplacePassword(ctx, u.ID, u.PasswordHash, h, nil, nil, true, u.AuthVersion)
 }
 
 func (s *Service) EnsureFromAC(ctx context.Context, acc *account.Account) (User, error) {
@@ -205,6 +223,10 @@ func (s *Service) EnsureFromAC(ctx context.Context, acc *account.Account) (User,
 		return s.store.GetByID(ctx, ln.UserID)
 	}
 	if u, err := s.store.GetByUsername(ctx, acc.Username); err == nil {
+		// Portal-only SSO users must never acquire realm accounts by name matching.
+		if u.AuthMode == AuthSSO {
+			return User{}, ErrLinkTaken
+		}
 		_ = s.store.Link(ctx, u.ID, acc.ID, acc.Username)
 		return u, nil
 	}
@@ -265,7 +287,7 @@ func (s *Service) Register(ctx context.Context, siteUser, sitePass, email, wowUs
 	if err := s.store.Link(ctx, u.ID, listed.ID, wowUser); err != nil {
 		return User{}, err
 	}
-	if dek, err := s.unwrapOrInit(ctx, u.ID, kek); err == nil {
+	if dek, err := s.unwrapOrInit(ctx, u.ID, kek, u.PasswordHash); err == nil {
 		_ = s.SealClientPassword(ctx, u.ID, wowUser, wowPass, dek)
 	}
 	return u, nil
@@ -304,13 +326,13 @@ func (s *Service) AddCredential(ctx context.Context, userID uint32, wowUser, wow
 	return Link{UserID: userID, AccountID: listed.ID, Username: wowUser}, nil
 }
 
-func (s *Service) AddCredentialWithDEK(ctx context.Context, userID uint32, wowUser, wowPass, email string, expansion uint8, dek []byte) (Link, error) {
+func (s *Service) AddCredentialWithDEK(ctx context.Context, userID uint32, wowUser, wowPass, email string, expansion uint8, dek []byte, expected ...uint64) (Link, error) {
 	ln, err := s.AddCredential(ctx, userID, wowUser, wowPass, email, expansion)
 	if err != nil {
 		return Link{}, err
 	}
 	if len(dek) == dekLen {
-		if err := s.SealClientPassword(ctx, userID, wowUser, wowPass, dek); err != nil {
+		if err := s.SealClientPassword(ctx, userID, wowUser, wowPass, dek, expected...); err != nil {
 			return ln, err
 		}
 	}
@@ -333,7 +355,11 @@ func (s *Service) rejectIfBanned(ctx context.Context, u User) error {
 		names = append(names, u.Username)
 	}
 	for _, n := range names {
-		if banned, _ := s.ac.IsBanned(ctx, n); banned {
+		banned, _, err := s.ac.IsBanned(ctx, n)
+		if err != nil {
+			return err
+		}
+		if banned {
 			return account.ErrBanned
 		}
 	}

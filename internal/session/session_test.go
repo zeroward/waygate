@@ -41,7 +41,7 @@ func TestSessionPersistsAcrossStoreReopen(t *testing.T) {
 	}
 	rec := httptest.NewRecorder()
 	sess := s1.GetOrCreate(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	sess.User = &User{ID: 7, Username: "HEROONE", Email: "h@example.com", GMLevel: 2}
+	sess.Update(func(d *Data) { d.User = &User{ID: 7, Username: "HEROONE", Email: "h@example.com", GMLevel: 2} })
 	sess.SetFlash("success", "welcome")
 	s1.SaveLatest(sess)
 
@@ -50,10 +50,10 @@ func TestSessionPersistsAcrossStoreReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := s2.GetOrCreate(httptest.NewRecorder(), cookieReq(rec, "/"))
-	if got.User == nil || got.User.ID != 7 || got.User.Username != "HEROONE" || got.User.GMLevel != 2 {
-		t.Fatalf("user %+v", got.User)
+	if got.Snapshot().User == nil || got.Snapshot().User.ID != 7 || got.Snapshot().User.Username != "HEROONE" || got.Snapshot().User.GMLevel != 2 {
+		t.Fatalf("user %+v", got.Snapshot().User)
 	}
-	if got.CSRF == "" || got.CSRF != sess.CSRF {
+	if got.Snapshot().CSRF == "" || got.Snapshot().CSRF != sess.Snapshot().CSRF {
 		t.Fatal("csrf")
 	}
 	f := got.TakeFlash()
@@ -80,8 +80,8 @@ func TestCredentialKeyNotPersisted(t *testing.T) {
 	}
 	rec := httptest.NewRecorder()
 	sess := s1.GetOrCreate(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	sess.User = &User{ID: 7, Username: "HEROONE"}
-	sess.CredentialKey = []byte("0123456789abcdef0123456789abcdef")
+	sess.Update(func(d *Data) { d.User = &User{ID: 7, Username: "HEROONE"} })
+	sess.Update(func(d *Data) { d.CredentialKey = []byte("0123456789abcdef0123456789abcdef") })
 	s1.SaveLatest(sess)
 
 	s2, err := NewStore(db, time.Hour, false)
@@ -89,7 +89,7 @@ func TestCredentialKeyNotPersisted(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := s2.GetOrCreate(httptest.NewRecorder(), cookieReq(rec, "/"))
-	if len(got.CredentialKey) != 0 {
+	if len(got.Snapshot().CredentialKey) != 0 {
 		t.Fatal("DEK must not persist in sqlite")
 	}
 	var blob string
@@ -109,18 +109,18 @@ func TestRevokeUserLeavesCurrent(t *testing.T) {
 	}
 	rec1 := httptest.NewRecorder()
 	a := s.GetOrCreate(rec1, httptest.NewRequest(http.MethodGet, "/", nil))
-	a.User = &User{ID: 9, Username: "HERO"}
+	a.Update(func(d *Data) { d.User = &User{ID: 9, Username: "HERO"} })
 	s.SaveLatest(a)
 	rec2 := httptest.NewRecorder()
 	b := s.GetOrCreate(rec2, httptest.NewRequest(http.MethodGet, "/", nil))
-	b.User = &User{ID: 9, Username: "HERO"}
+	b.Update(func(d *Data) { d.User = &User{ID: 9, Username: "HERO"} })
 	s.SaveLatest(b)
 	s.RevokeUser(9, a.ID)
-	if s.GetOrCreate(httptest.NewRecorder(), cookieReq(rec2, "/")).User != nil {
+	if s.GetOrCreate(httptest.NewRecorder(), cookieReq(rec2, "/")).Snapshot().User != nil {
 		t.Fatal("other session still live")
 	}
 	keep := s.GetOrCreate(httptest.NewRecorder(), cookieReq(rec1, "/"))
-	if keep.User == nil || keep.User.ID != 9 {
+	if keep.Snapshot().User == nil || keep.Snapshot().User.ID != 9 {
 		t.Fatal("current session revoked")
 	}
 }
@@ -133,12 +133,12 @@ func TestSessionRegenerateInvalidatesOldID(t *testing.T) {
 	}
 	rec := httptest.NewRecorder()
 	old := s.GetOrCreate(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	old.User = &User{ID: 1, Username: "HEROONE"}
+	old.Update(func(d *Data) { d.User = &User{ID: 1, Username: "HEROONE"} })
 	oldID := old.ID
 	rec2 := httptest.NewRecorder()
 	n := s.Regenerate(rec2, old)
 	s.SaveLatest(old)
-	if n.User == nil || n.User.Username != "HEROONE" {
+	if n.Snapshot().User == nil || n.Snapshot().User.Username != "HEROONE" {
 		t.Fatal("user not copied")
 	}
 	if n.ID == oldID {
@@ -151,12 +151,12 @@ func TestSessionRegenerateInvalidatesOldID(t *testing.T) {
 	stale := httptest.NewRequest(http.MethodGet, "/", nil)
 	stale.AddCookie(&http.Cookie{Name: CookieName, Value: oldID})
 	got := s2.GetOrCreate(httptest.NewRecorder(), stale)
-	if got.ID == oldID && got.User != nil {
+	if got.ID == oldID && got.Snapshot().User != nil {
 		t.Fatal("old session still live")
 	}
 	fresh := s2.GetOrCreate(httptest.NewRecorder(), cookieReq(rec2, "/"))
-	if fresh.User == nil || fresh.User.Username != "HEROONE" {
-		t.Fatalf("new sess %+v", fresh.User)
+	if fresh.Snapshot().User == nil || fresh.Snapshot().User.Username != "HEROONE" {
+		t.Fatalf("new sess %+v", fresh.Snapshot().User)
 	}
 }
 
@@ -168,7 +168,7 @@ func TestExpiredSessionNotLoaded(t *testing.T) {
 	}
 	rec := httptest.NewRecorder()
 	sess := s.GetOrCreate(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	sess.User = &User{ID: 1, Username: "HEROONE"}
+	sess.Update(func(d *Data) { d.User = &User{ID: 1, Username: "HEROONE"} })
 	s.SaveLatest(sess)
 	time.Sleep(40 * time.Millisecond)
 	s2, err := NewStore(db, time.Hour, false)
@@ -176,7 +176,7 @@ func TestExpiredSessionNotLoaded(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := s2.GetOrCreate(httptest.NewRecorder(), cookieReq(rec, "/"))
-	if got.User != nil {
+	if got.Snapshot().User != nil {
 		t.Fatal("expired session reused")
 	}
 }
@@ -189,7 +189,7 @@ func TestDestroyRemovesRow(t *testing.T) {
 	}
 	rec := httptest.NewRecorder()
 	sess := s.GetOrCreate(rec, httptest.NewRequest(http.MethodGet, "/", nil))
-	sess.User = &User{ID: 1, Username: "HEROONE"}
+	sess.Update(func(d *Data) { d.User = &User{ID: 1, Username: "HEROONE"} })
 	s.SaveLatest(sess)
 	id := sess.ID
 	s.Destroy(httptest.NewRecorder(), sess)
@@ -200,7 +200,7 @@ func TestDestroyRemovesRow(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.AddCookie(&http.Cookie{Name: CookieName, Value: id})
 	got := s2.GetOrCreate(httptest.NewRecorder(), req)
-	if got.User != nil {
+	if got.Snapshot().User != nil {
 		t.Fatal("destroyed session loaded")
 	}
 }

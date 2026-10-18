@@ -22,16 +22,12 @@ import (
 	"github.com/zeroward/waygate/internal/session"
 	"github.com/zeroward/waygate/internal/status"
 	"github.com/zeroward/waygate/internal/validate"
-	"github.com/zeroward/waygate/internal/wg"
 )
 
 type homeView struct {
 	status.Snapshot
-	LatestKB  *kb.Article
-	WGEnabled bool
-	WGUp      bool
-	WGPort    int
-	Calendar  []kb.RealmEvent
+	LatestKB *kb.Article
+	Calendar []kb.RealmEvent
 }
 
 func (s *Server) home(w http.ResponseWriter, r *http.Request) {
@@ -40,14 +36,8 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	hv := homeView{
-		Snapshot:  s.status.Get(r.Context()),
-		WGEnabled: s.cfg.WGEnabled,
-		WGUp:      s.wireGuardUp(r.Context()),
-		WGPort:    s.cfg.WGPort,
-		Calendar:  s.upcomingCalendar(r.Context()),
-	}
-	if hv.WGPort <= 0 {
-		hv.WGPort = 51820
+		Snapshot: s.status.Get(r.Context()),
+		Calendar: s.upcomingCalendar(r.Context()),
 	}
 	if s.kb != nil {
 		art, err := s.kb.LatestPublished(r.Context())
@@ -60,33 +50,9 @@ func (s *Server) home(w http.ResponseWriter, r *http.Request) {
 	s.view(w, r, "home.html", "Home", "home", hv)
 }
 
-func (s *Server) wireGuardUp(ctx context.Context) bool {
-	if !s.cfg.WGEnabled {
-		return false
-	}
-	if s.cfg.DemoMode {
-		return true
-	}
-	s.wgLiveMu.Lock()
-	defer s.wgLiveMu.Unlock()
-	ttl := s.cfg.StatusCache
-	if ttl <= 0 {
-		ttl = 20 * time.Second
-	}
-	if !s.wgLiveAt.IsZero() && time.Since(s.wgLiveAt) < ttl {
-		return s.wgLive
-	}
-	pctx, cancel := context.WithTimeout(ctx, time.Second)
-	defer cancel()
-	up := wg.Probe(pctx, s.cfg.WGAgentListen, s.cfg.WGDir)
-	s.wgLive = up
-	s.wgLiveAt = time.Now()
-	return up
-}
-
 func (s *Server) requireLogin(w http.ResponseWriter, r *http.Request) *session.Session {
 	sess := s.sessions.GetOrCreate(w, r)
-	if sess.User != nil {
+	if sess.Snapshot().User != nil {
 		return sess
 	}
 	next := r.URL.RequestURI()
@@ -130,7 +96,7 @@ func (s *Server) downloadsFile(w http.ResponseWriter, r *http.Request) {
 	if sess == nil {
 		return
 	}
-	if s.dlRL != nil && !s.dlRL.Allow(s.ip(r)+":"+sess.User.Username) {
+	if s.dlRL != nil && !s.dlRL.Allow(s.ip(r)+":"+sess.Snapshot().User.Username) {
 		http.Error(w, "Too many downloads. Wait and try again.", http.StatusTooManyRequests)
 		return
 	}
@@ -330,17 +296,16 @@ func (s *Server) registerPOST(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	sess := s.sessions.Regenerate(w, s.sessions.GetOrCreate(w, r))
-	sess.User = toSiteUser(u)
+	sess := s.transition(w, r, s.sessions.GetOrCreate(w, r), func(d *session.Data) { *d = session.Data{User: toSiteUser(u)} })
 	if dek, err := s.id.UnlockDEK(r.Context(), u.ID, pass); err == nil {
-		sess.CredentialKey = dek
+		sess.Update(func(d *session.Data) { d.CredentialKey = dek })
 	}
 	sess.SetFlash("success", "Account created. Set your realmlist and enter Azeroth.")
 	http.Redirect(w, r, "/account", http.StatusSeeOther)
 }
 
 func toSiteUser(u identity.User) *session.User {
-	return &session.User{ID: u.ID, Username: u.Username, Email: u.Email, GMLevel: u.StaffLevel}
+	return &session.User{ID: u.ID, Username: u.Username, Email: u.Email, GMLevel: u.StaffLevel, AuthVersion: u.AuthVersion}
 }
 
 func (s *Server) wowAccountIDs(ctx context.Context, userID uint32) []uint32 {
@@ -373,24 +338,27 @@ func (s *Server) modMin() uint8 {
 }
 
 func (s *Server) applyStaffLevel(ctx context.Context, sess *session.Session) {
-	if s.id == nil || sess == nil || sess.User == nil {
+	if s.id == nil || sess == nil || sess.Snapshot().User == nil {
 		return
 	}
-	u, err := s.id.GetByID(ctx, sess.User.ID)
+	u, err := s.id.GetByID(ctx, sess.Snapshot().User.ID)
 	if err != nil {
-		return
+		panic(err)
 	}
-	sess.User.GMLevel = u.StaffLevel
+	if u.AuthVersion != sess.Snapshot().User.AuthVersion {
+		panic(session.ErrRevoked)
+	}
+	sess.Update(func(d *session.Data) { d.User.GMLevel = u.StaffLevel })
 }
 
 func (s *Server) requireStaff(w http.ResponseWriter, r *http.Request) *session.Session {
 	sess := s.sessions.GetOrCreate(w, r)
-	if sess.User == nil {
+	if sess.Snapshot().User == nil {
 		s.flashRedirect(w, r, "/account", "error", "Log in first.")
 		return nil
 	}
 	s.applyStaffLevel(r.Context(), sess)
-	if !sess.User.IsStaff(s.staffMin()) {
+	if !sess.Snapshot().User.IsStaff(s.staffMin()) {
 		http.Error(w, "Admin panel only.", http.StatusForbidden)
 		return nil
 	}
@@ -399,12 +367,12 @@ func (s *Server) requireStaff(w http.ResponseWriter, r *http.Request) *session.S
 
 func (s *Server) requireMod(w http.ResponseWriter, r *http.Request) *session.Session {
 	sess := s.sessions.GetOrCreate(w, r)
-	if sess.User == nil {
+	if sess.Snapshot().User == nil {
 		s.flashRedirect(w, r, "/account", "error", "Log in first.")
 		return nil
 	}
 	s.applyStaffLevel(r.Context(), sess)
-	if !sess.User.IsStaff(s.modMin()) {
+	if !sess.Snapshot().User.IsStaff(s.modMin()) {
 		http.Error(w, "Staff tickets only.", http.StatusForbidden)
 		return nil
 	}
@@ -413,13 +381,13 @@ func (s *Server) requireMod(w http.ResponseWriter, r *http.Request) *session.Ses
 
 func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
 	sess := s.sessions.GetOrCreate(w, r)
-	if sess.User == nil {
+	if sess.Snapshot().User == nil {
 		s.flashRedirect(w, r, "/account", "error", "Log in first.")
 		return
 	}
 	s.applyStaffLevel(r.Context(), sess)
-	if !sess.User.IsStaff(s.staffMin()) {
-		if sess.User.IsStaff(s.modMin()) {
+	if !sess.Snapshot().User.IsStaff(s.staffMin()) {
+		if sess.Snapshot().User.IsStaff(s.modMin()) {
 			http.Redirect(w, r, "/staff/tickets", http.StatusSeeOther)
 			return
 		}
@@ -445,7 +413,7 @@ func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pages := (total + per - 1) / per
-	actorGM := int(sess.User.GMLevel)
+	actorGM := int(sess.Snapshot().User.GMLevel)
 	s.attachGatehouse(r.Context(), rows)
 	sortStaffAccounts(rows)
 	selected := s.staffSelected(r.Context(), rows, r.URL.Query().Get("select"), q, includeBots)
@@ -476,7 +444,7 @@ func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
 			canModify = false
 			canRank = false
 		}
-		if selected.Username == sess.User.Username || strings.EqualFold(selected.Gatehouse, sess.User.Username) {
+		if selected.Username == sess.Snapshot().User.Username || strings.EqualFold(selected.Gatehouse, sess.Snapshot().User.Username) {
 			canRank = false
 		}
 		linked = selected.Linked
@@ -503,7 +471,7 @@ func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
 		"NextPage":          pageN + 1,
 		"Selected":          selected,
 		"ActorGM":           actorGM,
-		"ActorUser":         sess.User.Username,
+		"ActorUser":         sess.Snapshot().User.Username,
 		"SelRank":           selRank,
 		"CanModify":         canModify,
 		"CanRank":           canRank,
@@ -514,10 +482,6 @@ func (s *Server) staffGET(w http.ResponseWriter, r *http.Request) {
 		"DownloadsScanning": s.downloads.Scanning(),
 		"Events":            s.recentStaffEvents(r.Context()),
 		"OpenTickets":       s.openTickets(r.Context()),
-		"WGOn":              s.cfg.WGEnabled,
-		"WGEndpoint":        s.wgEndpoint(),
-		"WGPort":            s.cfg.WGPort,
-		"WGRealmIP":         wg.TunnelIP(s.cfg.WGServerAddr),
 		"RegisterKey":       s.registerKey(),
 		"BannerMessage":     s.bannerMessage(r.Context()),
 		"BannerUntil":       s.bannerUntilLocal(r.Context()),
@@ -583,11 +547,11 @@ func (s *Server) registerKeyPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if key == "" {
-		s.logStaff(sess.User.Username, "register-key", "open")
+		s.logStaff(sess.Snapshot().User.Username, "register-key", "open")
 		s.flashRedirect(w, r, "/staff#register-key", "success", "Public registration is open (no key required).")
 		return
 	}
-	s.logStaff(sess.User.Username, "register-key", "set")
+	s.logStaff(sess.Snapshot().User.Username, "register-key", "set")
 	s.flashRedirect(w, r, "/staff#register-key", "success", "Registration now requires a key.")
 }
 
@@ -702,20 +666,20 @@ func (s *Server) staffCreatePOST(w http.ResponseWriter, r *http.Request) {
 	email := strings.TrimSpace(r.FormValue("email"))
 	pass := r.FormValue("password")
 	if pass != r.FormValue("password_confirm") {
-		s.flashRedirect(w, r, "/staff", "error", "passwords do not match")
+		s.flashRedirect(w, r, "/staff#create-account", "error", "passwords do not match")
 		return
 	}
 	if err := validate.Username(user); err != nil {
-		s.flashRedirect(w, r, "/staff", "error", err.Error())
+		s.flashRedirect(w, r, "/staff#create-account", "error", err.Error())
 		return
 	}
 	if err := validate.Password(pass, user, s.cfg.PasswordMinLength); err != nil {
-		s.flashRedirect(w, r, "/staff", "error", err.Error())
+		s.flashRedirect(w, r, "/staff#create-account", "error", err.Error())
 		return
 	}
 	if email != "" {
 		if err := validate.Email(email); err != nil {
-			s.flashRedirect(w, r, "/staff", "error", err.Error())
+			s.flashRedirect(w, r, "/staff#create-account", "error", err.Error())
 			return
 		}
 	}
@@ -723,14 +687,14 @@ func (s *Server) staffCreatePOST(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case errors.Is(err, identity.ErrTaken), errors.Is(err, account.ErrTaken),
 			errors.Is(err, identity.ErrEmailTaken), errors.Is(err, account.ErrEmailTaken):
-			s.flashRedirect(w, r, "/staff", "error", err.Error())
+			s.flashRedirect(w, r, "/staff#create-account", "error", err.Error())
 		default:
-			s.log.Error("staff create", "err", err, "actor", s.sessions.GetOrCreate(w, r).User.Username, "target", user)
-			s.flashRedirect(w, r, "/staff", "error", "could not create the account")
+			s.log.Error("staff create", "err", err, "actor", s.sessions.GetOrCreate(w, r).Snapshot().User.Username, "target", user)
+			s.flashRedirect(w, r, "/staff#create-account", "error", "could not create the account")
 		}
 		return
 	}
-	actor := s.sessions.GetOrCreate(w, r).User.Username
+	actor := s.sessions.GetOrCreate(w, r).Snapshot().User.Username
 	s.log.Info("staff create", "actor", actor, "target", strings.ToUpper(user))
 	s.logStaff(actor, "create", strings.ToUpper(user))
 	s.flashRedirect(w, r, "/staff?select="+url.QueryEscape(strings.ToUpper(user)), "success", "Created account "+user+".")
@@ -758,20 +722,20 @@ func (s *Server) staffResetPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", err.Error())
 		return
 	}
-	if err := s.accounts.ResetPasswordByGM(r.Context(), sess.User.GMLevel, target, pass); err != nil {
+	if err := s.accounts.ResetPasswordByGM(r.Context(), sess.Snapshot().User.GMLevel, target, pass); err != nil {
 		switch {
 		case errors.Is(err, account.ErrForbidden):
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Cannot modify GM "+strconv.Itoa(int(s.accountsGM(r, target))))
 		case errors.Is(err, account.ErrNotFound):
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "account not found")
 		default:
-			s.log.Error("staff reset", "err", err, "actor", sess.User.Username, "target", target)
+			s.log.Error("staff reset", "err", err, "actor", sess.Snapshot().User.Username, "target", target)
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "could not reset password")
 		}
 		return
 	}
-	s.log.Info("staff reset", "actor", sess.User.Username, "target", strings.ToUpper(target))
-	s.logStaff(sess.User.Username, "reset", strings.ToUpper(target))
+	s.log.Info("staff reset", "actor", sess.Snapshot().User.Username, "target", strings.ToUpper(target))
+	s.logStaff(sess.Snapshot().User.Username, "reset", strings.ToUpper(target))
 	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Password updated for "+target+".")
 }
 
@@ -795,7 +759,7 @@ func (s *Server) staffRankPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	gh, userID, names := s.linkedWowNames(r.Context(), target)
-	if userID != 0 && userID == sess.User.ID {
+	if userID != 0 && userID == sess.Snapshot().User.ID {
 		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "You cannot change your own rank.")
 		return
 	}
@@ -813,7 +777,7 @@ func (s *Server) staffRankPOST(w http.ResponseWriter, r *http.Request) {
 			current = u.StaffLevel
 		}
 	}
-	if err := account.CanGrantRank(sess.User.GMLevel, current, level); err != nil {
+	if err := account.CanGrantRank(sess.Snapshot().User.GMLevel, current, level); err != nil {
 		switch {
 		case errors.Is(err, account.ErrBadRank) && level == account.RankSuperGM:
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Super GM cannot be granted from this panel.")
@@ -823,6 +787,18 @@ func (s *Server) staffRankPOST(w http.ResponseWriter, r *http.Request) {
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Cannot modify "+account.RankName(current)+".")
 		}
 		return
+	}
+	if userID != 0 {
+		if err := s.id.Store().SetStaffLevel(r.Context(), userID, level); err != nil {
+			http.Error(w, "Website role could not be updated.", 503)
+			return
+		}
+		s.sessions.RevokeUser(userID, "")
+	} else {
+		if err := s.syncWebsiteStaffLevel(r.Context(), target, level); err != nil {
+			http.Error(w, "Website role could not be updated.", 503)
+			return
+		}
 	}
 	var last error
 	applied := 0
@@ -836,25 +812,18 @@ func (s *Server) staffRankPOST(w http.ResponseWriter, r *http.Request) {
 		}
 		applied++
 	}
-	if applied == 0 {
-		s.log.Error("staff rank", "err", last, "actor", sess.User.Username, "target", target, "rank", level)
-		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "could not update rank")
+	if applied != len(names) {
+		s.log.Error("staff rank", "err", last, "actor", sess.Snapshot().User.Username, "target", target, "rank", level)
+		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Website role updated; game role synchronization failed. Retry the rank change.")
 		return
 	}
-	if userID != 0 {
-		_ = s.id.Store().SetStaffLevel(r.Context(), userID, level)
-		if level == account.RankPlayer {
-			s.sessions.RevokeUser(userID, "")
-		}
-	} else {
-		s.syncWebsiteStaffLevel(r.Context(), target, level)
-	}
+
 	label := strings.ToUpper(target)
 	if gh != "" {
 		label = gh
 	}
-	s.log.Info("staff rank", "actor", sess.User.Username, "target", label, "rank", level, "logins", applied)
-	s.logStaff(sess.User.Username, "rank", label+"="+account.RankName(level))
+	s.log.Info("staff rank", "actor", sess.Snapshot().User.Username, "target", label, "rank", level, "logins", applied)
+	s.logStaff(sess.Snapshot().User.Username, "rank", label+"="+account.RankName(level))
 	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Set "+label+" to "+account.RankName(level)+" on "+strconv.Itoa(applied)+" Wow.exe login(s).")
 }
 
@@ -865,20 +834,35 @@ func (s *Server) linkedWowNames(ctx context.Context, wowUsername string) (gateho
 	return s.id.LinkedWowNames(ctx, wowUsername)
 }
 
-func (s *Server) syncWebsiteStaffLevel(ctx context.Context, wowUsername string, level uint8) {
+func (s *Server) syncWebsiteStaffLevel(ctx context.Context, wowUsername string, level uint8) error {
 	if s.id == nil {
-		return
+		return nil
 	}
 	listed, err := s.accounts.GetListed(ctx, wowUsername)
+	if err != nil {
+		return err
+	}
+	ln, err := s.id.Store().LinkByAccount(ctx, listed.ID)
+	var id uint32
 	if err == nil {
-		if ln, err := s.id.Store().LinkByAccount(ctx, listed.ID); err == nil {
-			_ = s.id.Store().SetStaffLevel(ctx, ln.UserID, level)
-			return
+		id = ln.UserID
+	} else if !errors.Is(err, identity.ErrNotFound) {
+		return err
+	} else {
+		u, err := s.id.GetByUsername(ctx, wowUsername)
+		if errors.Is(err, identity.ErrNotFound) {
+			return nil
 		}
+		if err != nil {
+			return err
+		}
+		id = u.ID
 	}
-	if u, err := s.id.GetByUsername(ctx, wowUsername); err == nil {
-		_ = s.id.Store().SetStaffLevel(ctx, u.ID, level)
+	if err := s.id.Store().SetStaffLevel(ctx, id, level); err != nil {
+		return err
 	}
+	s.sessions.RevokeUser(id, "")
+	return nil
 }
 
 func (s *Server) staffBanPOST(w http.ResponseWriter, r *http.Request) {
@@ -902,17 +886,24 @@ func (s *Server) staffBanPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	gh, userID, names := s.linkedWowNames(r.Context(), target)
-	if userID != 0 && userID == sess.User.ID {
+	if userID != 0 && userID == sess.Snapshot().User.ID {
 		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "You cannot suspend your own account.")
 		return
 	}
 	if len(names) == 0 {
 		names = []string{strings.ToUpper(target)}
 	}
+	if userID != 0 {
+		if err := s.id.Store().BumpAuthVersion(r.Context(), userID); err != nil {
+			http.Error(w, "Could not revoke authentication.", 503)
+			return
+		}
+		s.sessions.RevokeUser(userID, "")
+	}
 	var last error
 	banned := 0
 	for _, n := range names {
-		if err := s.accounts.Ban(r.Context(), sess.User.GMLevel, sess.User.Username, n, dur, reason); err != nil {
+		if err := s.accounts.Ban(r.Context(), sess.Snapshot().User.GMLevel, sess.Snapshot().User.Username, n, dur, reason); err != nil {
 			last = err
 			continue
 		}
@@ -921,7 +912,7 @@ func (s *Server) staffBanPOST(w http.ResponseWriter, r *http.Request) {
 	if banned == 0 {
 		switch {
 		case errors.Is(last, account.ErrForbidden):
-			if strings.EqualFold(target, sess.User.Username) || strings.EqualFold(gh, sess.User.Username) {
+			if strings.EqualFold(target, sess.Snapshot().User.Username) || strings.EqualFold(gh, sess.Snapshot().User.Username) {
 				s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "You cannot suspend your own account.")
 			} else {
 				s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Cannot modify "+account.RankName(s.accountsGM(r, target))+".")
@@ -931,7 +922,7 @@ func (s *Server) staffBanPOST(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(last, account.ErrNotFound):
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "account not found")
 		default:
-			s.log.Error("staff ban", "err", last, "actor", sess.User.Username, "target", target)
+			s.log.Error("staff ban", "err", last, "actor", sess.Snapshot().User.Username, "target", target)
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "could not suspend the account")
 		}
 		return
@@ -939,12 +930,16 @@ func (s *Server) staffBanPOST(w http.ResponseWriter, r *http.Request) {
 	if userID != 0 {
 		s.sessions.RevokeUser(userID, "")
 	}
+	if banned != len(names) {
+		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "Sessions revoked; only some game accounts were suspended. Retry to finish.")
+		return
+	}
 	who := strings.ToUpper(target)
 	if gh != "" {
 		who = gh
 	}
-	s.log.Info("staff ban", "actor", sess.User.Username, "target", who, "duration", label, "logins", banned)
-	s.logStaff(sess.User.Username, "ban", who+"="+label)
+	s.log.Info("staff ban", "actor", sess.Snapshot().User.Username, "target", who, "duration", label, "logins", banned)
+	s.logStaff(sess.Snapshot().User.Username, "ban", who+"="+label)
 	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Suspended "+who+" ("+label+") on "+strconv.Itoa(banned)+" Wow.exe login(s).")
 }
 
@@ -962,7 +957,7 @@ func (s *Server) staffUnbanPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	gh, userID, names := s.linkedWowNames(r.Context(), target)
-	if userID != 0 && userID == sess.User.ID {
+	if userID != 0 && userID == sess.Snapshot().User.ID {
 		s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "You cannot change your own suspension.")
 		return
 	}
@@ -972,7 +967,7 @@ func (s *Server) staffUnbanPOST(w http.ResponseWriter, r *http.Request) {
 	var last error
 	n := 0
 	for _, name := range names {
-		if err := s.accounts.Unban(r.Context(), sess.User.GMLevel, sess.User.Username, name); err != nil {
+		if err := s.accounts.Unban(r.Context(), sess.Snapshot().User.GMLevel, sess.Snapshot().User.Username, name); err != nil {
 			last = err
 			continue
 		}
@@ -985,7 +980,7 @@ func (s *Server) staffUnbanPOST(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(last, account.ErrNotFound):
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "account not found")
 		default:
-			s.log.Error("staff unban", "err", last, "actor", sess.User.Username, "target", target)
+			s.log.Error("staff unban", "err", last, "actor", sess.Snapshot().User.Username, "target", target)
 			s.flashRedirect(w, r, s.staffReturnURL(r, target), "error", "could not lift the suspension")
 		}
 		return
@@ -994,8 +989,8 @@ func (s *Server) staffUnbanPOST(w http.ResponseWriter, r *http.Request) {
 	if gh != "" {
 		who = gh
 	}
-	s.log.Info("staff unban", "actor", sess.User.Username, "target", who, "logins", n)
-	s.logStaff(sess.User.Username, "unban", who)
+	s.log.Info("staff unban", "actor", sess.Snapshot().User.Username, "target", who, "logins", n)
+	s.logStaff(sess.Snapshot().User.Username, "unban", who)
 	s.flashRedirect(w, r, s.staffReturnURL(r, target), "success", "Lifted suspension for "+who+" on "+strconv.Itoa(n)+" Wow.exe login(s).")
 }
 
@@ -1017,61 +1012,59 @@ func captchaToken(r *http.Request) string {
 func (s *Server) accountGET(w http.ResponseWriter, r *http.Request) {
 	sess := s.sessions.GetOrCreate(w, r)
 	var chars []status.Character
-	if sess.User != nil {
-		list, err := s.status.AccountCharactersMany(r.Context(), s.wowAccountIDs(r.Context(), sess.User.ID))
+	if sess.Snapshot().User != nil {
+		list, err := s.status.AccountCharactersMany(r.Context(), s.wowAccountIDs(r.Context(), sess.Snapshot().User.ID))
 		if err != nil {
-			s.log.Error("account characters", "err", err, "user", sess.User.ID)
+			s.log.Error("account characters", "err", err, "user", sess.Snapshot().User.ID)
 		} else {
 			chars = list
 		}
 	}
 	var wowLogins []wowLoginView
-	if sess.User != nil && s.id != nil {
+	if sess.Snapshot().User != nil && s.id != nil {
 		wowLogins = s.wowLoginViews(r, sess)
 	}
 	totpOn := false
 	totpSecret, totpURL, totpQR := "", "", ""
 	var totpCodes []string
 	var passkeys []identity.Passkey
-	var wgPeers []wgPeerView
-	if sess.User != nil {
-		totpOn = s.id.TOTPEnabled(r.Context(), sess.User.ID)
-		totpCodes = sess.TOTPCodes
-		sess.TOTPCodes = nil
+	if sess.Snapshot().User != nil {
+		var totpErr error
+		totpOn, totpErr = s.id.TOTPEnabled(r.Context(), sess.Snapshot().User.ID)
+		if totpErr != nil {
+			http.Error(w, "Account verification unavailable.", 503)
+			return
+		}
+		totpCodes = sess.Snapshot().TOTPCodes
+		sess.Update(func(d *session.Data) { d.TOTPCodes = nil })
 		if !totpOn {
-			if secret, otpURL, err := s.id.Store().PendingTOTP(r.Context(), sess.User.ID, sess.User.Username, s.cfg.RealmName); err == nil && secret != "" {
+			if secret, otpURL, err := s.id.Store().PendingTOTP(r.Context(), sess.Snapshot().User.ID, sess.Snapshot().User.Username, s.cfg.RealmName); err == nil && secret != "" {
 				totpSecret, totpURL = secret, otpURL
 				if qr, err := identity.QRDataURI(otpURL); err == nil {
 					totpQR = qr
 				}
 			}
 		}
-		passkeys, _ = s.id.Store().ListPasskeys(r.Context(), sess.User.ID)
-		if s.wgOn() {
-			if list, err := s.id.Store().ListWGPeers(r.Context(), sess.User.ID); err == nil {
-				if keys, err := wg.EnsureServerKeys(s.cfg.WGDir); err == nil {
-					wgPeers = s.wgPeerViews(list, keys.Public)
-				}
-			}
-		}
+		passkeys, _ = s.id.Store().ListPasskeys(r.Context(), sess.Snapshot().User.ID)
+
 	}
 	s.view(w, r, "account.html", "Account", "account", map[string]any{
-		"Characters":  chars,
-		"WowLogins":   wowLogins,
-		"WowUnlocked": sess.User != nil && len(sess.CredentialKey) == 32,
-		"WowMax":      s.cfg.WowCredentialsMax,
-		"TOTPOn":      totpOn,
-		"TOTPPending": sess.PendingUser != nil && sess.User == nil,
-		"TOTPSecret":  totpSecret,
-		"TOTPURL":     template.URL(totpURL),
-		"TOTPQR":      template.URL(totpQR),
-		"TOTPCodes":   totpCodes,
-		"Passkeys":    passkeys,
-		"PasskeysOK":  s.wa != nil,
-		"PasskeyMax":  identity.MaxPasskeys,
-		"WGOn":        s.wgOn(),
-		"WGPeers":     wgPeers,
-		"WGMax":       s.cfg.WGPeerMax,
+		"Characters":    chars,
+		"WowLogins":     wowLogins,
+		"WowUnlocked":   len(s.gameKey(sess, "wow-reveal", false)) == 32,
+		"SSOAccount":    sess.Snapshot().AuthMethod == identity.AuthSSO,
+		"CanCreateGame": len(s.gameKey(sess, "wow-create", false)) == 32,
+		"CanChangeGame": len(s.gameKey(sess, "wow-password", false)) == 32,
+		"WowMax":        s.cfg.WowCredentialsMax,
+		"TOTPOn":        totpOn,
+		"TOTPPending":   sess.Snapshot().PendingUser != nil && sess.Snapshot().User == nil,
+		"TOTPSecret":    totpSecret,
+		"TOTPURL":       template.URL(totpURL),
+		"TOTPQR":        template.URL(totpQR),
+		"TOTPCodes":     totpCodes,
+		"Passkeys":      passkeys,
+		"PasskeysOK":    s.wa != nil,
+		"PasskeyMax":    identity.MaxPasskeys,
 	})
 }
 
@@ -1086,32 +1079,34 @@ func (s *Server) wowCredentialPOST(w http.ResponseWriter, r *http.Request) {
 	user := strings.TrimSpace(r.FormValue("wow_username"))
 	pass := r.FormValue("wow_password")
 	if pass != r.FormValue("wow_password_confirm") {
-		s.flashRedirect(w, r, "/account", "error", "WoW passwords do not match")
+		s.flashRedirect(w, r, "/account#add-login", "error", "WoW passwords do not match")
 		return
 	}
 	if err := validate.Username(user); err != nil {
-		s.flashRedirect(w, r, "/account", "error", err.Error())
+		s.flashRedirect(w, r, "/account#add-login", "error", err.Error())
 		return
 	}
 	if err := validate.Password(pass, user, s.cfg.PasswordMinLength); err != nil {
-		s.flashRedirect(w, r, "/account", "error", err.Error())
+		s.flashRedirect(w, r, "/account#add-login", "error", err.Error())
 		return
 	}
-	if len(sess.CredentialKey) != 32 {
-		s.flashRedirect(w, r, "/account#wow", "error", "Enter your website password to save client logins.")
+	dek := s.gameKey(sess, "wow-create", true)
+	defer clear(dek)
+	if len(dek) != 32 {
+		s.flashRedirect(w, r, "/account#wow", "error", "Verify your identity to add a client login.")
 		return
 	}
-	if _, err := s.id.AddCredentialWithDEK(r.Context(), sess.User.ID, user, pass, "", wotlkExpansion, sess.CredentialKey); err != nil {
+	if _, err := s.id.AddCredentialWithDEK(r.Context(), sess.Snapshot().User.ID, user, pass, "", wotlkExpansion, dek, sess.Snapshot().User.AuthVersion); err != nil {
 		switch {
 		case errors.Is(err, identity.ErrTaken), errors.Is(err, account.ErrTaken):
-			s.flashRedirect(w, r, "/account", "error", "that client username is taken")
+			s.flashRedirect(w, r, "/account#add-login", "error", "that client username is taken")
 		case errors.Is(err, identity.ErrTooMany):
-			s.flashRedirect(w, r, "/account", "error", "you already have the maximum number of WoW client logins")
+			s.flashRedirect(w, r, "/account#add-login", "error", "you already have the maximum number of WoW client logins")
 		case errors.Is(err, account.ErrNotFound):
-			s.log.Error("wow credential", "err", err, "user", sess.User.Username)
+			s.log.Error("wow credential", "err", err, "user", sess.Snapshot().User.Username)
 			s.flashRedirect(w, r, "/account#wow", "error", "The realm did not finish creating that login. Try again in a moment.")
 		default:
-			s.log.Error("wow credential", "err", err, "user", sess.User.Username)
+			s.log.Error("wow credential", "err", err, "user", sess.Snapshot().User.Username)
 			s.flashRedirect(w, r, "/account#wow", "error", "could not create the client login")
 		}
 		return
@@ -1128,7 +1123,7 @@ type wowLoginView struct {
 }
 
 func (s *Server) wowLoginViews(r *http.Request, sess *session.Session) []wowLoginView {
-	links, err := s.id.Links(r.Context(), sess.User.ID)
+	links, err := s.id.Links(r.Context(), sess.Snapshot().User.ID)
 	if err != nil {
 		return nil
 	}
@@ -1137,7 +1132,8 @@ func (s *Server) wowLoginViews(r *http.Request, sess *session.Session) []wowLogi
 		ids = append(ids, l.AccountID)
 	}
 	stats := s.status.AccountStats(r.Context(), ids)
-	dek := sess.CredentialKey
+	dek := s.gameKey(sess, "wow-reveal", false)
+	defer clear(dek)
 	out := make([]wowLoginView, 0, len(links))
 	for _, l := range links {
 		st := stats[l.AccountID]
@@ -1170,12 +1166,15 @@ func (s *Server) wowUnlockPOST(w http.ResponseWriter, r *http.Request) {
 	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
 		return
 	}
-	dek, err := s.id.UnlockDEK(r.Context(), sess.User.ID, r.FormValue("current_password"))
+	if !s.authLimit(w, r, sess.Snapshot().User.Username) {
+		return
+	}
+	dek, err := s.id.UnlockDEK(r.Context(), sess.Snapshot().User.ID, r.FormValue("current_password"))
 	if err != nil {
 		s.flashRedirect(w, r, "/account#wow", "error", "Website password is incorrect.")
 		return
 	}
-	sess.CredentialKey = dek
+	sess.Update(func(d *session.Data) { d.CredentialKey = dek })
 	s.flashRedirect(w, r, "/account#wow", "success", "Client passwords unlocked for this session.")
 }
 
@@ -1187,8 +1186,10 @@ func (s *Server) wowPasswordPOST(w http.ResponseWriter, r *http.Request) {
 	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
 		return
 	}
-	if len(sess.CredentialKey) != 32 {
-		s.flashRedirect(w, r, "/account#wow", "error", "Enter your website password to save client logins.")
+	dek := s.gameKey(sess, "wow-password", true)
+	defer clear(dek)
+	if len(dek) != 32 {
+		s.flashRedirect(w, r, "/account#wow", "error", "Verify your identity to change a client password.")
 		return
 	}
 	user := strings.TrimSpace(r.FormValue("wow_username"))
@@ -1205,7 +1206,7 @@ func (s *Server) wowPasswordPOST(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, "/account#wow", "error", err.Error())
 		return
 	}
-	links, err := s.id.Links(r.Context(), sess.User.ID)
+	links, err := s.id.Links(r.Context(), sess.Snapshot().User.ID)
 	if err != nil {
 		s.flashRedirect(w, r, "/account#wow", "error", "Could not save the client password.")
 		return
@@ -1221,12 +1222,20 @@ func (s *Server) wowPasswordPOST(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	if err := s.accounts.ResetPassword(r.Context(), user, pass); err != nil {
-		s.log.Error("wow password", "err", err, "user", sess.User.Username)
+	if !s.authLimit(w, r, sess.Snapshot().User.Username) {
+		return
+	}
+	if r.FormValue("mode") == "remember" {
+		if _, err := s.accounts.Authenticate(r.Context(), user, pass); err != nil {
+			s.flashRedirect(w, r, "/account#wow", "error", "Current game password could not be verified.")
+			return
+		}
+	} else if err := s.accounts.ResetPassword(r.Context(), user, pass); err != nil {
+		s.log.Error("wow password", "err", err, "user", sess.Snapshot().User.Username)
 		s.flashRedirect(w, r, "/account#wow", "error", "Could not save the client password.")
 		return
 	}
-	if err := s.id.SealClientPassword(r.Context(), sess.User.ID, user, pass, sess.CredentialKey); err != nil {
+	if err := s.id.SealClientPassword(r.Context(), sess.Snapshot().User.ID, user, pass, dek, sess.Snapshot().User.AuthVersion); err != nil {
 		s.flashRedirect(w, r, "/account#wow", "error", "Could not save the client password.")
 		return
 	}
@@ -1241,33 +1250,33 @@ func (s *Server) unstuckPOST(w http.ResponseWriter, r *http.Request) {
 	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
 		return
 	}
-	if !s.unstuckRL.Allow(s.ip(r) + ":" + sess.User.Username) {
-		s.flashRedirect(w, r, "/account", "error", "Too many unstuck attempts. Wait and try again.")
+	if !s.unstuckRL.Allow(s.ip(r) + ":" + sess.Snapshot().User.Username) {
+		s.flashRedirect(w, r, "/account#characters", "error", "Too many unstuck attempts. Wait and try again.")
 		return
 	}
 	guid, err := strconv.ParseUint(strings.TrimSpace(r.FormValue("guid")), 10, 32)
 	if err != nil || guid == 0 {
-		s.flashRedirect(w, r, "/account", "error", "Character not found.")
+		s.flashRedirect(w, r, "/account#characters", "error", "Character not found.")
 		return
 	}
-	res, err := s.status.UnstuckAny(r.Context(), s.wowAccountIDs(r.Context(), sess.User.ID), uint32(guid))
+	res, err := s.status.UnstuckAny(r.Context(), s.wowAccountIDs(r.Context(), sess.Snapshot().User.ID), uint32(guid))
 	if err != nil {
 		switch {
 		case errors.Is(err, status.ErrCharOnline):
-			s.flashRedirect(w, r, "/account", "error", "Log out of the game first, then unstuck.")
+			s.flashRedirect(w, r, "/account#characters", "error", "Log out of the game first, then unstuck.")
 		case errors.Is(err, status.ErrCharNotFound):
-			s.flashRedirect(w, r, "/account", "error", "Character not found.")
+			s.flashRedirect(w, r, "/account#characters", "error", "Character not found.")
 		case errors.Is(err, status.ErrNoHomebind):
-			s.flashRedirect(w, r, "/account", "error", "No hearthstone bind yet. Visit an inn in-game first.")
+			s.flashRedirect(w, r, "/account#characters", "error", "No hearthstone bind yet. Visit an inn in-game first.")
 		default:
-			s.log.Error("unstuck", "err", err, "account", sess.User.ID, "guid", guid, "actor", sess.User.Username)
-			s.flashRedirect(w, r, "/account", "error", "Could not unstuck right now.")
+			s.log.Error("unstuck", "err", err, "account", sess.Snapshot().User.ID, "guid", guid, "actor", sess.Snapshot().User.Username)
+			s.flashRedirect(w, r, "/account#characters", "error", "Could not unstuck right now.")
 		}
 		return
 	}
 	s.log.Info("unstuck",
-		"actor", sess.User.Username,
-		"account", sess.User.ID,
+		"actor", sess.Snapshot().User.Username,
+		"account", sess.Snapshot().User.ID,
 		"guid", res.GUID,
 		"name", res.Name,
 		"from_map", res.FromMap,
@@ -1276,16 +1285,15 @@ func (s *Server) unstuckPOST(w http.ResponseWriter, r *http.Request) {
 		"to_zone", res.ToZone,
 		"via", res.Via,
 	)
-	s.logStaff(sess.User.Username, "unstuck", res.Name)
-	s.flashRedirect(w, r, "/account", "success", res.Name+" was sent to their hearth. Log in in-game.")
+	s.logStaff(sess.Snapshot().User.Username, "unstuck", res.Name)
+	s.flashRedirect(w, r, "/account#characters", "success", res.Name+" was sent to their hearth. Log in in-game.")
 }
 
 func (s *Server) loginPOST(w http.ResponseWriter, r *http.Request) {
 	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
 		return
 	}
-	ip := s.ip(r)
-	if !s.loginRL.Allow(ip) {
+	if !s.authLimit(w, r, r.FormValue("username")) {
 		s.flashRedirect(w, r, "/account", "error", "Too many login attempts.")
 		return
 	}
@@ -1306,17 +1314,24 @@ func (s *Server) loginPOST(w http.ResponseWriter, r *http.Request) {
 	}
 	sess := s.sessions.GetOrCreate(w, r)
 	dek, _ := s.id.UnlockDEK(r.Context(), u.ID, pass)
-	if s.id.TOTPEnabled(r.Context(), u.ID) {
-		sess.PendingUser = toSiteUser(u)
-		sess.PendingNext = r.FormValue("next")
-		sess.User = nil
-		sess.CredentialKey = dek
-		s.flashRedirect(w, r, "/account", "info", "Enter the code from your authenticator app.")
+	on, err := s.id.TOTPEnabled(r.Context(), u.ID)
+	if err != nil {
+		http.Error(w, "Account verification unavailable.", 503)
 		return
 	}
-	sess = s.sessions.Regenerate(w, sess)
-	sess.User = toSiteUser(u)
-	sess.CredentialKey = dek
+	if _, err := s.checkUser(r, toSiteUser(u)); err != nil {
+		http.Error(w, "Please sign in again.", 401)
+		return
+	}
+	if on {
+		sess = s.transition(w, r, sess, func(d *session.Data) {
+			*d = session.Data{PendingUser: toSiteUser(u), PendingNext: safeNext(r.FormValue("next")), PendingExpiry: time.Now().Add(5 * time.Minute), CredentialKey: dek}
+		})
+		sess.SetFlash("info", "Enter the code from your authenticator app.")
+		http.Redirect(w, r, "/account", http.StatusSeeOther)
+		return
+	}
+	sess = s.transition(w, r, sess, func(d *session.Data) { *d = session.Data{User: toSiteUser(u), CredentialKey: dek} })
 	sess.SetFlash("success", "Welcome back, "+u.Username+".")
 	http.Redirect(w, r, safeNext(r.FormValue("next")), http.StatusSeeOther)
 }
@@ -1335,46 +1350,57 @@ func (s *Server) passwordPOST(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess := s.sessions.GetOrCreate(w, r)
-	if sess.User == nil {
+	if sess.Snapshot().User == nil {
 		http.Redirect(w, r, "/account", http.StatusSeeOther)
+		return
+	}
+	if !s.authLimit(w, r, sess.Snapshot().User.Username) {
 		return
 	}
 	old := r.FormValue("current_password")
 	nw := r.FormValue("new_password")
 	conf := r.FormValue("new_password_confirm")
 	if nw != conf {
-		s.flashRedirect(w, r, "/account", "error", "new passwords do not match")
+		s.flashRedirect(w, r, "/account#password", "error", "new passwords do not match")
 		return
 	}
-	if err := validate.Password(nw, sess.User.Username, s.cfg.PasswordMinLength); err != nil {
-		s.flashRedirect(w, r, "/account", "error", err.Error())
+	if err := validate.Password(nw, sess.Snapshot().User.Username, s.cfg.PasswordMinLength); err != nil {
+		s.flashRedirect(w, r, "/account#password", "error", err.Error())
 		return
 	}
-	if s.id.TOTPEnabled(r.Context(), sess.User.ID) {
-		if err := s.id.Store().ValidateTOTP(r.Context(), sess.User.ID, r.FormValue("code")); err != nil {
+	on, err := s.id.TOTPEnabled(r.Context(), sess.Snapshot().User.ID)
+	if err != nil {
+		http.Error(w, "Account verification unavailable.", 503)
+		return
+	}
+	if on {
+		if err := s.id.Store().ValidateTOTP(r.Context(), sess.Snapshot().User.ID, r.FormValue("code")); err != nil {
 			s.flashRedirect(w, r, "/account#password", "error", "Authenticator code required to change password.")
 			return
 		}
 	}
-	cur, err := s.id.GetByID(r.Context(), sess.User.ID)
+	cur, err := s.id.GetByID(r.Context(), sess.Snapshot().User.ID)
 	if err != nil {
-		s.flashRedirect(w, r, "/account", "error", "could not change password")
+		s.flashRedirect(w, r, "/account#password", "error", "could not change password")
 		return
+	}
+	if cur.AuthVersion != sess.Snapshot().User.AuthVersion {
+		panic(session.ErrRevoked)
 	}
 	if err := s.id.ChangePassword(r.Context(), cur, old, nw); err != nil {
 		if errors.Is(err, identity.ErrBadPassword) {
-			s.flashRedirect(w, r, "/account", "error", "current password is incorrect")
+			s.flashRedirect(w, r, "/account#password", "error", "current password is incorrect")
 			return
 		}
-		s.log.Error("password change", "user", sess.User.Username, "err", err)
-		s.flashRedirect(w, r, "/account", "error", "could not change password")
+		s.log.Error("password change", "user", sess.Snapshot().User.Username, "err", err)
+		s.flashRedirect(w, r, "/account#password", "error", "could not change password")
 		return
 	}
-	s.sessions.RevokeUser(sess.User.ID, sess.ID)
-	if dek, err := s.id.UnlockDEK(r.Context(), sess.User.ID, nw); err == nil {
-		sess.CredentialKey = dek
+	sess = s.refreshSelf(w, r, sess)
+	if dek, err := s.id.UnlockDEK(r.Context(), cur.ID, nw); err == nil {
+		sess.Update(func(d *session.Data) { d.CredentialKey = dek })
 	}
-	s.flashRedirect(w, r, "/account", "success", "Website password updated. Your WoW client password is unchanged.")
+	s.flashRedirect(w, r, "/account#password", "success", "Website password updated. Your WoW client password is unchanged.")
 }
 
 func (s *Server) verifyGET(w http.ResponseWriter, r *http.Request) {
@@ -1452,7 +1478,7 @@ func (s *Server) resetPOST(w http.ResponseWriter, r *http.Request) {
 	}
 	email := strings.TrimSpace(r.FormValue("email"))
 	acc, err := s.id.GetByEmail(r.Context(), email)
-	if err == nil {
+	if err == nil && acc.AuthMode != identity.AuthSSO {
 		token, err := s.accounts.IssueResetToken(acc.Username)
 		if err == nil {
 			link := s.cfg.SiteURL + "/account/reset/" + token
@@ -1508,7 +1534,8 @@ func (s *Server) resetConfirmPOST(w http.ResponseWriter, r *http.Request) {
 	if u, err := s.id.GetByUsername(r.Context(), user); err == nil {
 		s.sessions.RevokeUser(u.ID, "")
 	}
-	sess := s.sessions.GetOrCreate(w, r)
+	sess := s.sessions.NewAnonymous(w)
+	*r = *session.WithSession(r, sess)
 	sess.SetFlash("success", "Password reset. You can log in.")
 	http.Redirect(w, r, "/account", http.StatusSeeOther)
 }

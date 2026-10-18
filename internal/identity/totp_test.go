@@ -33,10 +33,10 @@ func TestTOTPEnrollAndValidate(t *testing.T) {
 	if len(codes[0]) != 20 {
 		t.Fatalf("recovery length %d", len(codes[0]))
 	}
-	if !id.TOTPEnabled(ctx, u.ID) {
+	if on, err := id.TOTPEnabled(ctx, u.ID); err != nil || !on {
 		t.Fatal("expected enabled")
 	}
-	code, _ = totp.GenerateCode(secret, time.Now())
+	code, _ = totp.GenerateCode(secret, time.Now().Add(30*time.Second))
 	if err := id.Store().ValidateTOTP(ctx, u.ID, code); err != nil {
 		t.Fatal(err)
 	}
@@ -49,7 +49,7 @@ func TestTOTPEnrollAndValidate(t *testing.T) {
 	if _, _, err := id.Store().StartTOTP(ctx, u.ID, u.Username, "Icecrown"); !errors.Is(err, ErrTOTPEnabled) {
 		t.Fatalf("start while enabled %v", err)
 	}
-	if !id.TOTPEnabled(ctx, u.ID) {
+	if on, err := id.TOTPEnabled(ctx, u.ID); err != nil || !on {
 		t.Fatal("start must not disable live TOTP")
 	}
 }

@@ -148,21 +148,33 @@ Download URLs are `/downloads/{id}` (catalog `id`), never raw filesystem paths.
    Set that value in `.env` (`AC_NETWORK=…`), then:
 
    ```bash
-   docker compose up -d --build   # or docker-compose up -d --build
+   make deploy-check
+   make deploy
    ```
 
    Host port **3080** maps to the `waygate` container. The PHP `ac-webreg` container on this host is left alone. Image: `ghcr.io/zeroward/waygate`.
 
 6. Put a reverse proxy in front for HTTPS, then set `SESSION_SECURE_COOKIE=true` and `SITE_URL=https://…`.
 
-7. **Player VPN (WireGuard)** is optional. It runs as the compose `wireguard` service (`network_mode: host`, UDP **51820**) and **replaces** host `wg-quick@wg0`:
+7. Manage player connectivity with **NetBird** outside Gatehouse. Set `NETBIRD_SETUP_URL` to an HTTPS enrollment or instructions page to show a setup link on Account. Set `PUBLIC_HOST` to the realm hostname reachable through your NetBird network.
 
-   ```bash
-   sudo systemctl disable --now wg-quick@wg0
-   # leave /etc/wireguard/wg0.conf as a backup
-   ```
+8. Optionally enable **OpenID Connect SSO**. Users can sign up through SSO or link an existing account. Linked accounts use SSO exclusively for website login and no longer use website passwords, passkeys, or TOTP. WoW client logins are unchanged. Follow [SSO setup and migration](docs/sso-deployment.md).
 
-   Then set `WG_ENABLED=true` in `.env` and `docker compose up -d --build`. Registered users mint up to 5 device configs on Account (QR + zip bundle). Split tunnel only — not a general internet exit. Recreate any old `10.10.10.x` peer from the website (`10.8.0.0/24`). Do not start `wg-quick@wg0` again.
+## Deploying updates and database migrations
+
+Run `make deploy` from this checkout. It builds before downtime, stops the website, creates a private backup under `.deployment-backups/`, repairs data ownership, runs `waygate migrate` offline, and starts the website with a health check. The realm is left running; application dependencies are ensured running as needed. Existing tunnel services stay in place; configure/start a tunnel separately on a fresh installation.
+
+Run `make deploy-check` to check resolved paths and ownership first. Both Compose command variants are supported. If the check reports root-owned private data, use `sudo python3 scripts/deploy.py`. The helper supports the repository's dedicated `/app/data` bind mount; stop any additional processes using that database before deploying.
+
+The first credential-format upgrade signs everyone out once. Subsequent deployments are idempotent. A failed migration or health check leaves the managed services stopped and prints the private backup location; fix the cause and rerun. Do not start the old binary against a migrated database. [Migration details and recovery notes](docs/security-hardening/README.md).
+
+## Read-only management API
+
+Set `MANAGEMENT_API_TOKEN` to a dedicated random secret to enable `/api/v1/` for a management backend. Requests use `Authorization: Bearer <token>` and require no browser session. Leave the token empty to disable the API.
+
+`GET /api/v1/dashboard` returns realm status, population counts, online characters, all five leaderboards, and installed modules in one cached response. Individual resources are available at `/api/v1/status`, `/api/v1/players`, `/api/v1/leaderboards`, and `/api/v1/modules`. GET and HEAD are the only supported methods. Collection failures are explicit; unavailable data is never presented as a successful empty result.
+
+See the [integration guide](docs/management-api.md) for setup, curl examples, data semantics, and error handling, and the [OpenAPI contract](docs/management-api.openapi.json) for response schemas. Default polling interval: 20 seconds. No database migration is required.
 
 ## Environment
 
@@ -176,10 +188,11 @@ See `.env.example` for the full list. Important variables:
 | `LISTEN_ADDR` | Bind address (`:3080`) |
 | `SITE_URL` | Website origin (Cloudflare): mail links and passkeys. RP ID is this hostname. Not the realm host. |
 | `WEBAUTHN_RP_ID` / `WEBAUTHN_ORIGINS` | Optional passkey overrides; default from `SITE_URL`. RP ID must match the `SITE_URL` host — do not use `PUBLIC_HOST`. |
-| `WG_ENABLED` | Show Account VPN panel; requires the compose `wireguard` service |
-| `WG_ENDPOINT` / `WG_PORT` / `WG_PEER_MAX` | Default client endpoint (admins can override on the Admin panel), listen port, 5 configs per user |
+| `NETBIRD_SETUP_URL` | Optional HTTPS enrollment/instructions link; NetBird is managed externally |
+| `SSO_ENABLED` / `OIDC_ISSUER` / `OIDC_CLIENT_ID` / `OIDC_CLIENT_SECRET` | Enable one OpenID Connect provider; see the SSO runbook |
+| `SSO_VAULT_KEY_FILE` | Private encryption keyring for SSO users’ saved game passwords |
 | `REALM_NAME` / `SITE_BLURB` / `CORE_NAME` | Home page |
-| `PUBLIC_HOST` | Realmlist / VPN game hostname. Separate from `SITE_URL`. |
+| `PUBLIC_HOST` | Realmlist / game hostname. Separate from `SITE_URL`. |
 | `PUBLIC_AUTH_PORT` | Usually 3724 |
 | `PUBLIC_WORLD_PORT` | Public world port (**28085** on this host, not 8085) |
 | `MYSQL_*` / `AUTH_DB` / `CHARACTERS_DB` / `WORLD_DB` | AC databases |

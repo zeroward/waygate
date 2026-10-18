@@ -19,7 +19,6 @@ var (
 	ErrLinkTaken       = errors.New("that client login is already linked")
 	ErrTooMany         = errors.New("too many WoW client logins")
 	ErrTooManyPasskeys = errors.New("too many passkeys")
-	ErrTooManyWG       = errors.New("too many VPN configs")
 	ErrTOTPEnabled     = errors.New("authenticator is already enabled")
 )
 
@@ -29,6 +28,9 @@ type User struct {
 	Email        string
 	PasswordHash string
 	StaffLevel   uint8
+	AuthMode     string
+	AuthVersion  uint64
+	AuthChanged  int64
 }
 
 type Link struct {
@@ -95,30 +97,20 @@ CREATE TABLE IF NOT EXISTS identity_meta (
   k TEXT PRIMARY KEY,
   v TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS wg_peers (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id INTEGER NOT NULL,
-  name TEXT NOT NULL,
-  public_key TEXT NOT NULL UNIQUE,
-  private_key TEXT NOT NULL,
-  address TEXT NOT NULL UNIQUE,
-  created_at TEXT NOT NULL
-);
 `)
 	if err != nil {
 		return err
 	}
 	_, _ = db.Exec(`ALTER TABLE webauthn_credentials ADD COLUMN cred_json TEXT NOT NULL DEFAULT ''`)
 	_, _ = db.Exec(`CREATE INDEX IF NOT EXISTS idx_webauthn_user ON webauthn_credentials(user_id)`)
-	_, err = db.Exec(`CREATE INDEX IF NOT EXISTS idx_wg_peers_user ON wg_peers(user_id)`)
-	if err != nil {
-		return err
-	}
 	_, _ = db.Exec(`ALTER TABLE users ADD COLUMN dek_wrap BLOB`)
 	_, _ = db.Exec(`ALTER TABLE users ADD COLUMN dek_wrap_nonce BLOB`)
 	_, _ = db.Exec(`ALTER TABLE wow_links ADD COLUMN secret_blob BLOB`)
 	_, _ = db.Exec(`ALTER TABLE wow_links ADD COLUMN secret_nonce BLOB`)
-	return nil
+	if err := migrateSecurity(db); err != nil {
+		return err
+	}
+	return migrateSSO(db)
 }
 
 func (s *Store) CreateUser(ctx context.Context, username, email, passwordHash string, staff uint8) (User, error) {
@@ -134,27 +126,27 @@ func (s *Store) CreateUser(ctx context.Context, username, email, passwordHash st
 		return User{}, err
 	}
 	id, _ := res.LastInsertId()
-	return User{ID: uint32(id), Username: username, Email: email, PasswordHash: passwordHash, StaffLevel: staff}, nil
+	return User{ID: uint32(id), Username: username, Email: email, PasswordHash: passwordHash, StaffLevel: staff, AuthMode: AuthLocal}, nil
 }
 
 func (s *Store) GetByUsername(ctx context.Context, username string) (User, error) {
 	username = srp6.UpperLatin(strings.TrimSpace(username))
-	return s.scanUser(s.db.QueryRowContext(ctx, `SELECT id, username, email, password_hash, staff_level FROM users WHERE username = ?`, username))
+	return s.scanUser(s.db.QueryRowContext(ctx, `SELECT id, username, email, password_hash, staff_level, auth_version, auth_changed_at, auth_mode FROM users WHERE username = ?`, username))
 }
 
 func (s *Store) GetByID(ctx context.Context, id uint32) (User, error) {
-	return s.scanUser(s.db.QueryRowContext(ctx, `SELECT id, username, email, password_hash, staff_level FROM users WHERE id = ?`, id))
+	return s.scanUser(s.db.QueryRowContext(ctx, `SELECT id, username, email, password_hash, staff_level, auth_version, auth_changed_at, auth_mode FROM users WHERE id = ?`, id))
 }
 
 func (s *Store) GetByEmail(ctx context.Context, email string) (User, error) {
 	email = strings.TrimSpace(email)
-	return s.scanUser(s.db.QueryRowContext(ctx, `SELECT id, username, email, password_hash, staff_level FROM users WHERE LOWER(email) = LOWER(?) AND email <> '' LIMIT 1`, email))
+	return s.scanUser(s.db.QueryRowContext(ctx, `SELECT id, username, email, password_hash, staff_level, auth_version, auth_changed_at, auth_mode FROM users WHERE LOWER(email) = LOWER(?) AND email <> '' LIMIT 1`, email))
 }
 
 func (s *Store) scanUser(row *sql.Row) (User, error) {
 	var u User
 	var staff int
-	err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &staff)
+	err := row.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &staff, &u.AuthVersion, &u.AuthChanged, &u.AuthMode)
 	if errors.Is(err, sql.ErrNoRows) {
 		return User{}, ErrNotFound
 	}
@@ -165,10 +157,21 @@ func (s *Store) scanUser(row *sql.Row) (User, error) {
 	return u, nil
 }
 
-func (s *Store) SetPassword(ctx context.Context, id uint32, hash string) error {
+// ClaimPassword establishes a website password only for an unclaimed legacy account.
+func (s *Store) ClaimPassword(ctx context.Context, id uint32, hash string) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := s.db.ExecContext(ctx, `UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?`, hash, now, id)
-	return err
+	res, err := s.db.ExecContext(ctx, `UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ? AND auth_mode='local' AND password_hash IN ('','!migrated')`, hash, now, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrBadPassword
+	}
+	return nil
 }
 
 func (s *Store) DEKWrap(ctx context.Context, userID uint32) (wrap, nonce []byte, err error) {
@@ -181,13 +184,31 @@ func (s *Store) DEKWrap(ctx context.Context, userID uint32) (wrap, nonce []byte,
 
 func (s *Store) SetDEKWrap(ctx context.Context, userID uint32, wrap, nonce []byte) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := s.db.ExecContext(ctx, `UPDATE users SET dek_wrap = ?, dek_wrap_nonce = ?, updated_at = ? WHERE id = ?`, wrap, nonce, now, userID)
-	return err
+	res, err := s.db.ExecContext(ctx, `UPDATE users SET dek_wrap = ?, dek_wrap_nonce = ?, dek_wrap_version = 2, updated_at = ? WHERE id = ? AND auth_mode='local'`, wrap, nonce, now, userID)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n != 1 {
+		return ErrSSOOnly
+	}
+	return nil
 }
 
-func (s *Store) SetLinkSecret(ctx context.Context, userID uint32, wowUser string, blob, nonce []byte) error {
+func (s *Store) SetLinkSecret(ctx context.Context, userID uint32, wowUser string, blob, nonce []byte, expected ...uint64) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err = checkVersion(ctx, tx, userID, expected); err != nil {
+		return err
+	}
 	wowUser = srp6.UpperLatin(strings.TrimSpace(wowUser))
-	res, err := s.db.ExecContext(ctx, `UPDATE wow_links SET secret_blob = ?, secret_nonce = ? WHERE user_id = ? AND username = ?`, blob, nonce, userID, wowUser)
+	res, err := tx.ExecContext(ctx, `UPDATE wow_links SET secret_blob = ?, secret_nonce = ? WHERE user_id = ? AND username = ?`, blob, nonce, userID, wowUser)
 	if err != nil {
 		return err
 	}
@@ -195,12 +216,12 @@ func (s *Store) SetLinkSecret(ctx context.Context, userID uint32, wowUser string
 	if n == 0 {
 		return ErrNotFound
 	}
-	return nil
+	return tx.Commit()
 }
 
 func (s *Store) SetStaffLevel(ctx context.Context, id uint32, level uint8) error {
 	now := time.Now().UTC().Format(time.RFC3339)
-	_, err := s.db.ExecContext(ctx, `UPDATE users SET staff_level = ?, updated_at = ? WHERE id = ?`, int(level), now, id)
+	_, err := s.db.ExecContext(ctx, `UPDATE users SET staff_level = ?, auth_version = auth_version + 1, auth_changed_at = ?, updated_at = ? WHERE id = ?`, int(level), time.Now().UnixNano(), now, id)
 	return err
 }
 
@@ -354,13 +375,13 @@ func (s *Store) ListUsers(ctx context.Context, q string, limit, offset int) ([]U
 		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&total); err != nil {
 			return nil, 0, err
 		}
-		rows, err = s.db.QueryContext(ctx, `SELECT id, username, email, password_hash, staff_level FROM users ORDER BY username LIMIT ? OFFSET ?`, limit, offset)
+		rows, err = s.db.QueryContext(ctx, `SELECT id, username, email, password_hash, staff_level, auth_version, auth_changed_at, auth_mode FROM users ORDER BY username LIMIT ? OFFSET ?`, limit, offset)
 	} else {
 		like := "%" + q + "%"
 		if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE username LIKE ? OR UPPER(email) LIKE ?`, like, like).Scan(&total); err != nil {
 			return nil, 0, err
 		}
-		rows, err = s.db.QueryContext(ctx, `SELECT id, username, email, password_hash, staff_level FROM users WHERE username LIKE ? OR UPPER(email) LIKE ? ORDER BY username LIMIT ? OFFSET ?`, like, like, limit, offset)
+		rows, err = s.db.QueryContext(ctx, `SELECT id, username, email, password_hash, staff_level, auth_version, auth_changed_at, auth_mode FROM users WHERE username LIKE ? OR UPPER(email) LIKE ? ORDER BY username LIMIT ? OFFSET ?`, like, like, limit, offset)
 	}
 	if err != nil {
 		return nil, 0, err
@@ -370,7 +391,7 @@ func (s *Store) ListUsers(ctx context.Context, q string, limit, offset int) ([]U
 	for rows.Next() {
 		var u User
 		var staff int
-		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &staff); err != nil {
+		if err := rows.Scan(&u.ID, &u.Username, &u.Email, &u.PasswordHash, &staff, &u.AuthVersion, &u.AuthChanged, &u.AuthMode); err != nil {
 			return nil, 0, err
 		}
 		u.StaffLevel = uint8(staff)
@@ -380,23 +401,9 @@ func (s *Store) ListUsers(ctx context.Context, q string, limit, offset int) ([]U
 }
 
 const (
-	metaWGEndpoint  = "wg_endpoint"
 	metaRegisterKey = "register_key"
 	metaRegisterSet = "register_key_set"
 )
-
-func (s *Store) WGEndpoint() string {
-	return s.meta(context.Background(), metaWGEndpoint)
-}
-
-func (s *Store) SetWGEndpoint(ctx context.Context, v string) error {
-	v = strings.TrimSpace(v)
-	if v == "" {
-		_, err := s.db.ExecContext(ctx, `DELETE FROM identity_meta WHERE k = ?`, metaWGEndpoint)
-		return err
-	}
-	return s.setMeta(ctx, metaWGEndpoint, v)
-}
 
 func (s *Store) RegisterKeyOverride() (key string, set bool) {
 	if s.meta(context.Background(), metaRegisterSet) != "1" {

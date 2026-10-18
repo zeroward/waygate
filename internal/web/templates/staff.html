@@ -1,111 +1,22 @@
 {{template "header" .}}
 {{$d := .Data}}
 {{$sel := $d.Selected}}
-<div class="staff" data-staff data-actor-gm="{{$d.ActorGM}}" data-actor-user="{{$d.ActorUser}}">
-  <section class="home-hero">
+<div class="staff" data-staff data-sections data-default-section="accounts" data-actor-gm="{{$d.ActorGM}}" data-actor-user="{{$d.ActorUser}}">
+  <section class="page-heading">
     <p class="home-kicker">{{rankName .User.GMLevel}}</p>
     <h1>Admin panel</h1>
-    <p class="lede">Create accounts, reset passwords, suspend or unban, publish Downloads, and set GM or Admin. Super GM cannot be granted here.</p>
-    {{if .CanEditKB}}<p class="home-cta-quiet"><a href="/staff/kb">Knowledge Base articles</a></p>{{end}}
+    <p class="lede">Manage players, publish downloads, and keep the realm up to date.</p>
+    <p class="kb-edit-actions"><a class="btn" id="tickets" href="/staff/tickets">Open tickets <span class="mod-count">{{len $d.OpenTickets}}</span></a>{{if .CanEditKB}}<a class="btn" href="/staff/kb">Manage guides</a>{{end}}</p>
   </section>
 
-  <section class="panel" id="banner">
-    <h2>Maintenance banner</h2>
-    <p class="hint">Shown on every page. Leave the message empty to clear. Until is optional (UTC).</p>
-    <form method="post" action="/staff/banner" class="form">
-      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
-      <label>Message
-        <input name="message" maxlength="280" value="{{$d.BannerMessage}}" placeholder="Realm restart at 20:00 UTC">
-      </label>
-      <label>Until (optional)
-        <input type="datetime-local" name="until" value="{{$d.BannerUntil}}">
-      </label>
-      <button type="submit" class="btn btn-gold">Save banner</button>
-    </form>
-  </section>
-
-  <section class="panel" id="calendar">
-    <h2>Realm calendar</h2>
-    <p class="hint">Dated notes on the home page: raid nights, weekly reset, “don’t log in”. Past dates drop off the public list automatically.</p>
-    <form method="post" action="/staff/events" class="form">
-      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
-      <label>Date
-        <input type="date" name="event_date" required>
-      </label>
-      <label>Title
-        <input name="title" required maxlength="80" placeholder="Raid night — ICC 25">
-      </label>
-      <label>Detail (optional)
-        <input name="detail" maxlength="280" placeholder="8pm UTC. Sign up in Discord.">
-      </label>
-      <button type="submit" class="btn btn-gold">Add event</button>
-    </form>
-    {{if $d.Calendar}}
-    <div class="table-wrap">
-      <table>
-        <thead><tr><th>Date</th><th>Title</th><th></th></tr></thead>
-        <tbody>
-          {{range $d.Calendar}}
-          <tr>
-            <td>{{.Date}}</td>
-            <td>{{.Title}}{{if .Detail}} <span class="muted">{{.Detail}}</span>{{end}}</td>
-            <td>
-              <form method="post" action="/staff/events/{{.ID}}/delete">
-                <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
-                <button type="submit" class="btn btn-ghost">Remove</button>
-              </form>
-            </td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-    {{else}}
-    <p class="empty">No calendar events yet.</p>
-    {{end}}
-  </section>
-
-  <section class="panel staff-tickets" id="tickets">
-    <header class="home-mods-head">
-      <h2>Open tickets</h2>
-      <span class="mod-count">{{len $d.OpenTickets}}</span>
-    </header>
-    <p class="hint">Reply and set status from the queue. Players cannot see other accounts’ tickets.</p>
-    {{if $d.OpenTickets}}
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Ref</th>
-            <th>Player</th>
-            <th>Title</th>
-            <th>Category</th>
-            <th>Status</th>
-            <th>Updated</th>
-          </tr>
-        </thead>
-        <tbody>
-          {{range $d.OpenTickets}}
-          <tr>
-            <td class="name"><a href="/staff/tickets/{{.ID}}">{{.PublicRef}}</a></td>
-            <td>{{.Username}}</td>
-            <td>{{.Title}}</td>
-            <td>{{.Category}}</td>
-            <td>{{.StatusLabel}}</td>
-            <td>{{.UpdatedAt.Format "2006-01-02 15:04"}}</td>
-          </tr>
-          {{end}}
-        </tbody>
-      </table>
-    </div>
-    {{else}}
-    <p class="empty">No open tickets.</p>
-    {{end}}
-    <p class="kb-edit-actions"><a class="btn btn-gold" href="/staff/tickets">Ticket queue</a></p>
-  </section>
-
+  <nav class="section-nav" aria-label="Admin sections">
+    <a href="#accounts" data-section-link>Accounts</a>
+    <a href="#downloads" data-section-link>Downloads</a>
+    <a href="#realm-settings" data-section-link>Realm settings</a>
+  </nav>
+  <div id="accounts" class="section-stack" data-section>
   <section class="panel staff-create">
-    <h2>Create account</h2>
+    <details id="create-account"><summary>Create account</summary>
     <form method="post" action="/staff/create" class="staff-create-form">
       <input type="hidden" name="csrf_token" value="{{.CSRF}}">
       <label>Username
@@ -124,6 +35,7 @@
         <button type="submit" class="btn btn-gold">Create</button>
       </div>
     </form>
+    </details>
   </section>
 
   <div class="staff-work{{if $sel}} has-selection{{end}}">
@@ -133,13 +45,13 @@
         <span class="mod-count">{{$d.Total}}</span>
       </header>
       <form method="get" action="/staff" class="staff-search">
-        <input name="q" value="{{$d.Query}}" placeholder="Search username or email" maxlength="32">
+        <input aria-label="Search accounts" name="q" value="{{$d.Query}}" placeholder="Search username or email" maxlength="32">
         <label class="staff-check"><input type="checkbox" name="bots" value="1" {{if $d.IncludeBots}}checked{{end}}> Show bots</label>
         <input type="hidden" name="select" value="{{if $sel}}{{$sel.Username}}{{end}}" data-staff-search-select>
         <button type="submit" class="btn">Filter</button>
       </form>
       {{if $d.Accounts}}
-      <div class="table-wrap">
+      <div class="table-wrap" role="region" aria-label="Administration data" tabindex="0">
         <table data-staff-table>
           <thead>
             <tr>
@@ -166,7 +78,7 @@
                 data-ban-reason="{{.BanReason}}"
                 data-ban-until="{{.BanUntil}}"
                 aria-selected="{{if and $sel (eq .Username $sel.Username)}}true{{else}}false{{end}}">
-              <td class="name">{{.Username}}</td>
+              <td class="name"><a href="/staff?q={{$d.Query | urlquery}}{{if $d.IncludeBots}}&amp;bots=1{{end}}&amp;p={{$d.Page}}&amp;select={{.Username | urlquery}}#accounts" data-staff-select>{{.Username}}</a></td>
               <td>{{if .Gatehouse}}{{.Gatehouse}}{{else}}—{{end}}</td>
               <td>{{if .Email}}{{.Email}}{{else}}—{{end}}</td>
               <td>{{.JoinDate}}</td>
@@ -205,7 +117,7 @@
           <p class="hint" data-staff-gatehouse-hint{{if not (and $sel $sel.Gatehouse)}} hidden{{end}}>{{if and $sel $sel.Gatehouse}}Gatehouse account {{$sel.Gatehouse}}. Rank and suspend apply to every Wow.exe login on that account.{{end}}</p>
           <p class="hint" data-staff-linked-hint{{if not $d.LinkedLogins}} hidden{{end}}>{{if $d.LinkedLogins}}Wow.exe logins: {{range $i, $n := $d.LinkedLogins}}{{if $i}}, {{end}}<code>{{$n}}</code>{{end}}{{end}}</p>
           {{if $d.SelChars}}
-          <div class="table-wrap staff-sel-chars">
+          <div class="table-wrap staff-sel-chars" role="region" aria-label="Administration data" tabindex="0">
             <table>
               <thead><tr><th>Name</th><th>Login</th><th>Level</th><th>Class</th></tr></thead>
               <tbody>
@@ -335,34 +247,39 @@
     </aside>
   </div>
 
-  <section class="panel account-pass" id="register-key">
-    <h2>Registration key</h2>
-    <p class="hint">When set, new players must enter this on <a href="/register">/register</a>. Staff “Create account” does not need it. Leave blank to allow anyone to register.</p>
-    <form method="post" action="/staff/register-key" class="form">
-      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
-      <label>Key
-        <input name="register_key" value="{{$d.RegisterKey}}" maxlength="64" autocomplete="off" placeholder="optional">
-      </label>
-      <button type="submit" class="btn btn-gold">Save registration key</button>
-    </form>
+  <section class="panel staff-events">
+    <header class="home-mods-head">
+      <h2>Recent actions</h2>
+    </header>
+    {{if $d.Events}}
+    <div class="table-wrap" role="region" aria-label="Administration data" tabindex="0">
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Actor</th>
+            <th>Action</th>
+            <th>Target</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $d.Events}}
+          <tr>
+            <td>{{.At.Format "2006-01-02 15:04"}}</td>
+            <td>{{.Actor}}</td>
+            <td>{{.Action}}</td>
+            <td>{{.Target}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="empty">No recorded actions yet.</p>
+    {{end}}
   </section>
-
-  {{if $d.WGOn}}
-  <section class="panel account-pass" id="vpn">
-    <h2>VPN endpoint</h2>
-    <p class="hint">Public hostname or IP players use to reach WireGuard (UDP {{$d.WGPort}}). This is the <code>Endpoint</code> in each client config. Realmlist.wtf always uses the wg0 address <code>{{$d.WGRealmIP}}</code>.</p>
-    <form method="post" action="/staff/wg" class="form">
-      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
-      <label>Hostname or IP
-        <input name="endpoint" value="{{$d.WGEndpoint}}" maxlength="253" placeholder="vpn.example.com or 203.0.113.10" autocomplete="off">
-      </label>
-      <p class="hint">Port is optional (default {{$d.WGPort}}). Leave blank and save to restore PUBLIC_HOST.</p>
-      <button type="submit" class="btn btn-gold">Save VPN endpoint</button>
-    </form>
-  </section>
-  {{end}}
-
-  <section class="panel staff-dl" id="downloads">
+  </div>
+  <section class="panel staff-dl" id="downloads" data-section>
     <header class="home-mods-head">
       <h2>Downloads</h2>
       <span class="mod-count">{{len $d.Downloads}}</span>
@@ -383,7 +300,7 @@
       <label class="staff-dl-file">File
         <input type="file" name="file" required accept=".zip,.7z,.rar,.mpq,.patch" {{if not $d.DownloadsWritable}}disabled{{end}}>
       </label>
-      <div class="staff-dl-extra" data-dl-for="client" hidden>
+      <div class="staff-dl-extra" data-dl-for="client">
         <label>Client name
           <input name="title" maxlength="120" autocomplete="off" data-req="1" {{if not $d.DownloadsWritable}}disabled{{end}}>
         </label>
@@ -391,7 +308,7 @@
           <input name="version" maxlength="40" placeholder="3.3.5a (12340)" autocomplete="off" data-req="1" {{if not $d.DownloadsWritable}}disabled{{end}}>
         </label>
       </div>
-      <div class="staff-dl-extra" data-dl-for="mods" hidden>
+      <div class="staff-dl-extra" data-dl-for="mods">
         <label>Name
           <input name="title" maxlength="120" autocomplete="off" {{if not $d.DownloadsWritable}}disabled{{end}}>
         </label>
@@ -405,12 +322,12 @@
           <input name="addon_version" maxlength="40" autocomplete="off" {{if not $d.DownloadsWritable}}disabled{{end}}>
         </label>
       </div>
-      <div class="staff-dl-extra staff-dl-desc" data-dl-for="mods patches" hidden>
+      <div class="staff-dl-extra staff-dl-desc" data-dl-for="mods patches">
         <label>Description
           <textarea name="description" rows="2" maxlength="2000" {{if not $d.DownloadsWritable}}disabled{{end}}></textarea>
         </label>
       </div>
-      <div class="staff-dl-extra" data-dl-for="patches" hidden>
+      <div class="staff-dl-extra" data-dl-for="patches">
         <label class="staff-check">
           <input type="checkbox" name="mandatory" value="1" {{if not $d.DownloadsWritable}}disabled{{end}}> Mandatory to play
         </label>
@@ -426,7 +343,7 @@
       </div>
     </form>
     {{if $d.Downloads}}
-    <div class="table-wrap">
+    <div class="table-wrap" role="region" aria-label="Administration data" tabindex="0">
       <table>
         <thead>
           <tr>
@@ -472,36 +389,76 @@
     {{end}}
   </section>
 
-  <section class="panel staff-events">
-    <header class="home-mods-head">
-      <h2>Recent actions</h2>
-    </header>
-    {{if $d.Events}}
-    <div class="table-wrap">
+  <div id="realm-settings" class="section-stack" data-section>
+  <section class="panel" id="banner">
+    <h2>Maintenance banner</h2>
+    <p class="hint">Shown on every page. Leave the message empty to clear. Until is optional (UTC).</p>
+    <form method="post" action="/staff/banner" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Message
+        <input name="message" maxlength="280" value="{{$d.BannerMessage}}" placeholder="Realm restart at 20:00 UTC">
+      </label>
+      <label>Until (optional)
+        <input type="datetime-local" name="until" value="{{$d.BannerUntil}}">
+      </label>
+      <button type="submit" class="btn btn-gold">Save banner</button>
+    </form>
+  </section>
+
+  <section class="panel" id="calendar">
+    <h2>Realm calendar</h2>
+    <p class="hint">Dated notes on the home page: raid nights, weekly reset, “don’t log in”. Past dates drop off the public list automatically.</p>
+    <form method="post" action="/staff/events" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Date
+        <input type="date" name="event_date" required>
+      </label>
+      <label>Title
+        <input name="title" required maxlength="80" placeholder="Raid night — ICC 25">
+      </label>
+      <label>Detail (optional)
+        <input name="detail" maxlength="280" placeholder="8pm UTC. Sign up in Discord.">
+      </label>
+      <button type="submit" class="btn btn-gold">Add event</button>
+    </form>
+    {{if $d.Calendar}}
+    <div class="table-wrap" role="region" aria-label="Administration data" tabindex="0">
       <table>
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>Actor</th>
-            <th>Action</th>
-            <th>Target</th>
-          </tr>
-        </thead>
+        <thead><tr><th>Date</th><th>Title</th><th></th></tr></thead>
         <tbody>
-          {{range $d.Events}}
+          {{range $d.Calendar}}
           <tr>
-            <td>{{.At.Format "2006-01-02 15:04"}}</td>
-            <td>{{.Actor}}</td>
-            <td>{{.Action}}</td>
-            <td>{{.Target}}</td>
+            <td>{{.Date}}</td>
+            <td>{{.Title}}{{if .Detail}} <span class="muted">{{.Detail}}</span>{{end}}</td>
+            <td>
+              <form method="post" action="/staff/events/{{.ID}}/delete">
+                <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+                <button type="submit" class="btn btn-ghost">Remove</button>
+              </form>
+            </td>
           </tr>
           {{end}}
         </tbody>
       </table>
     </div>
     {{else}}
-    <p class="empty">No recorded actions yet.</p>
+    <p class="empty">No calendar events yet.</p>
     {{end}}
   </section>
+
+  <section class="panel account-pass" id="register-key">
+    <h2>Registration key</h2>
+    <p class="hint">When set, new players must enter this on <a href="/register">/register</a>. Staff “Create account” does not need it. Leave blank to allow anyone to register.</p>
+    <form method="post" action="/staff/register-key" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Key
+        <input name="register_key" value="{{$d.RegisterKey}}" maxlength="64" autocomplete="off" placeholder="optional">
+      </label>
+      <button type="submit" class="btn btn-gold">Save registration key</button>
+    </form>
+  </section>
+
+
+  </div>
 </div>
 {{template "footer" .}}

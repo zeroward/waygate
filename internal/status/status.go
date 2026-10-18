@@ -2,11 +2,15 @@ package status
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"net"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/go-sql-driver/mysql"
 
 	"github.com/zeroward/waygate/internal/acmod"
 	"github.com/zeroward/waygate/internal/config"
@@ -18,7 +22,7 @@ import (
 type Snapshot struct {
 	RealmName    string
 	RealmUp      bool
-	Online       int // real (non-bot, non-GM) players
+	Online       int // non-bot players, including GMs
 	OnlineBots   int
 	OnlineGMs    int
 	OnlineTotal  int
@@ -40,6 +44,9 @@ type Snapshot struct {
 	Gold         []BoardRow
 	WorldVersion string
 	Modules      []acmod.Module
+	// Unavailable contains failed sections: status, players, leaderboards, modules.
+	// Snapshots (including their slices and maps) are immutable after publication.
+	Unavailable map[string]bool
 }
 
 type Player struct {
@@ -67,9 +74,10 @@ type Cache struct {
 	db   *db.DB
 	soap *soap.Client
 
-	mu    sync.Mutex
-	snap  Snapshot
-	until time.Time
+	mu         sync.Mutex
+	snap       Snapshot
+	until      time.Time
+	refreshing chan struct{}
 }
 
 func New(cfg config.Config, database *db.DB, soapc *soap.Client) *Cache {
@@ -78,6 +86,8 @@ func New(cfg config.Config, database *db.DB, soapc *soap.Client) *Cache {
 
 func (c *Cache) Database() *db.DB { return c.db }
 
+// Get shares one bounded refresh across web and API callers. A disconnected caller
+// cannot cancel collection for other clients or publish cancellation as realm data.
 func (c *Cache) Get(ctx context.Context) Snapshot {
 	c.mu.Lock()
 	if time.Now().Before(c.until) && !c.snap.GeneratedAt.IsZero() {
@@ -85,19 +95,35 @@ func (c *Cache) Get(ctx context.Context) Snapshot {
 		c.mu.Unlock()
 		return s
 	}
+	if c.refreshing == nil {
+		c.refreshing = make(chan struct{})
+		go func() {
+			refreshCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			s := c.refresh(refreshCtx)
+			c.mu.Lock()
+			c.snap = s
+			c.until = time.Now().Add(c.cfg.StatusCache)
+			close(c.refreshing)
+			c.refreshing = nil
+			c.mu.Unlock()
+		}()
+	}
+	done := c.refreshing
 	c.mu.Unlock()
-
-	s := c.refresh(ctx)
-
-	c.mu.Lock()
-	c.snap = s
-	c.until = time.Now().Add(c.cfg.StatusCache)
-	c.mu.Unlock()
-	return s
+	select {
+	case <-done:
+		c.mu.Lock()
+		s := c.snap
+		c.mu.Unlock()
+		return s
+	case <-ctx.Done():
+		return c.unavailableSnapshot()
+	}
 }
 
-func (c *Cache) refresh(ctx context.Context) Snapshot {
-	s := Snapshot{
+func (c *Cache) baseSnapshot() Snapshot {
+	return Snapshot{
 		RealmName:   c.cfg.RealmName,
 		CoreName:    c.cfg.CoreName,
 		Expansion:   wow.ExpansionName(c.cfg.DefaultExpansion),
@@ -106,51 +132,99 @@ func (c *Cache) refresh(ctx context.Context) Snapshot {
 		PublicWorld: c.cfg.PublicWorldPort,
 		Blurb:       c.cfg.SiteBlurb,
 		Demo:        c.cfg.DemoMode,
-		GeneratedAt: time.Now(),
+		GeneratedAt: time.Now().UTC(),
+		Unavailable: make(map[string]bool),
 	}
-	if c.cfg.DemoMode || c.db == nil {
-		return demoSnapshot(s)
+}
+
+func (c *Cache) unavailableSnapshot() Snapshot {
+	s := c.baseSnapshot()
+	for _, section := range []string{"status", "players", "leaderboards", "modules"} {
+		s.Unavailable[section] = true
 	}
-
-	s.RealmUp = c.probeWorld(ctx)
-	s.WorldVersion = c.worldVersion(ctx)
-
-	s.Online, s.OnlineBots, s.OnlineGMs, s.Alliance, s.Horde = c.onlineCounts(ctx)
-	s.OnlineTotal = s.Online + s.OnlineBots
-
-	players, err := c.onlinePlayers(ctx)
-	if err == nil {
-		s.Players = players
-	}
-	s.Playtime = c.board(ctx, "c.`totaltime`", playtimeFmt)
-	s.Kills = c.board(ctx, "c.`totalKills`", uintFmt)
-	s.Honor = c.board(ctx, "c.`totalHonorPoints`", uintFmt)
-	s.Arena = c.board(ctx, "c.`arenaPoints`", uintFmt)
-	s.Gold = c.board(ctx, "c.`money`", goldFmt)
-	s.Modules = c.listModules(ctx)
 	return s
 }
 
-func (c *Cache) listModules(ctx context.Context) []acmod.Module {
-	mods := acmod.ScanDir(c.cfg.ModulesDir)
-	if c.db != nil && c.db.WorldDB != "" {
-		mods = acmod.Merge(mods, c.modulesFromDB(ctx))
+func (c *Cache) refresh(ctx context.Context) Snapshot {
+	s := c.baseSnapshot()
+	if c.cfg.DemoMode {
+		return demoSnapshot(s)
 	}
-	return mods
+	if c.db == nil || c.db.SQL == nil {
+		return c.unavailableSnapshot()
+	}
+	s.RealmUp = c.probeWorld(ctx)
+	if ctx.Err() != nil {
+		s.Unavailable["status"] = true
+	}
+	var err error
+	s.WorldVersion, err = c.worldVersion(ctx)
+	if err != nil {
+		s.Unavailable["status"] = true
+	}
+	s.Online, s.OnlineBots, s.OnlineGMs, s.Alliance, s.Horde, err = c.onlineCounts(ctx)
+	if err != nil {
+		s.Unavailable["status"] = true
+	}
+	s.OnlineTotal = s.Online + s.OnlineBots
+	s.Players, err = c.onlinePlayers(ctx)
+	if err != nil {
+		s.Unavailable["players"] = true
+	}
+	for _, board := range []struct {
+		dest   *[]BoardRow
+		col    string
+		format func(uint32) string
+	}{
+		{&s.Playtime, "c.`totaltime`", playtimeFmt},
+		{&s.Kills, "c.`totalKills`", uintFmt},
+		{&s.Honor, "c.`totalHonorPoints`", uintFmt},
+		{&s.Arena, "c.`arenaPoints`", uintFmt},
+		{&s.Gold, "c.`money`", goldFmt},
+	} {
+		*board.dest, err = c.board(ctx, board.col, board.format)
+		if err != nil {
+			s.Unavailable["leaderboards"] = true
+		}
+	}
+	s.Modules, err = c.listModules(ctx)
+	if err != nil {
+		s.Unavailable["modules"] = true
+	}
+	return s
 }
 
-func (c *Cache) modulesFromDB(ctx context.Context) []acmod.Module {
+func (c *Cache) listModules(ctx context.Context) ([]acmod.Module, error) {
+	mods, scanErr := acmod.ScanDirWithError(c.cfg.ModulesDir)
+	if c.db != nil && c.db.WorldDB != "" {
+		extra, err := c.modulesFromDB(ctx)
+		return acmod.Merge(mods, extra), errors.Join(scanErr, err)
+	}
+	return mods, scanErr
+}
+
+// The world tables are optional on some AzerothCore installations. Missing
+// tables are absence, while permission/connectivity/query failures are errors.
+func optionalTableMissing(err error) bool {
+	var me *mysql.MySQLError
+	return errors.As(err, &me) && me.Number == 1146
+}
+
+func (c *Cache) modulesFromDB(ctx context.Context) ([]acmod.Module, error) {
 	q := fmt.Sprintf("SELECT DISTINCT `module` FROM %s WHERE `module` <> '' ORDER BY `module`", c.db.QWorld("module_string"))
 	rows, err := c.db.SQL.QueryContext(ctx, q)
+	if optionalTableMissing(err) {
+		return nil, nil
+	}
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer rows.Close()
 	var out []acmod.Module
 	for rows.Next() {
 		var id string
 		if err := rows.Scan(&id); err != nil {
-			return out
+			return nil, err
 		}
 		id = strings.TrimSpace(id)
 		if id == "" {
@@ -158,7 +232,7 @@ func (c *Cache) modulesFromDB(ctx context.Context) []acmod.Module {
 		}
 		out = append(out, acmod.Module{ID: id, Title: ""})
 	}
-	return out
+	return out, rows.Err()
 }
 
 func playtimeFmt(v uint32) string { return wow.Playtime(v) }
@@ -187,19 +261,20 @@ func (c *Cache) probeWorld(ctx context.Context) bool {
 	return true
 }
 
-func (c *Cache) worldVersion(ctx context.Context) string {
+func (c *Cache) worldVersion(ctx context.Context) (string, error) {
 	if c.db == nil || c.db.WorldDB == "" {
-		return ""
+		return "", nil
 	}
 	q := fmt.Sprintf("SELECT `core_version` FROM %s LIMIT 1", c.db.QWorld("version"))
 	var v string
-	if err := c.db.SQL.QueryRowContext(ctx, q).Scan(&v); err != nil {
-		return ""
+	err := c.db.SQL.QueryRowContext(ctx, q).Scan(&v)
+	if errors.Is(err, sql.ErrNoRows) || optionalTableMissing(err) {
+		return "", nil
 	}
-	return v
+	return v, err
 }
 
-func (c *Cache) onlineCounts(ctx context.Context) (players, bots, gms, alliance, horde int) {
+func (c *Cache) onlineCounts(ctx context.Context) (players, bots, gms, alliance, horde int, err error) {
 	botSQL, botArgs := c.botPredicate()
 	q := fmt.Sprintf(`
 		SELECT
@@ -224,11 +299,11 @@ func (c *Cache) onlineCounts(ctx context.Context) (players, bots, gms, alliance,
 		c.db.QChar("characters"),
 		c.db.QAuth("account"),
 	)
-	err := c.db.SQL.QueryRowContext(ctx, q, botArgs...).Scan(&players, &bots, &gms, &alliance, &horde)
+	err = c.db.SQL.QueryRowContext(ctx, q, botArgs...).Scan(&players, &bots, &gms, &alliance, &horde)
 	if err != nil {
-		return 0, 0, 0, 0, 0
+		return 0, 0, 0, 0, 0, err
 	}
-	return players, bots, gms, alliance, horde
+	return players, bots, gms, alliance, horde, nil
 }
 
 func (c *Cache) botPredicate() (string, []any) {
@@ -275,7 +350,7 @@ func (c *Cache) onlinePlayers(ctx context.Context) ([]Player, error) {
 	return out, rows.Err()
 }
 
-func (c *Cache) board(ctx context.Context, col string, fmtVal func(uint32) string) []BoardRow {
+func (c *Cache) board(ctx context.Context, col string, fmtVal func(uint32) string) ([]BoardRow, error) {
 	where, args := c.filters(false, c.cfg.HideGM)
 	q := fmt.Sprintf(
 		`SELECT c.`+"`name`"+`, c.`+"`level`"+`, c.`+"`class`"+`, %s AS v
@@ -289,7 +364,7 @@ func (c *Cache) board(ctx context.Context, col string, fmtVal func(uint32) strin
 	args = append(args, c.cfg.LeaderboardSize)
 	rows, err := c.db.SQL.QueryContext(ctx, q, args...)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	defer rows.Close()
 	var out []BoardRow
@@ -299,7 +374,7 @@ func (c *Cache) board(ctx context.Context, col string, fmtVal func(uint32) strin
 		var level, class uint8
 		var v uint32
 		if err := rows.Scan(&name, &level, &class, &v); err != nil {
-			return out
+			return nil, err
 		}
 		out = append(out, BoardRow{
 			Rank:  rank,
@@ -311,7 +386,7 @@ func (c *Cache) board(ctx context.Context, col string, fmtVal func(uint32) strin
 		})
 		rank++
 	}
-	return out
+	return out, rows.Err()
 }
 
 func (c *Cache) playerQuery(onlineOnly bool) (string, []any) {

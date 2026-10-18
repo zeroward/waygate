@@ -7,22 +7,23 @@
   <title>{{if .Title}}{{.Title}} — {{end}}{{.RealmName}}</title>
   <meta name="description" content="{{.RealmName}} — {{.CoreName}} account registration and realm status.">
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/css/app.css?v=32">
+  <link rel="stylesheet" href="/static/css/app.css?v=33">
   {{if eq .CaptchaProv "turnstile"}}
   <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   {{end}}
   {{if eq .CaptchaProv "hcaptcha"}}
   <script src="https://js.hcaptcha.com/1/api.js" async defer></script>
   {{end}}
+  <script src="/static/js/site.js?v=1" defer></script>
   {{if eq .Active "staff"}}
-  <script src="/static/js/staff.js?v=10" defer></script>
+  <script src="/static/js/staff.js?v=11" defer></script>
   {{end}}
   {{if eq .Active "kb"}}
   <script src="/static/js/kb.js?v=2" defer></script>
   {{end}}
   {{if eq .Active "account"}}
   <script src="/static/js/account.js?v=3" defer></script>
-  <script src="/static/js/passkey.js?v=1" defer></script>
+  <script src="/static/js/passkey.js?v=2" defer></script>
   {{end}}
   {{if eq .Active "companion"}}
   <script src="/static/js/companion.js?v=2" defer></script>
@@ -33,6 +34,7 @@
   {{end}}
 </head>
 <body class="page-{{.Active}}">
+  <a class="skip-link" href="#main-content">Skip to content</a>
   <div class="frost" aria-hidden="true"></div>
   {{if .Demo}}
   <div class="demo-banner">Demo mode — no AzerothCore databases. Status and accounts are simulated.</div>
@@ -50,56 +52,53 @@
         </span>
       </a>
 
-      <input type="checkbox" id="nav-toggle" class="nav-toggle" hidden>
-      <label for="nav-toggle" class="nav-burger" aria-label="Menu"><span></span></label>
-
-      <nav class="nav-primary">
-        <a href="/" {{if eq .Active "home"}}class="is-active"{{end}}>Home</a>
-        <a href="/kb" {{if eq .Active "kb"}}class="is-active"{{end}}><span class="nav-wide">Knowledge Base</span><span class="nav-narrow">Docs</span></a>
-        <a href="/downloads" {{if eq .Active "downloads"}}class="is-active"{{end}}>Downloads</a>
-        <a href="/online" {{if eq .Active "online"}}class="is-active"{{end}}>Online</a>
-        <a href="/leaderboards" {{if eq .Active "leaderboards"}}class="is-active"{{end}}>Leaderboards</a>
-        <a href="/armory" {{if eq .Active "armory"}}class="is-active"{{end}}>Armory</a>
-        <a href="/companion" {{if eq .Active "companion"}}class="is-active"{{end}}><span class="nav-wide">Companion</span><span class="nav-narrow">Quests</span></a>
-      </nav>
-
-      <div class="nav-util">
-        {{if .Staff}}
-        <a href="/staff" class="nav-util-link{{if eq .Active "staff"}} is-active{{end}}">Admin panel</a>
-        {{end}}
-        {{if .Mod}}
-        <a href="/staff/tickets" class="nav-util-link">Tickets</a>
-        {{end}}
-        <a href="/contact" class="nav-util-link{{if eq .Active "contact"}} is-active{{end}}">Contact</a>
+      <button type="button" class="nav-toggle btn" aria-controls="site-navigation" aria-expanded="false" hidden>Menu</button>
+      <div class="site-navigation" id="site-navigation">
+        <nav class="nav-primary" aria-label="Main navigation">
+          <a href="/" {{if eq .Active "home"}}class="is-active" aria-current="page"{{end}}>Play</a>
+          <details class="realm-menu" data-menu>
+            <summary{{if or (eq .Active "online") (eq .Active "leaderboards") (eq .Active "armory") (eq .Active "companion")}} class="is-active" aria-current="page"{{end}}>Realm <span class="user-chevron" aria-hidden="true"></span></summary>
+            <div class="menu-panel">
+              <a href="/online" {{if eq .Active "online"}}aria-current="page"{{end}}>Players online</a>
+              <a href="/leaderboards" {{if eq .Active "leaderboards"}}aria-current="page"{{end}}>Leaderboards</a>
+              <a href="/armory" {{if eq .Active "armory"}}aria-current="page"{{end}}>Armory</a>
+              <a href="/companion" {{if eq .Active "companion"}}aria-current="page"{{end}}>Quest companion</a>
+            </div>
+          </details>
+          <a href="/kb" {{if eq .Active "kb"}}class="is-active" aria-current="page"{{end}}>Guides</a>
+          <a href="/downloads" {{if eq .Active "downloads"}}class="is-active" aria-current="page"{{end}}>Downloads</a>
+        </nav>
         <div class="nav-account">
-        {{if .User}}
-        <details class="user-menu">
-          <summary>
-            <span class="user-avatar" aria-hidden="true">{{initial .User.Username}}</span>
-            <span class="user-name">{{.User.Username}}</span>
-            <span class="user-chevron" aria-hidden="true"></span>
-          </summary>
-          <div class="user-menu-panel">
-            <a href="/account">Account</a>
-            <a href="/tickets">My tickets</a>
-            {{if .Mod}}<a href="/staff/tickets">Staff tickets</a>{{end}}
-            <a href="/account#password">Change password</a>
-            <form method="post" action="/account/logout">
-              <input type="hidden" name="csrf_token" value="{{.CSRF}}">
-              <button type="submit">Logout</button>
-            </form>
-          </div>
-        </details>
-        {{else}}
-        <a href="/account" class="nav-signin">Sign in</a>
-        <a href="/register" class="nav-register">Register</a>
-        {{end}}
+          {{if .User}}
+          <details class="user-menu" data-menu>
+            <summary aria-label="Account menu for {{.User.Username}}">
+              <span class="user-avatar" aria-hidden="true">{{initial .User.Username}}</span>
+              <span class="user-name">{{.User.Username}}</span>
+              <span class="user-chevron" aria-hidden="true"></span>
+            </summary>
+            <div class="menu-panel">
+              <a href="/account">Account overview</a>
+              <a href="/account#wow">Game logins</a>
+              <a href="/account#security">Security</a>
+              <a href="/tickets">My tickets</a>
+              {{if .Mod}}<a href="/staff/tickets">Staff tickets</a>{{end}}
+              {{if .Staff}}<a href="/staff">Admin panel</a>{{end}}
+              <form method="post" action="/account/logout">
+                <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+                <button type="submit">Sign out</button>
+              </form>
+            </div>
+          </details>
+          {{else}}
+          <a href="/account" class="nav-signin">Sign in</a>
+          <a href="/register" class="nav-register">Create account</a>
+          {{end}}
         </div>
       </div>
     </div>
   </header>
-  <main class="wrap">
+  <main class="wrap" id="main-content" tabindex="-1">
     {{if .Flash}}
-    <div class="flash flash-{{.Flash.Kind}}" role="status">{{.Flash.Text}}</div>
+    <div class="flash flash-{{.Flash.Kind}}" role="{{if eq .Flash.Kind "error"}}alert{{else}}status{{end}}">{{.Flash.Text}}</div>
     {{end}}
 {{end}}

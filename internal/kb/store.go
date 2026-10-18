@@ -11,6 +11,8 @@ import (
 	"time"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/zeroward/waygate/internal/privatefs"
 )
 
 var (
@@ -67,8 +69,20 @@ func dsnFor(path string) (string, error) {
 	}
 	dir := filepath.Dir(path)
 	if dir != "" && dir != "." {
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := privatefs.Dir(dir); err != nil {
 			return "", fmt.Errorf("kb data dir: %w", err)
+		}
+	}
+	if err := privatefs.File(path); err != nil {
+		return "", err
+	}
+	for _, suffix := range []string{"-wal", "-shm"} {
+		if _, err := os.Lstat(path + suffix); err == nil {
+			if err = privatefs.File(path + suffix); err != nil {
+				return "", err
+			}
+		} else if !os.IsNotExist(err) {
+			return "", err
 		}
 	}
 	abs, err := filepath.Abs(path)

@@ -1,0 +1,25 @@
+?   	github.com/zeroward/waygate/cmd/waygate	[no test files]
+?   	github.com/zeroward/waygate/internal/captcha	[no test files]
+?   	github.com/zeroward/waygate/internal/db	[no test files]
+ok  	github.com/zeroward/waygate/internal/account	0.003s
+ok  	github.com/zeroward/waygate/internal/acmod	(cached)
+ok  	github.com/zeroward/waygate/internal/armory	0.002s
+ok  	github.com/zeroward/waygate/internal/clamav	(cached)
+ok  	github.com/zeroward/waygate/internal/companion	0.002s
+ok  	github.com/zeroward/waygate/internal/config	(cached)
+ok  	github.com/zeroward/waygate/internal/downloads	(cached)
+ok  	github.com/zeroward/waygate/internal/identity	(cached)
+ok  	github.com/zeroward/waygate/internal/kb	(cached)
+?   	github.com/zeroward/waygate/internal/logx	[no test files]
+?   	github.com/zeroward/waygate/internal/mail	[no test files]
+?   	github.com/zeroward/waygate/internal/privatefs	[no test files]
+ok  	github.com/zeroward/waygate/internal/md	(cached)
+ok  	github.com/zeroward/waygate/internal/ratelimit	(cached)
+ok  	github.com/zeroward/waygate/internal/session	(cached)
+ok  	github.com/zeroward/waygate/internal/soap	(cached)
+ok  	github.com/zeroward/waygate/internal/srp6	(cached)
+ok  	github.com/zeroward/waygate/internal/status	0.002s
+ok  	github.com/zeroward/waygate/internal/validate	(cached)
+ok  	github.com/zeroward/waygate/internal/web	3.114s
+ok  	github.com/zeroward/waygate/internal/wg	0.004s
+ok  	github.com/zeroward/waygate/internal/wow	(cached)

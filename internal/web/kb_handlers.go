@@ -23,11 +23,12 @@ func (s *Server) canEditKB(u *session.User) bool {
 
 func (s *Server) requireKBEditor(w http.ResponseWriter, r *http.Request) *session.Session {
 	sess := s.sessions.GetOrCreate(w, r)
-	if sess.User == nil {
+	if sess.Snapshot().User == nil {
 		s.flashRedirect(w, r, "/account?next="+url.QueryEscape(r.URL.RequestURI()), "error", "Log in first.")
 		return nil
 	}
-	if !s.canEditKB(sess.User) {
+	s.applyStaffLevel(r.Context(), sess)
+	if !s.canEditKB(sess.Snapshot().User) {
 		http.Error(w, "Knowledge Base editing requires Admin (GM 3) or higher.", http.StatusForbidden)
 		return nil
 	}
@@ -90,7 +91,7 @@ func (s *Server) kbIndex(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess := s.sessions.GetOrCreate(w, r)
-	canEdit := s.canEditKB(sess.User)
+	canEdit := s.canEditKB(sess.Snapshot().User)
 	var staff []kb.Article
 	if canEdit {
 		staff, err = s.kb.ListAll(r.Context())
@@ -126,7 +127,7 @@ func (s *Server) kbArticle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sess := s.sessions.GetOrCreate(w, r)
-	canEdit := s.canEditKB(sess.User)
+	canEdit := s.canEditKB(sess.Snapshot().User)
 	preview := r.URL.Query().Get("preview") == "1"
 	if !a.Published {
 		if !canEdit {
@@ -228,20 +229,20 @@ func (s *Server) staffKBCreate(w http.ResponseWriter, r *http.Request) {
 	if !s.parseFormMax(w, r, kbBodyMax) || !s.requireCSRF(w, r) {
 		return
 	}
-	if !s.kbRL.Allow(s.ip(r) + ":" + sess.User.Username) {
+	if !s.kbRL.Allow(s.ip(r) + ":" + sess.Snapshot().User.Username) {
 		s.flashRedirect(w, r, "/staff/kb/new", "error", "Too many saves. Wait and try again.")
 		return
 	}
 	a := articleFromForm(r)
-	a.CreatedBy = sess.User.Username
-	a.UpdatedBy = sess.User.Username
+	a.CreatedBy = sess.Snapshot().User.Username
+	a.UpdatedBy = sess.Snapshot().User.Username
 	saved, err := s.kb.Create(r.Context(), a)
 	if err != nil {
 		s.kbFormError(w, r, a, true, err)
 		return
 	}
-	s.log.Info("kb create", "actor", sess.User.Username, "slug", saved.Slug, "id", saved.ID)
-	s.logStaff(sess.User.Username, "kb-create", saved.Slug)
+	s.log.Info("kb create", "actor", sess.Snapshot().User.Username, "slug", saved.Slug, "id", saved.ID)
+	s.logStaff(sess.Snapshot().User.Username, "kb-create", saved.Slug)
 	s.flashRedirect(w, r, "/staff/kb/"+strconv.FormatInt(saved.ID, 10), "success", "Article saved.")
 }
 
@@ -258,7 +259,7 @@ func (s *Server) staffKBUpdate(w http.ResponseWriter, r *http.Request) {
 	if !s.parseFormMax(w, r, kbBodyMax) || !s.requireCSRF(w, r) {
 		return
 	}
-	if !s.kbRL.Allow(s.ip(r) + ":" + sess.User.Username) {
+	if !s.kbRL.Allow(s.ip(r) + ":" + sess.Snapshot().User.Username) {
 		s.flashRedirect(w, r, "/staff/kb/"+strconv.FormatInt(id, 10), "error", "Too many saves. Wait and try again.")
 		return
 	}
@@ -270,14 +271,14 @@ func (s *Server) staffKBUpdate(w http.ResponseWriter, r *http.Request) {
 	a := articleFromForm(r)
 	a.ID = existing.ID
 	a.CreatedBy = existing.CreatedBy
-	a.UpdatedBy = sess.User.Username
+	a.UpdatedBy = sess.Snapshot().User.Username
 	saved, err := s.kb.Update(r.Context(), a)
 	if err != nil {
 		s.kbFormError(w, r, a, false, err)
 		return
 	}
-	s.log.Info("kb update", "actor", sess.User.Username, "slug", saved.Slug, "id", saved.ID)
-	s.logStaff(sess.User.Username, "kb-update", saved.Slug)
+	s.log.Info("kb update", "actor", sess.Snapshot().User.Username, "slug", saved.Slug, "id", saved.ID)
+	s.logStaff(sess.Snapshot().User.Username, "kb-update", saved.Slug)
 	s.flashRedirect(w, r, "/staff/kb/"+strconv.FormatInt(saved.ID, 10), "success", "Article saved.")
 }
 
@@ -294,7 +295,7 @@ func (s *Server) staffKBDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.parseForm(w, r) || !s.requireCSRF(w, r) {
 		return
 	}
-	if !s.kbRL.Allow(s.ip(r) + ":" + sess.User.Username) {
+	if !s.kbRL.Allow(s.ip(r) + ":" + sess.Snapshot().User.Username) {
 		s.flashRedirect(w, r, "/staff/kb/"+strconv.FormatInt(id, 10), "error", "Too many saves. Wait and try again.")
 		return
 	}
@@ -307,8 +308,8 @@ func (s *Server) staffKBDelete(w http.ResponseWriter, r *http.Request) {
 		s.flashRedirect(w, r, "/staff/kb", "error", "Could not delete the article.")
 		return
 	}
-	s.log.Info("kb delete", "actor", sess.User.Username, "id", id)
-	s.logStaff(sess.User.Username, "kb-delete", strconv.FormatInt(id, 10))
+	s.log.Info("kb delete", "actor", sess.Snapshot().User.Username, "id", id)
+	s.logStaff(sess.Snapshot().User.Username, "kb-delete", strconv.FormatInt(id, 10))
 	s.flashRedirect(w, r, "/staff/kb", "success", "Article deleted.")
 }
 

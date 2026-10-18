@@ -1,32 +1,35 @@
 {{template "header" .}}
 {{$s := .Data}}
 <div class="home">
-  <section class="home-hero">
+  <section class="home-hero play-hero">
     <div class="home-kickers">
       <p class="home-kicker">
         <span class="live{{if $s.RealmUp}} is-up{{end}}" aria-hidden="true"></span>
         {{if $s.RealmUp}}Online{{else}}Offline{{end}}
         <span class="dot">·</span>
         WotLK 3.3.5a
-        <span class="dot">·</span>
-        Build 12340
       </p>
-      {{if $s.WGEnabled}}
-      <p class="home-kicker">
-        <span class="live{{if $s.WGUp}} is-up{{end}}" aria-hidden="true"></span>
-        {{if $s.WGUp}}Online{{else}}Offline{{end}}
-        <span class="dot">·</span>
-        WireGuard Server
-        <span class="dot">·</span>
-        UDP {{$s.WGPort}}
-      </p>
-      {{end}}
     </div>
     <h1>{{.RealmName}}</h1>
     <p class="lede">{{$s.Blurb}}</p>
-    {{if .User}}
-    <p class="home-cta-quiet"><a href="/downloads">Download the client</a> or <a href="/kb/how-to-connect">how to connect</a></p>
-    {{end}}
+    <div class="hero-actions">
+      {{if .User}}
+      <a class="btn btn-gold" href="/account#overview">Continue setup <span aria-hidden="true">→</span></a>
+      <a class="btn" href="/companion">Quest companion</a>
+      {{else}}
+      <a class="btn btn-gold" href="/register">Create account <span aria-hidden="true">→</span></a>
+      <a class="btn" href="/account">Sign in</a>
+      {{end}}
+    </div>
+  </section>
+
+  <section class="journey" aria-labelledby="journey-title">
+    <div class="section-heading"><h2 id="journey-title">Your journey to Northrend</h2><span class="hint">Wrath of the Lich King · 3.3.5a</span></div>
+    <ol class="setup-steps">
+      <li><span class="step-number" aria-hidden="true">01</span><div><h3><a href="{{if .User}}/account#wow{{else}}/register{{end}}">{{if .User}}Manage game logins{{else}}Create your account{{end}}</a></h3><p>Set up the credentials you’ll use in the game.</p></div></li>
+      <li><span class="step-number" aria-hidden="true">02</span><div><h3><a href="/downloads">Get the client</a></h3><p>Download the client and required patches.</p></div></li>
+      <li><span class="step-number" aria-hidden="true">03</span><div><h3><a href="/kb/how-to-connect">Connect to the realm</a></h3><p>Follow the connection guide and enter Azeroth.{{if .NetBirdSetupURL}} <a href="{{.NetBirdSetupURL}}" rel="noreferrer">Set up NetBird</a>{{end}}</p></div></li>
+    </ol>
   </section>
 
   <section class="metrics" aria-label="Realm population">
@@ -73,17 +76,14 @@
   {{end}}
 
   {{if $s.Modules}}
-  <section class="home-mods">
-    <header class="home-mods-head">
-      <h2>Installed modules</h2>
-      <span class="mod-count">{{len $s.Modules}}</span>
-    </header>
+  <details class="home-mods">
+    <summary>Installed modules <span class="mod-count">{{len $s.Modules}}</span></summary>
     <ul class="mod-list">
       {{range $s.Modules}}
       <li class="mod-chip"{{if .Blurb}} title="{{.Blurb}}"{{end}}>{{.Title}}{{if .Version}} <span class="mod-ver">{{.Version}}</span>{{end}}</li>
       {{end}}
     </ul>
-  </section>
+  </details>
   {{end}}
 </div>
 {{template "footer" .}}

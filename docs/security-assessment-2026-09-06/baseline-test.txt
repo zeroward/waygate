@@ -1,0 +1,24 @@
+?   	github.com/zeroward/waygate/cmd/waygate	[no test files]
+?   	github.com/zeroward/waygate/internal/captcha	[no test files]
+?   	github.com/zeroward/waygate/internal/config	[no test files]
+?   	github.com/zeroward/waygate/internal/db	[no test files]
+ok  	github.com/zeroward/waygate/internal/account	0.002s
+ok  	github.com/zeroward/waygate/internal/acmod	0.001s
+ok  	github.com/zeroward/waygate/internal/armory	0.001s
+ok  	github.com/zeroward/waygate/internal/clamav	0.001s
+ok  	github.com/zeroward/waygate/internal/companion	0.002s
+ok  	github.com/zeroward/waygate/internal/downloads	0.004s
+?   	github.com/zeroward/waygate/internal/logx	[no test files]
+?   	github.com/zeroward/waygate/internal/mail	[no test files]
+ok  	github.com/zeroward/waygate/internal/identity	0.692s
+ok  	github.com/zeroward/waygate/internal/kb	0.125s
+ok  	github.com/zeroward/waygate/internal/md	0.003s
+ok  	github.com/zeroward/waygate/internal/ratelimit	0.082s
+ok  	github.com/zeroward/waygate/internal/session	0.051s
+ok  	github.com/zeroward/waygate/internal/soap	0.006s
+ok  	github.com/zeroward/waygate/internal/srp6	0.002s
+ok  	github.com/zeroward/waygate/internal/status	0.003s
+ok  	github.com/zeroward/waygate/internal/validate	0.012s
+ok  	github.com/zeroward/waygate/internal/web	2.709s
+ok  	github.com/zeroward/waygate/internal/wg	0.003s
+ok  	github.com/zeroward/waygate/internal/wow	0.002s

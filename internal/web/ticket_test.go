@@ -218,8 +218,8 @@ func TestStaffTicketsReplyAndStatus(t *testing.T) {
 	if res.StatusCode != 200 || !strings.Contains(string(staffHome), `href="/staff/tickets"`) {
 		t.Fatal("admin panel missing tickets link")
 	}
-	if !strings.Contains(string(staffHome), "Open tickets") || !strings.Contains(string(staffHome), "Missing sword") {
-		t.Fatal("admin panel should list open tickets")
+	if !strings.Contains(string(staffHome), "Open tickets") || !strings.Contains(string(staffHome), `class="mod-count">1</span>`) {
+		t.Fatal("admin panel should show the open ticket count")
 	}
 
 	res, err = staff.Get(ts.URL + "/staff/tickets")

@@ -12,7 +12,7 @@ func (s *Server) companionPage(w http.ResponseWriter, r *http.Request) {
 	if sess == nil {
 		return
 	}
-	ids := s.wowAccountIDs(r.Context(), sess.User.ID)
+	ids := s.wowAccountIDs(r.Context(), sess.Snapshot().User.ID)
 	picks := s.companion.List(r.Context(), ids)
 	raw := r.URL.Query().Get("guid")
 	var requested uint32
@@ -77,7 +77,7 @@ func (s *Server) companionLive(w http.ResponseWriter, r *http.Request) {
 			zone = uint32(zn)
 		}
 	}
-	ids := s.wowAccountIDs(r.Context(), sess.User.ID)
+	ids := s.wowAccountIDs(r.Context(), sess.Snapshot().User.ID)
 	snap, ok := s.companion.Snapshot(r.Context(), ids, uint32(n), zone)
 	if !ok {
 		writeJSONError(w, http.StatusNotFound, "Character not found.")

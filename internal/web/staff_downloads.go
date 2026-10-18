@@ -117,8 +117,8 @@ func (s *Server) staffDownloadPOST(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	s.log.Info("staff download upload", "actor", sess.User.Username, "id", added.ID, "file", added.FileName, "bytes", added.Size)
-	s.logStaff(sess.User.Username, "download-upload", added.ID)
+	s.log.Info("staff download upload", "actor", sess.Snapshot().User.Username, "id", added.ID, "file", added.FileName, "bytes", added.Size)
+	s.logStaff(sess.Snapshot().User.Username, "download-upload", added.ID)
 	s.uploadReply(w, r, dest, "success", "Uploaded "+added.Title+".")
 }
 
@@ -169,8 +169,8 @@ func (s *Server) staffDownloadDeletePOST(w http.ResponseWriter, r *http.Request)
 		s.flashRedirect(w, r, dest, "error", uploadErr(err, 0))
 		return
 	}
-	s.log.Info("staff download delete", "actor", sess.User.Username, "id", id)
-	s.logStaff(sess.User.Username, "download-delete", id)
+	s.log.Info("staff download delete", "actor", sess.Snapshot().User.Username, "id", id)
+	s.logStaff(sess.Snapshot().User.Username, "download-delete", id)
 	s.flashRedirect(w, r, dest, "success", "Removed "+id+".")
 }
 

@@ -1,16 +1,36 @@
 package web
 
 import (
+	"errors"
 	"net/http"
 	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/zeroward/waygate/internal/identity"
+	"github.com/zeroward/waygate/internal/session"
 )
 
 func (s *Server) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		lw := &statusWriter{ResponseWriter: w, code: 200}
+		w = lw
+		defer func() {
+			s.log.Info("http", "method", r.Method, "path", r.URL.Path,
+				"status", lw.code, "ms", time.Since(start).Milliseconds(), "ip", s.ip(r))
+		}()
 		defer func() {
 			if rec := recover(); rec != nil {
+				if isManagementAPIPath(r.URL.Path) {
+					s.log.Error("management API panic", "path", r.URL.Path, "stack", string(debug.Stack()))
+					writeManagementError(w, r, http.StatusInternalServerError, "internal_error", "Request could not be completed.")
+					return
+				}
+				if err, ok := rec.(error); ok && errors.Is(err, session.ErrRevoked) {
+					http.Error(w, "Please sign in again.", 401)
+					return
+				}
 				s.log.Error("panic", "err", rec, "path", r.URL.Path, "stack", string(debug.Stack()))
 				http.Error(w, "The Frozen Throne is silent. Try again shortly.", http.StatusInternalServerError)
 			}
@@ -24,20 +44,31 @@ func (s *Server) middleware(next http.Handler) http.Handler {
 		if s.cfg.SessionSecure {
 			w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 		}
-		start := time.Now()
-		lw := &statusWriter{ResponseWriter: w, code: 200}
+		// Machine credentials never enter browser session or identity handling.
+		if isManagementAPIPath(r.URL.Path) {
+			s.managementAPI(lw, r)
+			return
+		}
 		if r.URL.Path != "/healthz" && !strings.HasPrefix(r.URL.Path, "/static/") {
-			sess := s.sessions.GetOrCreate(w, r)
-			defer s.sessions.SaveLatest(sess)
+			r = s.sessions.Bind(w, r)
+			w.Header().Set("Cache-Control", "no-store")
+			if !s.validateSession(w, r) {
+				return
+			}
+		}
+		h := sessionForLocalCheck(s, w, r)
+		if h != nil && h.Snapshot().User != nil && localAuthPath(r.URL.Path) {
+			current, err := s.id.GetByID(r.Context(), h.Snapshot().User.ID)
+			if err != nil {
+				http.Error(w, "Account verification unavailable.", 503)
+				return
+			}
+			if current.AuthMode == identity.AuthSSO {
+				http.Error(w, "Use single sign-on to manage authentication.", 403)
+				return
+			}
 		}
 		next.ServeHTTP(lw, r)
-		s.log.Info("http",
-			"method", r.Method,
-			"path", r.URL.Path,
-			"status", lw.code,
-			"ms", time.Since(start).Milliseconds(),
-			"ip", s.ip(r),
-		)
 	})
 }
 
@@ -88,4 +119,15 @@ type statusWriter struct {
 func (w *statusWriter) WriteHeader(code int) {
 	w.code = code
 	w.ResponseWriter.WriteHeader(code)
+}
+
+// Defense in depth for every local credential management route.
+func localAuthPath(p string) bool {
+	return p == "/account/password" || p == "/account/wow/unlock" || p == "/account/login" || strings.HasPrefix(p, "/account/login/") || strings.HasPrefix(p, "/account/totp/") || strings.HasPrefix(p, "/account/passkey/") || strings.HasPrefix(p, "/account/reauth/") || strings.HasPrefix(p, "/account/reset")
+}
+func sessionForLocalCheck(s *Server, w http.ResponseWriter, r *http.Request) *session.Session {
+	if !localAuthPath(r.URL.Path) {
+		return nil
+	}
+	return s.sessions.GetOrCreate(w, r)
 }

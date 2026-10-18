@@ -1,18 +1,18 @@
 {{template "header" .}}
 {{$d := .Data}}
 <section class="panel">
-  <p class="eyebrow">Armory of Icecrown</p>
+  <p class="eyebrow">Prepare for adventure</p>
   <h1>Downloads</h1>
   <p class="lede">{{$d.Intro}}</p>
-  <nav class="tabs">
-    <a href="/downloads{{if $d.Query}}?q={{$d.Query | urlquery}}{{end}}" {{if eq $d.Tab "all"}}class="is-active"{{end}}>All ({{index $d.Counts "all"}})</a>
-    <a href="/downloads?tab=client{{if $d.Query}}&amp;q={{$d.Query | urlquery}}{{end}}" {{if eq $d.Tab "client"}}class="is-active"{{end}}>Client ({{index $d.Counts "client"}})</a>
-    <a href="/downloads?tab=patches{{if $d.Query}}&amp;q={{$d.Query | urlquery}}{{end}}" {{if eq $d.Tab "patches"}}class="is-active"{{end}}>Patches ({{index $d.Counts "patches"}})</a>
-    <a href="/downloads?tab=mods{{if $d.Query}}&amp;q={{$d.Query | urlquery}}{{end}}" {{if eq $d.Tab "mods"}}class="is-active"{{end}}>Addons ({{index $d.Counts "mods"}})</a>
+  <nav class="tabs" aria-label="Download categories">
+    <a href="/downloads{{if $d.Query}}?q={{$d.Query | urlquery}}{{end}}" {{if eq $d.Tab "all"}}class="is-active" aria-current="page"{{end}}>All ({{index $d.Counts "all"}})</a>
+    <a href="/downloads?tab=client{{if $d.Query}}&amp;q={{$d.Query | urlquery}}{{end}}" {{if eq $d.Tab "client"}}class="is-active" aria-current="page"{{end}}>Client ({{index $d.Counts "client"}})</a>
+    <a href="/downloads?tab=patches{{if $d.Query}}&amp;q={{$d.Query | urlquery}}{{end}}" {{if eq $d.Tab "patches"}}class="is-active" aria-current="page"{{end}}>Patches ({{index $d.Counts "patches"}})</a>
+    <a href="/downloads?tab=mods{{if $d.Query}}&amp;q={{$d.Query | urlquery}}{{end}}" {{if eq $d.Tab "mods"}}class="is-active" aria-current="page"{{end}}>Addons ({{index $d.Counts "mods"}})</a>
   </nav>
   <form method="get" action="/downloads" class="dl-search">
     {{if ne $d.Tab "all"}}<input type="hidden" name="tab" value="{{$d.Tab}}">{{end}}
-    <input name="q" value="{{$d.Query}}" placeholder="Search name, file, addon ID…" maxlength="64" autocomplete="off">
+    <input aria-label="Search downloads" name="q" value="{{$d.Query}}" placeholder="Search name, file, addon ID…" maxlength="64" autocomplete="off">
     <button type="submit" class="btn">Search</button>
   </form>
   {{if $d.Items}}
@@ -26,15 +26,19 @@
         {{if .Version}}<span class="badge">{{.Version}}</span>{{end}}
       </header>
       <h2>{{.Title}}</h2>
-      {{if .AddonID}}<p class="dl-meta">Addon ID <code>{{.AddonID}}</code></p>{{end}}
-      {{if .SourceURL}}<p class="dl-meta"><a class="dl-source" href="{{.SourceURL}}" rel="noopener noreferrer" target="_blank">Source</a></p>{{end}}
       {{if .Description}}<p>{{.Description}}</p>{{end}}
-      <p class="muted">
-        {{if .Ready}}{{.SizeHuman}} · {{.FileName}}{{else}}Not uploaded yet{{end}}
-      </p>
-      {{if .UploadedAt}}<p class="dl-meta">Uploaded {{.UploadedAt}}</p>{{end}}
-      {{if .ClamAVLabel}}<p class="dl-scan{{if .ClamClean}} is-clean{{end}}">ClamAV {{.ClamAVLabel}}</p>{{end}}
-      {{if .SHA256}}<p class="dl-hash"><code>{{.SHA256}}</code></p>{{end}}
+      <p class="muted">{{if .Ready}}{{.SizeHuman}}{{else}}Not uploaded yet{{end}}</p>
+      {{if .ClamAVLabel}}<p class="dl-scan{{if .ClamClean}} is-clean{{end}}">Scan: {{.ClamAVLabel}}</p>{{end}}
+      <details class="download-details">
+        <summary>File details</summary>
+        <dl>
+          <dt>Filename</dt><dd>{{.FileName}}</dd>
+          {{if .UploadedAt}}<dt>Uploaded</dt><dd>{{.UploadedAt}}</dd>{{end}}
+          {{if .AddonID}}<dt>Addon ID</dt><dd>{{.AddonID}}</dd>{{end}}
+          {{if .SourceURL}}<dt>Source</dt><dd><a href="{{.SourceURL}}" rel="noopener noreferrer" target="_blank">View source <span class="sr-only">(opens a new tab)</span></a></dd>{{end}}
+          {{if .SHA256}}<dt>SHA-256</dt><dd class="dl-hash"><code>{{.SHA256}}</code></dd>{{end}}
+        </dl>
+      </details>
       {{if .Ready}}
       <a class="btn btn-gold" href="/downloads/{{.ID}}">Download</a>
       {{else}}

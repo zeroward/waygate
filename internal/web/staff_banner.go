@@ -54,28 +54,28 @@ func (s *Server) staffBannerPOST(w http.ResponseWriter, r *http.Request) {
 	if untilRaw != "" {
 		parsed, err := parseBannerUntil(untilRaw)
 		if err != nil {
-			s.flashRedirect(w, r, "/staff", "error", "Until must be a date and time.")
+			s.flashRedirect(w, r, "/staff#banner", "error", "Until must be a date and time.")
 			return
 		}
 		until = parsed
 	}
 	if err := s.kb.SetSetting(r.Context(), kb.SettingMaintenanceMessage, msg); err != nil {
 		s.log.Error("banner", "err", err)
-		s.flashRedirect(w, r, "/staff", "error", "Could not save the banner.")
+		s.flashRedirect(w, r, "/staff#banner", "error", "Could not save the banner.")
 		return
 	}
 	if err := s.kb.SetSetting(r.Context(), kb.SettingMaintenanceUntil, until); err != nil {
 		s.log.Error("banner until", "err", err)
-		s.flashRedirect(w, r, "/staff", "error", "Could not save the banner.")
+		s.flashRedirect(w, r, "/staff#banner", "error", "Could not save the banner.")
 		return
 	}
 	if msg == "" {
-		s.logStaff(sess.User.Username, "banner-clear", "")
-		s.flashRedirect(w, r, "/staff", "success", "Maintenance banner cleared.")
+		s.logStaff(sess.Snapshot().User.Username, "banner-clear", "")
+		s.flashRedirect(w, r, "/staff#banner", "success", "Maintenance banner cleared.")
 		return
 	}
-	s.logStaff(sess.User.Username, "banner-set", msg)
-	s.flashRedirect(w, r, "/staff", "success", "Maintenance banner set.")
+	s.logStaff(sess.Snapshot().User.Username, "banner-set", msg)
+	s.flashRedirect(w, r, "/staff#banner", "success", "Maintenance banner set.")
 }
 
 func parseBannerUntil(raw string) (string, error) {

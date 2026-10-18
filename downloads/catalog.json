@@ -63,6 +63,30 @@
       "uploaded_at": "2026-08-30 07:08 UTC",
       "clamav": "not scanned",
       "mandatory": true
+    },
+    {
+      "id": "unk",
+      "title": "Dugi's Guides",
+      "category": "mods",
+      "file": "mods/Dugi-Guides.rar",
+      "version": "UNK",
+      "sha256": "7e9759ed7dfc44dc18be259465884b267a43dbe64d29e951a0a4565f2bf281f5",
+      "source_url": "https://www.ownedcore.com/forums/world-of-warcraft/world-of-warcraft-emulator-servers/wow-emu-guides-tutorials/612275-zygor-dugi-guides-3-3-5-a.html",
+      "addon_id": "unk",
+      "uploaded_at": "2026-08-30 21:11 UTC",
+      "clamav": "not scanned"
+    },
+    {
+      "id": "1235",
+      "title": "Zygor Guides",
+      "category": "mods",
+      "file": "mods/ZygorGuides.rar",
+      "version": "UNK",
+      "sha256": "e513d210a1b9b8f7cfa8abf184084d6d9c251d643d8cd85f23f5e427d7ea48c0",
+      "source_url": "https://www.ownedcore.com/forums/world-of-warcraft/world-of-warcraft-emulator-servers/wow-emu-guides-tutorials/612275-zygor-dugi-guides-3-3-5-a.html",
+      "addon_id": "1235",
+      "uploaded_at": "2026-08-30 21:12 UTC",
+      "clamav": "not scanned"
     }
   ]
 }

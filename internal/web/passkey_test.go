@@ -86,6 +86,14 @@ func TestPasskeyRegisterAndLogin(t *testing.T) {
 	authenticator := virtualwebauthn.NewAuthenticator()
 	credential := virtualwebauthn.NewCredential(virtualwebauthn.KeyTypeEC2)
 
+	denied := jsonPOST(t, client, ts.URL+"/account/passkey/register/begin", csrf, map[string]string{"name": "Denied"})
+	if denied["_status"].(int) != 403 {
+		t.Fatalf("unverified enrollment accepted %v", denied)
+	}
+	proof := jsonPOST(t, client, ts.URL+"/account/reauth/password", csrf, map[string]string{"purpose": "passkey-add", "password": "Abcd1234"})
+	if proof["ok"] != true {
+		t.Fatalf("proof %v", proof)
+	}
 	begin := jsonPOST(t, client, ts.URL+"/account/passkey/register/begin", csrf, map[string]string{"name": "Laptop"})
 	if begin["_status"].(int) != 200 {
 		t.Fatalf("begin %v", begin)
@@ -144,6 +152,20 @@ func TestPasskeyRegisterAndLogin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse assertion %v %s", err, assertJSON)
 	}
+
+	authenticator.Options.UserNotVerified = true
+	unverified := virtualwebauthn.CreateAssertionResponse(rp, authenticator, credential, *assertOpts)
+	rejected := jsonPOSTRaw(t, client, ts.URL+"/account/passkey/login/finish", csrf, unverified)
+	if rejected["ok"] == true || rejected["_status"].(int) < 400 {
+		t.Fatal("UV=false login accepted", rejected)
+	}
+	authenticator.Options.UserNotVerified = false
+	assertBegin = jsonPOST(t, client, ts.URL+"/account/passkey/login/begin", csrf, map[string]string{"next": "/tickets"})
+	assertJSON, _ = json.Marshal(beginWithoutStatus(assertBegin))
+	assertOpts, err = virtualwebauthn.ParseAssertionOptions(string(assertJSON))
+	if err != nil {
+		t.Fatal(err)
+	}
 	assertion := virtualwebauthn.CreateAssertionResponse(rp, authenticator, credential, *assertOpts)
 	logged := jsonPOSTRaw(t, client, ts.URL+"/account/passkey/login/finish", csrf, assertion)
 	if logged["_status"].(int) != 200 || logged["ok"] != true {
@@ -169,8 +191,9 @@ func TestPasskeyRegisterAndLogin(t *testing.T) {
 	}
 	csrf = extractCSRF(string(homeBody))
 	del, err := client.PostForm(ts.URL+"/account/passkey/delete", url.Values{
-		"csrf_token": {csrf},
-		"id":         {strconv.FormatInt(keys[0].ID, 10)},
+		"csrf_token":       {csrf},
+		"id":               {strconv.FormatInt(keys[0].ID, 10)},
+		"current_password": {"Abcd1234"},
 	})
 	if err != nil {
 		t.Fatal(err)

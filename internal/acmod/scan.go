@@ -19,12 +19,19 @@ type Module struct {
 }
 
 func ScanDir(root string) []Module {
+	mods, _ := ScanDirWithError(root)
+	return mods
+}
+
+// ScanDirWithError distinguishes an unavailable configured directory from an empty one.
+// Optional module metadata files remain best-effort.
+func ScanDirWithError(root string) ([]Module, error) {
 	if root == "" {
-		return nil
+		return nil, nil
 	}
 	entries, err := os.ReadDir(root)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 	var out []Module
 	for _, e := range entries {
@@ -60,7 +67,7 @@ func ScanDir(root string) []Module {
 	sort.Slice(out, func(i, j int) bool {
 		return strings.ToLower(out[i].Title) < strings.ToLower(out[j].Title)
 	})
-	return out
+	return out, nil
 }
 
 func Merge(base []Module, extra []Module) []Module {

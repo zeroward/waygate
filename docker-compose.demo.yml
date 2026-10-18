@@ -10,6 +10,7 @@ services:
     environment:
       LISTEN_ADDR: ":3080"
       DEMO_MODE: "true"
+      MANAGEMENT_API_TOKEN: ${MANAGEMENT_API_TOKEN:-}
       REALM_NAME: Icecrown
       PUBLIC_HOST: 127.0.0.1
       PUBLIC_AUTH_PORT: 3724
