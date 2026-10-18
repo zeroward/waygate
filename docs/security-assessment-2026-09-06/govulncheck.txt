@@ -1,0 +1,714 @@
+Fetching vulnerabilities from the database...
+
+Checking the code against the vulnerabilities...
+
+The package pattern matched the following 24 root packages:
+  github.com/zeroward/waygate/internal/config
+  github.com/zeroward/waygate/internal/db
+  github.com/zeroward/waygate/internal/soap
+  github.com/zeroward/waygate/internal/srp6
+  github.com/zeroward/waygate/internal/account
+  github.com/zeroward/waygate/internal/captcha
+  github.com/zeroward/waygate/internal/logx
+  github.com/zeroward/waygate/internal/mail
+  github.com/zeroward/waygate/internal/acmod
+  github.com/zeroward/waygate/internal/wow
+  github.com/zeroward/waygate/internal/status
+  github.com/zeroward/waygate/internal/armory
+  github.com/zeroward/waygate/internal/clamav
+  github.com/zeroward/waygate/internal/companion
+  github.com/zeroward/waygate/internal/downloads
+  github.com/zeroward/waygate/internal/identity
+  github.com/zeroward/waygate/internal/kb
+  github.com/zeroward/waygate/internal/md
+  github.com/zeroward/waygate/internal/ratelimit
+  github.com/zeroward/waygate/internal/session
+  github.com/zeroward/waygate/internal/validate
+  github.com/zeroward/waygate/internal/wg
+  github.com/zeroward/waygate/internal/web
+  github.com/zeroward/waygate/cmd/waygate
+Govulncheck scanned the following 22 modules and the go1.23.12 standard library:
+  github.com/zeroward/waygate
+  filippo.io/edwards25519@v1.1.0
+  github.com/boombuler/barcode@v1.0.1-0.20190219062509-6c824513bacc
+  github.com/dustin/go-humanize@v1.0.1
+  github.com/fxamacker/cbor/v2@v2.7.0
+  github.com/go-sql-driver/mysql@v1.8.1
+  github.com/go-webauthn/webauthn@v0.11.2
+  github.com/go-webauthn/x@v0.1.14
+  github.com/golang-jwt/jwt/v5@v5.2.1
+  github.com/google/go-tpm@v0.9.1
+  github.com/google/uuid@v1.6.0
+  github.com/mitchellh/mapstructure@v1.5.0
+  github.com/pquerna/otp@v1.4.0
+  github.com/remyoudompheng/bigfft@v0.0.0-20230129092748-24d4a6f8daec
+  github.com/skip2/go-qrcode@v0.0.0-20200617195104-da1b6568686e
+  github.com/x448/float16@v0.8.4
+  golang.org/x/crypto@v0.26.0
+  golang.org/x/sys@v0.23.0
+  modernc.org/libc@v1.55.3
+  modernc.org/mathutil@v1.6.0
+  modernc.org/memory@v1.8.0
+  modernc.org/sqlite@v1.34.5
+
+=== Symbol Results ===
+
+Vulnerability #1: GO-2026-6218
+    Avoid quadratic complexity in resolvePath in net/url
+  More info: https://pkg.go.dev/vuln/GO-2026-6218
+  Standard library
+    Found in: net/url@go1.23.12
+    Fixed in: net/url@go1.25.13
+    Example traces found:
+      #1: internal/soap/soap.go:147:23: soap.Client.Execute calls http.Client.Do, which eventually calls url.URL.Parse
+
+Vulnerability #2: GO-2026-6091
+    Fix Javascript regexp context tracking in html/template
+  More info: https://pkg.go.dev/vuln/GO-2026-6091
+  Standard library
+    Found in: html/template@go1.23.12
+    Fixed in: html/template@go1.25.13
+    Example traces found:
+      #1: internal/web/server.go:371:33: web.Server.view calls template.Template.ExecuteTemplate
+
+Vulnerability #3: GO-2026-6090
+    Limit handshake messages we are willing to accept post-handshake in
+    crypto/tls
+  More info: https://pkg.go.dev/vuln/GO-2026-6090
+  Standard library
+    Found in: crypto/tls@go1.23.12
+    Fixed in: crypto/tls@go1.25.13
+    Example traces found:
+      #1: internal/kb/store.go:46:21: kb.Open calls sql.Open, which eventually calls tls.Conn.Handshake
+      #2: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls tls.Conn.HandshakeContext
+      #3: internal/soap/soap.go:152:24: soap.Client.Execute calls io.ReadAll, which eventually calls tls.Conn.Read
+      #4: internal/wg/wg.go:374:13: wg.ServerConf calls fmt.Fprintf, which calls tls.Conn.Write
+      #5: internal/mail/mail.go:59:26: mail.sendTLS calls tls.Dialer.Dial
+      #6: internal/soap/soap.go:147:23: soap.Client.Execute calls http.Client.Do, which eventually calls tls.Dialer.DialContext
+
+Vulnerability #4: GO-2026-6089
+    Apply ReadHeaderTimeout when doing unencrypted HTTP/2 check in net/http
+  More info: https://pkg.go.dev/vuln/GO-2026-6089
+  Standard library
+    Found in: net/http@go1.23.12
+    Fixed in: net/http@go1.25.13
+    Example traces found:
+      #1: cmd/waygate/main.go:96:35: waygate.main calls http.Server.ListenAndServe
+      #2: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve
+
+Vulnerability #5: GO-2026-6088
+    Add recursion depth guard during decode in encoding/xml
+  More info: https://pkg.go.dev/vuln/GO-2026-6088
+  Standard library
+    Found in: encoding/xml@go1.23.12
+    Fixed in: encoding/xml@go1.25.13
+    Example traces found:
+      #1: internal/soap/soap.go:280:25: soap.ParseResponse calls xml.Unmarshal
+
+Vulnerability #6: GO-2026-5972
+    Enforce maximum recursion depth in encoding/asn1
+  More info: https://pkg.go.dev/vuln/GO-2026-5972
+  Standard library
+    Found in: encoding/asn1@go1.23.12
+    Fixed in: encoding/asn1@go1.25.13
+    Example traces found:
+      #1: internal/kb/store.go:46:21: kb.Open calls sql.Open, which eventually calls asn1.Unmarshal
+
+Vulnerability #7: GO-2026-5856
+    Invoking Encrypted Client Hello privacy leak in crypto/tls
+  More info: https://pkg.go.dev/vuln/GO-2026-5856
+  Standard library
+    Found in: crypto/tls@go1.23.12
+    Fixed in: crypto/tls@go1.25.12
+    Example traces found:
+      #1: internal/kb/store.go:46:21: kb.Open calls sql.Open, which eventually calls tls.Conn.Handshake
+      #2: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls tls.Conn.HandshakeContext
+      #3: internal/soap/soap.go:152:24: soap.Client.Execute calls io.ReadAll, which eventually calls tls.Conn.Read
+      #4: internal/wg/wg.go:374:13: wg.ServerConf calls fmt.Fprintf, which calls tls.Conn.Write
+      #5: internal/mail/mail.go:59:26: mail.sendTLS calls tls.Dialer.Dial
+      #6: internal/soap/soap.go:147:23: soap.Client.Execute calls http.Client.Do, which eventually calls tls.Dialer.DialContext
+
+Vulnerability #8: GO-2026-5039
+    Arbitrary inputs are included in errors without any escaping in
+    net/textproto
+  More info: https://pkg.go.dev/vuln/GO-2026-5039
+  Standard library
+    Found in: net/textproto@go1.23.12
+    Fixed in: net/textproto@go1.25.11
+    Example traces found:
+      #1: internal/account/account.go:833:18: account.Service.FindByEmail calls fmt.Sprintf, which eventually calls textproto.Error.Error
+      #2: internal/soap/soap.go:152:24: soap.Client.Execute calls io.ReadAll, which eventually calls textproto.Reader.ReadMIMEHeader
+      #3: internal/mail/mail.go:98:26: mail.sendTLS calls smtp.NewClient, which calls textproto.Reader.ReadResponse
+
+Vulnerability #9: GO-2026-5037
+    Inefficient candidate hostname parsing in crypto/x509
+  More info: https://pkg.go.dev/vuln/GO-2026-5037
+  Standard library
+    Found in: crypto/x509@go1.23.12
+    Fixed in: crypto/x509@go1.25.11
+    Example traces found:
+      #1: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls x509.Certificate.Verify
+      #2: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls x509.Certificate.VerifyHostname
+      #3: internal/account/account.go:833:18: account.Service.FindByEmail calls fmt.Sprintf, which eventually calls x509.HostnameError.Error
+
+Vulnerability #10: GO-2026-5026
+    Invoking failure to reject ASCII-only Punycode-encoded labels in
+    golang.org/x/net/idna
+  More info: https://pkg.go.dev/vuln/GO-2026-5026
+  Standard library
+    Found in: net/http@go1.23.12
+    Fixed in: net/http@go1.25.13
+    Example traces found:
+      #1: internal/soap/soap.go:147:23: soap.Client.Execute calls http.Client.Do
+
+Vulnerability #11: GO-2026-4986
+    Quadratic string concatentation in consumeComment in net/mail
+  More info: https://pkg.go.dev/vuln/GO-2026-4986
+  Standard library
+    Found in: net/mail@go1.23.12
+    Fixed in: net/mail@go1.25.10
+    Example traces found:
+      #1: internal/validate/validate.go:101:32: validate.Email calls mail.ParseAddress
+
+Vulnerability #12: GO-2026-4982
+    Bypass of meta content URL escaping causes XSS in html/template
+  More info: https://pkg.go.dev/vuln/GO-2026-4982
+  Standard library
+    Found in: html/template@go1.23.12
+    Fixed in: html/template@go1.25.10
+    Example traces found:
+      #1: internal/web/server.go:371:33: web.Server.view calls template.Template.ExecuteTemplate
+
+Vulnerability #13: GO-2026-4980
+    Escaper bypass leads to XSS in html/template
+  More info: https://pkg.go.dev/vuln/GO-2026-4980
+  Standard library
+    Found in: html/template@go1.23.12
+    Fixed in: html/template@go1.25.10
+    Example traces found:
+      #1: internal/web/server.go:371:33: web.Server.view calls template.Template.ExecuteTemplate
+
+Vulnerability #14: GO-2026-4977
+    Quadratic string concatenation in consumePhrase in net/mail
+  More info: https://pkg.go.dev/vuln/GO-2026-4977
+  Standard library
+    Found in: net/mail@go1.23.12
+    Fixed in: net/mail@go1.25.10
+    Example traces found:
+      #1: internal/validate/validate.go:101:32: validate.Email calls mail.ParseAddress
+
+Vulnerability #15: GO-2026-4971
+    Panic in Dial and LookupPort when handling NUL byte on Windows in net
+  More info: https://pkg.go.dev/vuln/GO-2026-4971
+  Standard library
+    Found in: net@go1.23.12
+    Fixed in: net@go1.25.10
+    Example traces found:
+      #1: internal/mail/mail.go:54:22: mail.Sender.Send calls smtp.SendMail, which eventually calls net.Dial
+      #2: internal/clamav/clamav.go:104:35: clamav.Client.command calls net.Dialer.DialContext
+      #3: internal/wg/agent.go:112:23: wg.Agent.serveHealth calls net.Listen
+      #4: internal/wg/wg.go:358:27: wg.LookupHosts calls net.LookupIP
+
+Vulnerability #16: GO-2026-4947
+    Unexpected work during chain building in crypto/x509
+  More info: https://pkg.go.dev/vuln/GO-2026-4947
+  Standard library
+    Found in: crypto/x509@go1.23.12
+    Fixed in: crypto/x509@go1.25.9
+    Example traces found:
+      #1: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls x509.Certificate.Verify
+
+Vulnerability #17: GO-2026-4946
+    Inefficient policy validation in crypto/x509
+  More info: https://pkg.go.dev/vuln/GO-2026-4946
+  Standard library
+    Found in: crypto/x509@go1.23.12
+    Fixed in: crypto/x509@go1.25.9
+    Example traces found:
+      #1: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls x509.Certificate.Verify
+
+Vulnerability #18: GO-2026-4918
+    Infinite loop in HTTP/2 transport when given bad SETTINGS_MAX_FRAME_SIZE in
+    net/http/internal/http2 in golang.org/x/net
+  More info: https://pkg.go.dev/vuln/GO-2026-4918
+  Standard library
+    Found in: net/http@go1.23.12
+    Fixed in: net/http@go1.25.10
+    Example traces found:
+      #1: internal/soap/soap.go:147:23: soap.Client.Execute calls http.Client.Do
+
+Vulnerability #19: GO-2026-4870
+    Unauthenticated TLS 1.3 KeyUpdate record can cause persistent connection
+    retention and DoS in crypto/tls
+  More info: https://pkg.go.dev/vuln/GO-2026-4870
+  Standard library
+    Found in: crypto/tls@go1.23.12
+    Fixed in: crypto/tls@go1.25.9
+    Example traces found:
+      #1: internal/kb/store.go:46:21: kb.Open calls sql.Open, which eventually calls tls.Conn.Handshake
+      #2: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls tls.Conn.HandshakeContext
+      #3: internal/soap/soap.go:152:24: soap.Client.Execute calls io.ReadAll, which eventually calls tls.Conn.Read
+      #4: internal/wg/wg.go:374:13: wg.ServerConf calls fmt.Fprintf, which calls tls.Conn.Write
+      #5: internal/mail/mail.go:59:26: mail.sendTLS calls tls.Dialer.Dial
+      #6: internal/soap/soap.go:147:23: soap.Client.Execute calls http.Client.Do, which eventually calls tls.Dialer.DialContext
+
+Vulnerability #20: GO-2026-4865
+    JsBraceDepth Context Tracking Bugs (XSS) in html/template
+  More info: https://pkg.go.dev/vuln/GO-2026-4865
+  Standard library
+    Found in: html/template@go1.23.12
+    Fixed in: html/template@go1.25.9
+    Example traces found:
+      #1: internal/account/account.go:833:18: account.Service.FindByEmail calls fmt.Sprintf, which eventually calls template.Error.Error
+      #2: internal/web/server.go:371:33: web.Server.view calls template.Template.ExecuteTemplate
+      #3: internal/web/server.go:88:36: web.New calls template.Template.Funcs
+      #4: internal/web/server.go:88:51: web.New calls template.Template.ParseFS
+      #5: internal/account/account.go:833:18: account.Service.FindByEmail calls fmt.Sprintf, which eventually calls template.context.String
+
+Vulnerability #21: GO-2026-4603
+    URLs in meta content attribute actions are not escaped in html/template
+  More info: https://pkg.go.dev/vuln/GO-2026-4603
+  Standard library
+    Found in: html/template@go1.23.12
+    Fixed in: html/template@go1.25.8
+    Example traces found:
+      #1: internal/web/server.go:371:33: web.Server.view calls template.Template.ExecuteTemplate
+
+Vulnerability #22: GO-2026-4602
+    FileInfo can escape from a Root in os
+  More info: https://pkg.go.dev/vuln/GO-2026-4602
+  Standard library
+    Found in: os@go1.23.12
+    Fixed in: os@go1.25.8
+    Example traces found:
+      #1: internal/web/handlers.go:147:16: web.Server.downloadsFile calls http.ServeFile, which eventually calls os.File.ReadDir
+      #2: internal/web/handlers.go:147:16: web.Server.downloadsFile calls http.ServeFile, which eventually calls os.File.Readdir
+      #3: internal/wg/wg.go:390:25: wg.ReadPeerDir calls os.ReadDir
+
+Vulnerability #23: GO-2026-4601
+    Incorrect parsing of IPv6 host literals in net/url
+  More info: https://pkg.go.dev/vuln/GO-2026-4601
+  Standard library
+    Found in: net/url@go1.23.12
+    Fixed in: net/url@go1.25.8
+    Example traces found:
+      #1: internal/web/armory_proxy.go:177:24: web.mvGetOnce calls url.JoinPath
+      #2: internal/downloads/manage.go:457:21: downloads.SanitizeSourceURL calls url.Parse
+      #3: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls url.ParseRequestURI
+      #4: internal/soap/soap.go:147:23: soap.Client.Execute calls http.Client.Do, which eventually calls url.URL.Parse
+
+Vulnerability #24: GO-2026-4341
+    Memory exhaustion in query parameter parsing in net/url
+  More info: https://pkg.go.dev/vuln/GO-2026-4341
+  Standard library
+    Found in: net/url@go1.23.12
+    Fixed in: net/url@go1.24.12
+    Example traces found:
+      #1: internal/web/kb_handlers.go:370:23: web.Server.parseFormMax calls http.Request.ParseForm, which calls url.ParseQuery
+      #2: internal/identity/totp.go:47:21: identity.Store.StartTOTP calls otp.Key.Secret, which calls url.URL.Query
+
+Vulnerability #25: GO-2026-4340
+    Handshake messages may be processed at the incorrect encryption level in
+    crypto/tls
+  More info: https://pkg.go.dev/vuln/GO-2026-4340
+  Standard library
+    Found in: crypto/tls@go1.23.12
+    Fixed in: crypto/tls@go1.24.12
+    Example traces found:
+      #1: internal/kb/store.go:46:21: kb.Open calls sql.Open, which eventually calls tls.Conn.Handshake
+      #2: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls tls.Conn.HandshakeContext
+      #3: internal/soap/soap.go:152:24: soap.Client.Execute calls io.ReadAll, which eventually calls tls.Conn.Read
+      #4: internal/wg/wg.go:374:13: wg.ServerConf calls fmt.Fprintf, which calls tls.Conn.Write
+      #5: internal/mail/mail.go:59:26: mail.sendTLS calls tls.Dialer.Dial
+      #6: internal/soap/soap.go:147:23: soap.Client.Execute calls http.Client.Do, which eventually calls tls.Dialer.DialContext
+
+Vulnerability #26: GO-2026-4337
+    Unexpected session resumption in crypto/tls
+  More info: https://pkg.go.dev/vuln/GO-2026-4337
+  Standard library
+    Found in: crypto/tls@go1.23.12
+    Fixed in: crypto/tls@go1.24.13
+    Example traces found:
+      #1: internal/kb/store.go:46:21: kb.Open calls sql.Open, which eventually calls tls.Conn.Handshake
+      #2: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls tls.Conn.HandshakeContext
+      #3: internal/soap/soap.go:152:24: soap.Client.Execute calls io.ReadAll, which eventually calls tls.Conn.Read
+      #4: internal/wg/wg.go:374:13: wg.ServerConf calls fmt.Fprintf, which calls tls.Conn.Write
+      #5: internal/mail/mail.go:59:26: mail.sendTLS calls tls.Dialer.Dial
+      #6: internal/soap/soap.go:147:23: soap.Client.Execute calls http.Client.Do, which eventually calls tls.Dialer.DialContext
+
+Vulnerability #27: GO-2025-4175
+    Improper application of excluded DNS name constraints when verifying
+    wildcard names in crypto/x509
+  More info: https://pkg.go.dev/vuln/GO-2025-4175
+  Standard library
+    Found in: crypto/x509@go1.23.12
+    Fixed in: crypto/x509@go1.24.11
+    Example traces found:
+      #1: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls x509.Certificate.Verify
+
+Vulnerability #28: GO-2025-4155
+    Excessive resource consumption when printing error string for host
+    certificate validation in crypto/x509
+  More info: https://pkg.go.dev/vuln/GO-2025-4155
+  Standard library
+    Found in: crypto/x509@go1.23.12
+    Fixed in: crypto/x509@go1.24.11
+    Example traces found:
+      #1: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls x509.Certificate.Verify
+      #2: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls x509.Certificate.VerifyHostname
+
+Vulnerability #29: GO-2025-4015
+    Excessive CPU consumption in Reader.ReadResponse in net/textproto
+  More info: https://pkg.go.dev/vuln/GO-2025-4015
+  Standard library
+    Found in: net/textproto@go1.23.12
+    Fixed in: net/textproto@go1.24.8
+    Example traces found:
+      #1: internal/mail/mail.go:98:26: mail.sendTLS calls smtp.NewClient, which calls textproto.Reader.ReadResponse
+
+Vulnerability #30: GO-2025-4013
+    Panic when validating certificates with DSA public keys in crypto/x509
+  More info: https://pkg.go.dev/vuln/GO-2025-4013
+  Standard library
+    Found in: crypto/x509@go1.23.12
+    Fixed in: crypto/x509@go1.24.8
+    Example traces found:
+      #1: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls x509.Certificate.Verify
+
+Vulnerability #31: GO-2025-4012
+    Lack of limit when parsing cookies can cause memory exhaustion in net/http
+  More info: https://pkg.go.dev/vuln/GO-2025-4012
+  Standard library
+    Found in: net/http@go1.23.12
+    Fixed in: net/http@go1.24.8
+    Example traces found:
+      #1: internal/soap/soap.go:147:23: soap.Client.Execute calls http.Client.Do
+      #2: internal/session/session.go:131:23: session.Store.GetOrCreate calls http.Request.Cookie
+
+Vulnerability #32: GO-2025-4011
+    Parsing DER payload can cause memory exhaustion in encoding/asn1
+  More info: https://pkg.go.dev/vuln/GO-2025-4011
+  Standard library
+    Found in: encoding/asn1@go1.23.12
+    Fixed in: encoding/asn1@go1.24.8
+    Example traces found:
+      #1: internal/kb/store.go:46:21: kb.Open calls sql.Open, which eventually calls asn1.Unmarshal
+
+Vulnerability #33: GO-2025-4010
+    Insufficient validation of bracketed IPv6 hostnames in net/url
+  More info: https://pkg.go.dev/vuln/GO-2025-4010
+  Standard library
+    Found in: net/url@go1.23.12
+    Fixed in: net/url@go1.24.8
+    Example traces found:
+      #1: internal/web/armory_proxy.go:177:24: web.mvGetOnce calls url.JoinPath
+      #2: internal/downloads/manage.go:457:21: downloads.SanitizeSourceURL calls url.Parse
+      #3: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls url.ParseRequestURI
+      #4: internal/soap/soap.go:147:23: soap.Client.Execute calls http.Client.Do, which eventually calls url.URL.Parse
+
+Vulnerability #34: GO-2025-4009
+    Quadratic complexity when parsing some invalid inputs in encoding/pem
+  More info: https://pkg.go.dev/vuln/GO-2025-4009
+  Standard library
+    Found in: encoding/pem@go1.23.12
+    Fixed in: encoding/pem@go1.24.8
+    Example traces found:
+      #1: internal/kb/store.go:46:21: kb.Open calls sql.Open, which eventually calls pem.Decode
+
+Vulnerability #35: GO-2025-4008
+    ALPN negotiation error contains attacker controlled information in
+    crypto/tls
+  More info: https://pkg.go.dev/vuln/GO-2025-4008
+  Standard library
+    Found in: crypto/tls@go1.23.12
+    Fixed in: crypto/tls@go1.24.8
+    Example traces found:
+      #1: internal/kb/store.go:46:21: kb.Open calls sql.Open, which eventually calls tls.Conn.Handshake
+      #2: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls tls.Conn.HandshakeContext
+      #3: internal/soap/soap.go:152:24: soap.Client.Execute calls io.ReadAll, which eventually calls tls.Conn.Read
+      #4: internal/wg/wg.go:374:13: wg.ServerConf calls fmt.Fprintf, which calls tls.Conn.Write
+      #5: internal/mail/mail.go:59:26: mail.sendTLS calls tls.Dialer.Dial
+      #6: internal/soap/soap.go:147:23: soap.Client.Execute calls http.Client.Do, which eventually calls tls.Dialer.DialContext
+
+Vulnerability #36: GO-2025-4007
+    Quadratic complexity when checking name constraints in crypto/x509
+  More info: https://pkg.go.dev/vuln/GO-2025-4007
+  Standard library
+    Found in: crypto/x509@go1.23.12
+    Fixed in: crypto/x509@go1.24.9
+    Example traces found:
+      #1: internal/config/dotenv.go:47:16: config.LoadDotEnv calls os.Setenv, which eventually calls x509.CertPool.AppendCertsFromPEM
+      #2: internal/web/passkey_handlers.go:179:38: web.Server.passkeyRegisterFinish calls webauthn.WebAuthn.FinishRegistration, which eventually calls x509.Certificate.CheckSignature
+      #3: internal/wg/agent.go:118:15: wg.Agent.serveHealth calls http.Server.Serve, which eventually calls x509.Certificate.Verify
+      #4: internal/config/dotenv.go:47:16: config.LoadDotEnv calls os.Setenv, which eventually calls x509.ParseCertificate
+      #5: internal/kb/store.go:46:21: kb.Open calls sql.Open, which eventually calls x509.ParsePKIXPublicKey
+
+Vulnerability #37: GO-2025-4006
+    Excessive CPU consumption in ParseAddress in net/mail
+  More info: https://pkg.go.dev/vuln/GO-2025-4006
+  Standard library
+    Found in: net/mail@go1.23.12
+    Fixed in: net/mail@go1.24.8
+    Example traces found:
+      #1: internal/validate/validate.go:101:32: validate.Email calls mail.ParseAddress
+
+Vulnerability #38: GO-2025-3553
+    Excessive memory allocation during header parsing in
+    github.com/golang-jwt/jwt
+  More info: https://pkg.go.dev/vuln/GO-2025-3553
+  Module: github.com/golang-jwt/jwt/v5
+    Found in: github.com/golang-jwt/jwt/v5@v5.2.1
+    Fixed in: github.com/golang-jwt/jwt/v5@v5.2.2
+    Example traces found:
+      #1: internal/web/passkey_handlers.go:179:38: web.Server.passkeyRegisterFinish calls webauthn.WebAuthn.FinishRegistration, which eventually calls jwt.Parser.ParseUnverified
+
+=== Package Results ===
+
+Vulnerability #1: GO-2026-5038
+    Quadratic complexity in WordDecoder.DecodeHeader in mime
+  More info: https://pkg.go.dev/vuln/GO-2026-5038
+  Standard library
+    Found in: mime@go1.23.12
+    Fixed in: mime@go1.25.11
+
+Vulnerability #2: GO-2026-4981
+    Crash when handling long CNAME response in net
+  More info: https://pkg.go.dev/vuln/GO-2026-4981
+  Standard library
+    Found in: net@go1.23.12
+    Fixed in: net@go1.25.10
+
+Vulnerability #3: GO-2026-4970
+    Root escape via symlink plus trailing slash in os
+  More info: https://pkg.go.dev/vuln/GO-2026-4970
+  Standard library
+    Found in: os@go1.23.12
+    Fixed in: os@go1.25.12
+
+Vulnerability #4: GO-2026-4864
+    TOCTOU permits root escape on Linux via Root.Chmod in os in
+    internal/syscall/unix
+  More info: https://pkg.go.dev/vuln/GO-2026-4864
+  Standard library
+    Found in: internal/syscall/unix@go1.23.12
+    Fixed in: internal/syscall/unix@go1.25.9
+    Platforms: linux
+
+Vulnerability #5: GO-2026-4503
+    Invalid result or undefined behavior in filippo.io/edwards25519
+  More info: https://pkg.go.dev/vuln/GO-2026-4503
+  Module: filippo.io/edwards25519
+    Found in: filippo.io/edwards25519@v1.1.0
+    Fixed in: filippo.io/edwards25519@v1.1.1
+
+Vulnerability #6: GO-2026-4342
+    Excessive CPU consumption when building archive index in archive/zip
+  More info: https://pkg.go.dev/vuln/GO-2026-4342
+  Standard library
+    Found in: archive/zip@go1.23.12
+    Fixed in: archive/zip@go1.24.12
+
+=== Module Results ===
+
+Vulnerability #1: GO-2026-6355
+    Prevent DoS on deadlocked established channel in golang.org/x/crypto/ssh
+  More info: https://pkg.go.dev/vuln/GO-2026-6355
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.56.0
+
+Vulnerability #2: GO-2026-6354
+    Prevent DoS on deadlocked undecided channel in golang.org/x/crypto/ssh
+  More info: https://pkg.go.dev/vuln/GO-2026-6354
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.56.0
+
+Vulnerability #3: GO-2026-6303
+    Source-address critical option not enforced for non-public-key auth
+    callbacks in golang.org/x/crypto/ssh
+  More info: https://pkg.go.dev/vuln/GO-2026-6303
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.55.0
+
+Vulnerability #4: GO-2026-5932
+    The golang.org/x/crypto/openpgp package is unmaintained, unsafe by design,
+    and has known security issues
+  More info: https://pkg.go.dev/vuln/GO-2026-5932
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: N/A
+
+Vulnerability #5: GO-2026-5033
+    Invoking pathological inputs can lead to client panic in
+    golang.org/x/crypto/ssh/agent
+  More info: https://pkg.go.dev/vuln/GO-2026-5033
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.52.0
+
+Vulnerability #6: GO-2026-5024
+    Invoking integer overflow in NewNTUnicodeString in golang.org/x/sys/windows
+  More info: https://pkg.go.dev/vuln/GO-2026-5024
+  Module: golang.org/x/sys
+    Found in: golang.org/x/sys@v0.23.0
+    Fixed in: golang.org/x/sys@v0.44.0
+    Platforms: windows
+
+Vulnerability #7: GO-2026-5023
+    Invoking VerifiedPublicKeyCallback permissions skip enforcement in
+    golang.org/x/crypto/ssh
+  More info: https://pkg.go.dev/vuln/GO-2026-5023
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.52.0
+
+Vulnerability #8: GO-2026-5021
+    Invoking auth bypass via unenforced @revoked status in
+    golang.org/x/crypto/ssh/knownhosts
+  More info: https://pkg.go.dev/vuln/GO-2026-5021
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.52.0
+
+Vulnerability #9: GO-2026-5020
+    Invoking infinite loop on large channel writes in golang.org/x/crypto/ssh
+  More info: https://pkg.go.dev/vuln/GO-2026-5020
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.52.0
+
+Vulnerability #10: GO-2026-5019
+    Invoking bypass of FIDO/U2F security keys physical interaction in
+    golang.org/x/crypto/ssh
+  More info: https://pkg.go.dev/vuln/GO-2026-5019
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.52.0
+
+Vulnerability #11: GO-2026-5018
+    Invoking pathological RSA/DSA parameters may cause DoS in
+    golang.org/x/crypto/ssh
+  More info: https://pkg.go.dev/vuln/GO-2026-5018
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.52.0
+
+Vulnerability #12: GO-2026-5017
+    Invoking client can cause server deadlock on unexpected responses in
+    golang.org/x/crypto/ssh
+  More info: https://pkg.go.dev/vuln/GO-2026-5017
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.52.0
+
+Vulnerability #13: GO-2026-5016
+    Invoking memory leak when rejecting channels can lead to DoS in
+    golang.org/x/crypto/ssh
+  More info: https://pkg.go.dev/vuln/GO-2026-5016
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.52.0
+
+Vulnerability #14: GO-2026-5015
+    Invoking server panic during CheckHostKey/Authenticate in
+    golang.org/x/crypto/ssh
+  More info: https://pkg.go.dev/vuln/GO-2026-5015
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.52.0
+
+Vulnerability #15: GO-2026-5014
+    Invoking bypass of certificate restrictions in golang.org/x/crypto/ssh
+  More info: https://pkg.go.dev/vuln/GO-2026-5014
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.52.0
+
+Vulnerability #16: GO-2026-5013
+    Invoking byte arithmetic causes underflow and panic in
+    golang.org/x/crypto/ssh
+  More info: https://pkg.go.dev/vuln/GO-2026-5013
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.52.0
+
+Vulnerability #17: GO-2026-5006
+    Invoking agent constraints dropped when forwarding keys in
+    golang.org/x/crypto/ssh/agent
+  More info: https://pkg.go.dev/vuln/GO-2026-5006
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.52.0
+
+Vulnerability #18: GO-2026-5005
+    Invoking key constraints not enforced in golang.org/x/crypto/ssh/agent
+  More info: https://pkg.go.dev/vuln/GO-2026-5005
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.52.0
+
+Vulnerability #19: GO-2026-4976
+    ReverseProxy forwards queries with more than urlmaxqueryparams parameters in
+    net/http/httputil
+  More info: https://pkg.go.dev/vuln/GO-2026-4976
+  Standard library
+    Found in: stdlib@go1.23.12
+    Fixed in: stdlib@go1.25.10
+
+Vulnerability #20: GO-2026-4869
+    Unbounded allocation for old GNU sparse in archive/tar
+  More info: https://pkg.go.dev/vuln/GO-2026-4869
+  Standard library
+    Found in: stdlib@go1.23.12
+    Fixed in: stdlib@go1.25.9
+
+Vulnerability #21: GO-2025-4135
+    Malformed constraint may cause denial of service in
+    golang.org/x/crypto/ssh/agent
+  More info: https://pkg.go.dev/vuln/GO-2025-4135
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.45.0
+
+Vulnerability #22: GO-2025-4134
+    Unbounded memory consumption in golang.org/x/crypto/ssh
+  More info: https://pkg.go.dev/vuln/GO-2025-4134
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.45.0
+
+Vulnerability #23: GO-2025-4116
+    Potential denial of service in golang.org/x/crypto/ssh/agent
+  More info: https://pkg.go.dev/vuln/GO-2025-4116
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.43.0
+
+Vulnerability #24: GO-2025-4014
+    Unbounded allocation when parsing GNU sparse map in archive/tar
+  More info: https://pkg.go.dev/vuln/GO-2025-4014
+  Standard library
+    Found in: stdlib@go1.23.12
+    Fixed in: stdlib@go1.24.8
+
+Vulnerability #25: GO-2025-3487
+    Potential denial of service in golang.org/x/crypto
+  More info: https://pkg.go.dev/vuln/GO-2025-3487
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.35.0
+
+Vulnerability #26: GO-2024-3321
+    Misuse of connection.serverAuthenticate may cause authorization bypass in
+    golang.org/x/crypto
+  More info: https://pkg.go.dev/vuln/GO-2024-3321
+  Module: golang.org/x/crypto
+    Found in: golang.org/x/crypto@v0.26.0
+    Fixed in: golang.org/x/crypto@v0.31.0
+
+Your code is affected by 38 vulnerabilities from 1 module and the Go standard library.
+This scan also found 6 vulnerabilities in packages you import and 26
+vulnerabilities in modules you require, but your code doesn't appear to call
+these vulnerabilities.

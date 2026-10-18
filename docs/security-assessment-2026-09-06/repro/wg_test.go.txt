@@ -1,0 +1,39 @@
+package wg
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+)
+
+func TestAssessmentForwardRulesLackDestinationAndInputPolicy(t *testing.T) {
+	a := NewAgent(t.TempDir(), "wg0", ServerAddr, "", 51820, 3724, 28085, 3080, nil)
+	var cmds []string
+	a.run = func(name string, args ...string) error {
+		c := name + " " + strings.Join(args, " ")
+		cmds = append(cmds, c)
+		if name == "iptables" && (args[0] == "-D" || args[0] == "-C") {
+			return fmt.Errorf("fixture missing")
+		}
+		return nil
+	}
+	if err := a.ensureForward(); err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, c := range cmds {
+		if strings.Contains(c, "-A FORWARD -i wg0 -p tcp") && strings.Contains(c, "-j ACCEPT") {
+			found = true
+			if strings.Contains(c, " -d ") {
+				t.Fatal("destination restriction exists")
+			}
+		}
+		if strings.Contains(c, " INPUT ") {
+			t.Fatal("input policy exists")
+		}
+	}
+	if !found {
+		t.Fatal("missing allow rule")
+	}
+	t.Log("Confirmed: allow rule covers all destinations on selected ports; no host INPUT restriction")
+}

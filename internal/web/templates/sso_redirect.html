@@ -1,0 +1,8 @@
+{{template "header" .}}
+<section class="panel narrow">
+  <h1>Continue to {{.SSOName}}</h1>
+  <p>Taking you to your identity provider to verify your account.</p>
+  <p><a id="sso-continue" href="{{.Data.AuthorizationURL}}" class="btn btn-gold">Continue</a></p>
+</section>
+<script src="/static/js/sso-redirect.js" defer></script>
+{{template "footer" .}}

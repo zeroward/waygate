@@ -1,0 +1,27 @@
+# Allow only build inputs. Runtime data must never enter builder layers/cache.
+**
+!go.mod
+!go.sum
+!cmd/
+!cmd/**
+!internal/
+!internal/**
+!content/
+!content/**
+!Dockerfile
+!**/.dockerignore
+**/.env*
+**/*.sqlite*
+**/*.db
+**/*.key
+**/*.pem
+**/*.p12
+**/*.pfx
+**/.git
+**/data/**
+**/*_test.go
+**/*.zip
+**/*.7z
+**/*.rar
+**/*.exe
+**/*.mpq

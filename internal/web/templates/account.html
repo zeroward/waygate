@@ -1,0 +1,355 @@
+{{template "header" .}}
+{{$d := .Data}}
+{{if .User}}
+<div class="account" data-sections data-default-section="{{if or $d.TOTPSecret $d.TOTPCodes}}security{{else}}overview{{end}}">
+  <header class="page-heading">
+    <p class="eyebrow">Your account</p>
+    <h1>{{.User.Username}}</h1>
+    <p class="lede">Everything you need to enter the realm.</p>
+  </header>
+  <nav class="section-nav" aria-label="Account sections">
+    <a href="#overview" data-section-link>Overview</a>
+    <a href="#wow" data-section-link>Game logins</a>
+    <a href="#characters" data-section-link>Characters</a>
+    <a href="#security" data-section-link>Security</a>
+  </nav>
+  <section class="panel" id="overview" data-section>
+    <h2>Ready to play</h2>
+    <p class="hint">Your website account manages your game logins and characters.</p>
+    <ol class="setup-steps">
+      <li><span class="step-number" aria-hidden="true">01</span><div><h3><a href="#wow">Game logins</a></h3><p>{{if $d.WowLogins}}{{len $d.WowLogins}} linked. View your usernames or manage passwords.{{else}}Add a game login to use in the WoW client.{{end}}</p></div></li>
+      <li><span class="step-number" aria-hidden="true">02</span><div><h3><a href="/downloads">Client &amp; patches</a></h3><p>Get the 3.3.5a client and required patches.</p></div></li>
+      <li><span class="step-number" aria-hidden="true">03</span><div><h3><a href="/kb/how-to-connect">Connection guide</a></h3><p>Set up your connection and join the realm.{{if .NetBirdSetupURL}} <a href="{{.NetBirdSetupURL}}" rel="noreferrer">Set up NetBird</a>{{end}}</p></div></li>
+    </ol>
+    <dl class="kv">
+      <dt>Website username</dt><dd>{{.User.Username}}</dd>
+      <dt>Email</dt><dd>{{.User.Email}}</dd>
+      <dt>Sign-in method</dt><dd>{{if $d.SSOAccount}}{{.SSOName}}{{else}}Website password{{if $d.TOTPOn}} + authenticator{{end}}{{end}}</dd>
+    </dl>
+    <p class="kb-edit-actions"><a class="btn" href="/tickets">My tickets</a><a class="btn" href="#security">Security settings</a></p>
+  </section>
+  <section class="panel" id="wow" data-section>
+    <h2>Game logins</h2>
+    <p class="hint">Use these credentials in the WoW client. You can have up to {{$d.WowMax}}. {{if $d.SSOAccount}}Verify with SSO before viewing or changing client credentials.{{else}}Your website password unlocks saved client passwords. Passkeys do not unlock them.{{end}}</p>
+    {{if and $d.SSOAccount (not $d.WowUnlocked)}}
+    <form method="post" action="/account/sso/reauth" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <input type="hidden" name="purpose" value="wow-reveal">
+      <button class="btn">Verify with SSO to view passwords</button>
+    </form>
+    {{else if not $d.WowUnlocked}}
+    <form method="post" action="/account/wow/unlock" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Website password
+        <input type="password" name="current_password" required maxlength="16" autocomplete="current-password">
+      </label>
+      <button type="submit" class="btn">Unlock client passwords</button>
+    </form>
+    {{end}}
+    {{if and $d.SSOAccount (not $d.CanChangeGame)}}
+    <form method="post" action="/account/sso/reauth" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <input type="hidden" name="purpose" value="wow-password">
+      <button class="btn">Verify with SSO to change or save a password</button>
+    </form>
+    {{end}}
+    {{if $d.WowLogins}}
+    <div class="table-wrap" role="region" aria-label="Game logins" tabindex="0">
+      <table class="wow-logins">
+        <thead>
+          <tr>
+            <th>Username</th>
+            <th>Password</th>
+            <th>Last login</th>
+            <th>Characters</th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $d.WowLogins}}
+          <tr>
+            <td class="name"><code>{{.Username}}</code></td>
+            <td>
+              {{if not $d.WowUnlocked}}
+              <span class="muted">Unlock to view</span>
+              {{else if .Password}}
+              <div class="secret-pass">
+                <input id="wow-pass-{{.Username}}" aria-label="Game password for {{.Username}}" type="password" value="{{.Password}}" readonly autocomplete="off" spellcheck="false">
+                <button type="button" class="btn" data-reveal-pass="wow-pass-{{.Username}}">Show</button>
+              </div>
+              {{else}}
+              <span class="muted">Saved copy unavailable; your game login still works.</span>
+
+              {{end}}
+              {{if $d.CanChangeGame}}
+              <details><summary>Change or save game password</summary>
+                <form method="post" action="/account/wow/password" class="form">
+                  <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+                  <input type="hidden" name="wow_username" value="{{.Username}}">
+                  <label>Action<select name="mode"><option value="reset">Set a new game password</option><option value="remember">Save current game password</option></select></label>
+                  <label>Game password<input type="password" name="wow_password" required minlength="8" maxlength="16" autocomplete="new-password"></label>
+                  <label>Confirm<input type="password" name="wow_password_confirm" required minlength="8" maxlength="16" autocomplete="new-password"></label>
+                  <button class="btn">Save game password</button>
+                </form>
+              </details>
+              {{end}}
+            </td>
+            <td>{{.LastLogin}}</td>
+            <td>{{.Chars}}</td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="empty">No client logins linked yet.</p>
+    {{end}}
+    <details class="action-disclosure" id="add-login"{{if or (not $d.WowLogins) (and $d.SSOAccount $d.CanCreateGame)}} open{{end}}>
+      <summary>Add a game login</summary>
+    {{if and $d.SSOAccount (not $d.CanCreateGame)}}
+    <form method="post" action="/account/sso/reauth" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <input type="hidden" name="purpose" value="wow-create">
+      <button class="btn">Verify with SSO to add a client login</button>
+    </form>
+    {{else}}
+    <form method="post" action="/account/wow" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Game username
+        <input name="wow_username" required minlength="3" maxlength="16" pattern="[A-Za-z0-9]{3,16}" autocomplete="off">
+      </label>
+      <label>Game password
+        <input type="password" name="wow_password" required minlength="8" maxlength="16" autocomplete="new-password">
+      </label>
+      <label>Confirm
+        <input type="password" name="wow_password_confirm" required minlength="8" maxlength="16" autocomplete="new-password">
+      </label>
+      <button type="submit" class="btn btn-gold">Add game login</button>
+    </form>
+    {{end}}
+    </details>
+  </section>
+
+  <section class="panel" id="characters" data-section>
+    <h2>Characters</h2>
+    <p class="hint">View characters across your game logins. Unstuck returns an offline character to their inn.</p>
+    {{if $d.Characters}}
+    <div class="table-wrap" role="region" aria-label="Characters" tabindex="0">
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Login</th>
+            <th>Level</th>
+            <th>Class</th>
+            <th>Gold</th>
+            <th>Played</th>
+            <th>Last logout</th>
+            <th>Location</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {{range $d.Characters}}
+          <tr>
+            <td class="name"><a href="/armory/{{.Name}}">{{.Name}}</a>{{if .Online}} <span class="char-online">Online</span>{{end}}</td>
+            <td>{{if .Login}}<code>{{.Login}}</code>{{else}}—{{end}}</td>
+            <td>{{.Level}}</td>
+            <td class="class-{{classSlug .ClassID}}">{{.Class}} <span class="muted">{{.Race}}</span></td>
+            <td class="money">{{.Gold}}</td>
+            <td>{{.Played}}</td>
+            <td>{{.Logout}}</td>
+            <td>{{.Location}}</td>
+            <td class="char-unstuck">
+              {{if .Online}}
+              <span class="muted">Log out first</span>
+              {{else}}
+              <form method="post" action="/account/unstuck" data-unstuck>
+                <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+                <input type="hidden" name="guid" value="{{.GUID}}">
+                <button type="submit" class="btn btn-gold">Unstuck</button>
+              </form>
+              {{end}}
+            </td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+    </div>
+    {{else}}
+    <p class="empty">No characters yet. Log into the realm with this account to create one.</p>
+    {{end}}
+  </section>
+
+  <section class="panel" id="security" data-section>
+    <h2>Account security</h2>
+    <p class="hint">Manage how you sign in to this website. Game passwords are managed under <a href="#wow">Game logins</a>.</p>
+    {{if $d.SSOAccount}}
+    <h3>Single sign-on connected</h3>
+    <p>Use {{.SSOName}} to sign in. Website passwords and passkeys are disabled; your provider manages account recovery and authentication.</p>
+    {{else if .SSOEnabled}}
+    <h3>Connect single sign-on</h3>
+    <p>Keep this account and its WoW logins. After linking, sign in only through {{.SSOName}}.</p>
+    <form method="post" action="/account/sso/link" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Website password<input type="password" name="current_password" required maxlength="16" autocomplete="current-password"></label>
+      {{if $d.TOTPOn}}<label>Authenticator or recovery code<input name="code" required maxlength="20" autocomplete="one-time-code"></label>{{end}}
+      <button class="btn">Connect {{.SSOName}}</button>
+    </form>
+    {{end}}
+  {{if not $d.SSOAccount}}
+  <section class="security-block account-pass">
+    <h3 id="password">Website password</h3>
+    <p class="hint">This is for the Gatehouse site only. It does not change Wow.exe passwords.</p>
+    <form method="post" action="/account/password" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Current password
+        <input type="password" name="current_password" required maxlength="16" autocomplete="current-password">
+      </label>
+      <label>New password
+        <input type="password" name="new_password" required minlength="8" maxlength="16" autocomplete="new-password">
+      </label>
+      <label>Confirm new password
+        <input type="password" name="new_password_confirm" required minlength="8" maxlength="16" autocomplete="new-password">
+      </label>
+      {{if $d.TOTPOn}}
+      <label>Authenticator code
+        <input name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="20">
+      </label>
+      {{end}}
+      <button type="submit" class="btn btn-gold">Update password</button>
+    </form>
+  </section>
+
+  <dialog id="security-verify" data-csrf="{{.CSRF}}">
+    <form method="dialog" class="form">
+      <h2>Verify this change</h2>
+      <p>Use your website password{{if $d.TOTPOn}} and authenticator code{{end}}, or an existing passkey with its PIN or biometric.</p>
+      <label>Website password<input type="password" data-verify-password autocomplete="current-password"></label>
+      {{if $d.TOTPOn}}<label>Authenticator or recovery code<input data-verify-code autocomplete="one-time-code"></label>{{end}}
+      <p data-verify-status role="alert"></p>
+      <button type="button" class="btn" data-verify-submit>Verify with password</button>
+      {{if $d.Passkeys}}<button type="button" class="btn" data-verify-passkey>Verify with passkey</button>{{end}}
+      <button value="cancel" class="btn">Cancel</button>
+    </form>
+  </dialog>
+  <section class="security-block account-pass" id="totp">
+    <h3>Authenticator (TOTP)</h3>
+    <p class="hint">Account security changes require fresh verification.</p>
+    <p class="hint">Protects website login only. The 3.3.5a client does not use this.</p>
+    {{if $d.TOTPCodes}}
+    <p class="flash flash-info">Recovery codes (store these; they will not be shown again):</p>
+    <ul class="plain">{{range $d.TOTPCodes}}<li><code>{{.}}</code></li>{{end}}</ul>
+    {{end}}
+    {{if $d.TOTPOn}}
+    <form method="post" data-sensitive-purpose="totp-disable" action="/account/totp/disable" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Website password<input type="password" name="current_password" required autocomplete="current-password"></label>
+      <label>Current code
+        <input name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="20">
+      </label>
+      <button type="submit" class="btn">Disable authenticator</button>
+    </form>
+    {{else if $d.TOTPSecret}}
+    <p class="hint">Scan this QR with your authenticator app, then enter a 6-digit code to confirm.</p>
+    {{if $d.TOTPQR}}
+    <p class="totp-qr-wrap"><img src="{{$d.TOTPQR}}" alt="Authenticator QR code" width="220" height="220" class="totp-qr"></p>
+    {{end}}
+    <p>Secret: <code>{{$d.TOTPSecret}}</code></p>
+    {{if $d.TOTPURL}}<p class="hint"><a href="{{$d.TOTPURL}}">Open in authenticator</a> if you cannot scan.</p>{{end}}
+    <form method="post" action="/account/totp/confirm" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Code from the app
+        <input name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="8" pattern="[0-9]{6}">
+      </label>
+      <button type="submit" class="btn btn-gold">Confirm</button>
+    </form>
+    {{else}}
+    <form method="post" data-sensitive-purpose="totp-start" action="/account/totp/start" class="form">
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label>Website password
+        <input type="password" name="current_password" required maxlength="16" autocomplete="current-password">
+      </label>
+      <button type="submit" class="btn btn-gold">Set up authenticator</button>
+    </form>
+    {{end}}
+  </section>
+
+  {{if $d.PasskeysOK}}
+  <section class="security-block account-pass" id="passkeys" data-csrf="{{.CSRF}}">
+    <h3>Passkeys</h3>
+    <p class="hint">Website login only — Face ID, Windows Hello, a security key, or a password manager. This cannot log you into Wow.exe.</p>
+    {{if $d.Passkeys}}
+    <ul class="passkey-list">
+      {{range $d.Passkeys}}
+      <li class="passkey-row">
+        <span><strong>{{.Name}}</strong>{{if .Created}} <span class="muted">{{.Created}}</span>{{end}}</span>
+        <form method="post" data-sensitive-purpose="passkey-delete" action="/account/passkey/delete">
+          <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
+          <input type="hidden" name="id" value="{{.ID}}">
+          <button type="submit" class="btn">Remove</button>
+        </form>
+      </li>
+      {{end}}
+    </ul>
+    {{else}}
+    <p class="empty">No passkeys yet.</p>
+    {{end}}
+    <p class="hint" data-passkey-status hidden></p>
+    <div class="form passkey-add">
+      <label>Name
+        <input data-passkey-name maxlength="40" placeholder="Phone, security key, …" autocomplete="off">
+      </label>
+      <button type="button" class="btn btn-gold" data-passkey-register>Add passkey</button>
+    </div>
+  </section>
+  {{end}}
+  {{end}}
+  </section>
+</div>
+{{else if $d.TOTPPending}}
+<section class="panel narrow" data-csrf="{{.CSRF}}" data-passkey-next="{{.Next}}">
+  <p class="eyebrow">Second factor</p>
+  <h1>Authenticator</h1>
+  <p class="lede">Enter the 6-digit code from your app, or a recovery code.</p>
+  <form method="post" action="/account/login/totp" class="form" autocomplete="off">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <label>Code
+      <input name="code" inputmode="numeric" autocomplete="one-time-code" required maxlength="16" autofocus>
+    </label>
+    <button type="submit" class="btn btn-gold">Continue</button>
+  </form>
+  {{if $d.PasskeysOK}}
+  <p class="passkey-or muted">or</p>
+  <p class="hint" data-passkey-status hidden></p>
+  <button type="button" class="btn" data-passkey-login>Use a passkey instead</button>
+  {{end}}
+</section>
+{{else}}
+<section class="panel narrow" data-csrf="{{.CSRF}}" data-passkey-next="{{.Next}}">
+  <p class="eyebrow">Welcome back</p>
+  <h1>Sign in</h1>
+  <p class="lede">Sign in to manage your game logins, downloads, and characters.</p>
+  {{if .SSOEnabled}}<p><a class="btn btn-gold" href="/auth/oidc/start?next={{.Next}}">Sign in with {{.SSOName}}</a></p>{{end}}
+  {{if .SSOEnabled}}<p class="auth-divider">Or use your website account</p>{{end}}
+  <form method="post" action="/account/login" class="form" autocomplete="on">
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    {{if and .Next (ne .Next "/account")}}<input type="hidden" name="next" value="{{.Next}}">{{end}}
+    <label>Username
+      <input name="username" required maxlength="16" autocomplete="username webauthn">
+    </label>
+    <label>Password
+      <input type="password" name="password" required maxlength="16" autocomplete="current-password">
+    </label>
+    <button type="submit" class="btn btn-gold">Sign in</button>
+  </form>
+  {{if $d.PasskeysOK}}
+  <p class="passkey-or muted">or</p>
+  <p class="hint" data-passkey-status hidden></p>
+  <button type="button" class="btn" data-passkey-login>Sign in with a passkey</button>
+  {{end}}
+  <p class="muted">No account? <a href="/register">Create account</a>
+    {{if .SMTP}} · <a href="/account/reset">Forgot password</a>{{end}}
+  </p>
+</section>
+{{end}}
+{{template "footer" .}}

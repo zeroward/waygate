@@ -1,0 +1,59 @@
+{{template "header" .}}
+{{$d := .Data}}
+{{$a := $d.Article}}
+<section class="panel kb-edit">
+  <p class="eyebrow">{{if $d.New}}New article{{else}}Edit article{{end}}</p>
+  <h1>{{if $d.New}}New article{{else}}{{$a.Title}}{{end}}</h1>
+  {{if $d.Error}}<p class="flash flash-error" role="alert">{{$d.Error}}</p>{{end}}
+  <form method="post" action="{{if $d.New}}/staff/kb{{else}}/staff/kb/{{$a.ID}}{{end}}" class="kb-edit-form" data-kb-editor>
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <div class="kb-edit-meta">
+      <label>Title
+        <input name="title" value="{{$a.Title}}" required maxlength="120" autocomplete="off" data-kb-title>
+      </label>
+      <label>Slug
+        <input name="slug" value="{{$a.Slug}}" maxlength="80" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" autocomplete="off" data-kb-slug{{if not $d.New}} data-kb-slug-locked="1"{{end}}>
+        <span class="hint">URL: /kb/<span data-kb-slug-preview>{{if $a.Slug}}{{$a.Slug}}{{else}}slug{{end}}</span></span>
+      </label>
+      <label>Category
+        <input name="category" value="{{$a.Category}}" list="kb-cats" maxlength="64" autocomplete="off">
+        <datalist id="kb-cats">
+          <option value="Getting started">
+          {{range $d.Categories}}<option value="{{.}}">{{end}}
+        </datalist>
+      </label>
+      <label>Sort order
+        <input type="number" name="sort_order" value="{{$a.SortOrder}}" step="1">
+      </label>
+      <label>Summary
+        <input name="summary" value="{{$a.Summary}}" maxlength="240" autocomplete="off" placeholder="One line on the index">
+      </label>
+      <label class="kb-check">
+        <input type="checkbox" name="published" value="1" {{if $a.Published}}checked{{end}}> Published
+      </label>
+    </div>
+    <div class="kb-edit-panes">
+      <label class="kb-edit-body">Markdown
+        <textarea name="body_markdown" rows="22" data-kb-body>{{$a.BodyMarkdown}}</textarea>
+      </label>
+      <div>
+        <p class="kb-preview-label">Preview</p>
+        <div class="prose kb-preview" data-kb-preview>{{$d.Preview}}</div>
+      </div>
+    </div>
+    <p class="kb-edit-actions">
+      <button type="submit" class="btn btn-gold">Save</button>
+      {{if not $d.New}}
+      {{if $a.Slug}}<a class="btn" href="/kb/{{$a.Slug}}{{if not $a.Published}}?preview=1{{end}}">View</a>{{end}}
+      {{end}}
+      <a class="btn" href="/staff/kb">Back</a>
+    </p>
+  </form>
+  {{if not $d.New}}
+  <form method="post" action="/staff/kb/{{$a.ID}}/delete" class="kb-delete" data-kb-delete>
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <button type="submit" class="btn">Delete</button>
+  </form>
+  {{end}}
+</section>
+{{template "footer" .}}

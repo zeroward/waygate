@@ -1,0 +1,89 @@
+{{template "header" .}}
+{{$s := .Data}}
+<div class="home">
+  <section class="home-hero play-hero">
+    <div class="home-kickers">
+      <p class="home-kicker">
+        <span class="live{{if $s.RealmUp}} is-up{{end}}" aria-hidden="true"></span>
+        {{if $s.RealmUp}}Online{{else}}Offline{{end}}
+        <span class="dot">·</span>
+        WotLK 3.3.5a
+      </p>
+    </div>
+    <h1>{{.RealmName}}</h1>
+    <p class="lede">{{$s.Blurb}}</p>
+    <div class="hero-actions">
+      {{if .User}}
+      <a class="btn btn-gold" href="/account#overview">Continue setup <span aria-hidden="true">→</span></a>
+      <a class="btn" href="/companion">Quest companion</a>
+      {{else}}
+      <a class="btn btn-gold" href="/register">Create account <span aria-hidden="true">→</span></a>
+      <a class="btn" href="/account">Sign in</a>
+      {{end}}
+    </div>
+  </section>
+
+  <section class="journey" aria-labelledby="journey-title">
+    <div class="section-heading"><h2 id="journey-title">Your journey to Northrend</h2><span class="hint">Wrath of the Lich King · 3.3.5a</span></div>
+    <ol class="setup-steps">
+      <li><span class="step-number" aria-hidden="true">01</span><div><h3><a href="{{if .User}}/account#wow{{else}}/register{{end}}">{{if .User}}Manage game logins{{else}}Create your account{{end}}</a></h3><p>Set up the credentials you’ll use in the game.</p></div></li>
+      <li><span class="step-number" aria-hidden="true">02</span><div><h3><a href="/downloads">Get the client</a></h3><p>Download the client and required patches.</p></div></li>
+      <li><span class="step-number" aria-hidden="true">03</span><div><h3><a href="/kb/how-to-connect">Connect to the realm</a></h3><p>Follow the connection guide and enter Azeroth.{{if .NetBirdSetupURL}} <a href="{{.NetBirdSetupURL}}" rel="noreferrer">Set up NetBird</a>{{end}}</p></div></li>
+    </ol>
+  </section>
+
+  <section class="metrics" aria-label="Realm population">
+    <a class="metric" href="/online">
+      <span class="metric-label">Players</span>
+      <span class="metric-value">{{$s.Online}}</span>
+      <span class="metric-sub"><span class="faction-Alliance">{{$s.Alliance}} Alliance</span> · <span class="faction-Horde">{{$s.Horde}} Horde</span></span>
+    </a>
+    <div class="metric">
+      <span class="metric-label">Bots</span>
+      <span class="metric-value">{{$s.OnlineBots}}</span>
+      <span class="metric-sub">Playerbots in the world</span>
+    </div>
+    <div class="metric">
+      <span class="metric-label">GMs</span>
+      <span class="metric-value">{{$s.OnlineGMs}}</span>
+      <span class="metric-sub">Included in players</span>
+    </div>
+  </section>
+
+  {{if $s.Calendar}}
+  <section class="panel home-calendar">
+    <h2>Realm calendar</h2>
+    <ul>
+      {{range $s.Calendar}}
+      <li>
+        <time datetime="{{.Date}}">{{.DisplayDate}}</time>
+        <div>
+          <strong>{{.Title}}</strong>
+          {{if .Detail}}<span>{{.Detail}}</span>{{end}}
+        </div>
+      </li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
+
+  {{if $s.LatestKB}}
+  <section class="panel home-kb">
+    <p class="eyebrow">{{$s.LatestKB.Category}}</p>
+    <h2><a href="/kb/{{$s.LatestKB.Slug}}">{{$s.LatestKB.Title}}</a></h2>
+    {{if $s.LatestKB.Summary}}<p class="lede">{{$s.LatestKB.Summary}}</p>{{end}}
+  </section>
+  {{end}}
+
+  {{if $s.Modules}}
+  <details class="home-mods">
+    <summary>Installed modules <span class="mod-count">{{len $s.Modules}}</span></summary>
+    <ul class="mod-list">
+      {{range $s.Modules}}
+      <li class="mod-chip"{{if .Blurb}} title="{{.Blurb}}"{{end}}>{{.Title}}{{if .Version}} <span class="mod-ver">{{.Version}}</span>{{end}}</li>
+      {{end}}
+    </ul>
+  </details>
+  {{end}}
+</div>
+{{template "footer" .}}

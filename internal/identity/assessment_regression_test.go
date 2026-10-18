@@ -1,0 +1,95 @@
+package identity
+
+import (
+	"context"
+	"encoding/base64"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/pquerna/otp/totp"
+)
+
+// Targeted findings now assert the hardened behavior. Historical output is retained separately.
+func TestRegressionStoredHashDecryptsClientPassword(t *testing.T) {
+	id, _ := testID(t)
+	ctx := context.Background()
+	u, err := id.Register(ctx, "AuditHero", "Website-Only123", "audit@example.invalid", "AuditGame", "Game-Only456", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err = id.GetByID(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Attacker inputs below are exclusively values stored in SQLite.
+	kek, err := base64.RawStdEncoding.DecodeString(strings.Split(u.PasswordHash, "$")[4])
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrap, nonce, err := id.Store().DEKWrap(ctx, u.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := openAAD(kek, nonce, wrap, wrapAAD(u.ID)); err == nil {
+		t.Fatal("stored verifier decrypted key")
+	}
+	if _, err := openAAD(derive(kek, "dek-wrap"), nonce, wrap, wrapAAD(u.ID)); err == nil {
+		t.Fatal("derived stored verifier decrypted key")
+	}
+	t.Log("Fixed: stored verifier cannot unwrap credential key")
+}
+
+func TestRegressionTOTPReplayAndRecoveryWriteFailure(t *testing.T) {
+	id, _ := testID(t)
+	ctx := context.Background()
+	u, err := id.Store().CreateUser(ctx, "AUDITTOTP", "audit@example.invalid", "!migrated", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secret, _, err := id.Store().StartTOTP(ctx, u.ID, u.Username, "Audit")
+	if err != nil {
+		t.Fatal(err)
+	}
+	code, err := totp.GenerateCode(secret, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	codes, err := id.Store().ConfirmTOTP(ctx, u.ID, code)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := id.Store().ValidateTOTP(ctx, u.ID, code); err == nil {
+			t.Fatal("replayed timestep accepted")
+		}
+	}
+	_, err = id.store.db.Exec(`CREATE TRIGGER fail_recovery BEFORE UPDATE OF recovery_hashes ON user_totp BEGIN SELECT RAISE(FAIL, 'fixture write failure'); END`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ {
+		if err := id.Store().ValidateTOTP(ctx, u.ID, codes[0]); err == nil {
+			t.Fatal("recovery accepted despite failed consumption")
+		}
+	}
+	t.Log("Fixed: TOTP replay and failed recovery consumption rejected")
+}
+
+func TestRegressionTOTPStatusFailsOpen(t *testing.T) {
+	id, _ := testID(t)
+	ctx := context.Background()
+	u, err := id.Store().CreateUser(ctx, "AUDITFAIL", "audit@example.invalid", "!migrated", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = id.store.db.Exec(`DROP TABLE user_totp`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	enabled, err := id.Store().TOTPStatus(ctx, u.ID)
+	if enabled || err == nil {
+		t.Fatal("MFA lookup failure was not returned")
+	}
+	t.Log("Fixed: missing MFA table returns error")
+}

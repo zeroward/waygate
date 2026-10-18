@@ -1,0 +1,8 @@
+fuzz: elapsed: 0s, gathering baseline coverage: 0/6 completed
+fuzz: elapsed: 0s, gathering baseline coverage: 6/6 completed, now fuzzing with 2 workers
+fuzz: elapsed: 3s, execs: 260150 (86699/sec), new interesting: 57 (total: 63)
+fuzz: elapsed: 6s, execs: 526949 (88926/sec), new interesting: 63 (total: 69)
+fuzz: elapsed: 9s, execs: 813464 (95527/sec), new interesting: 66 (total: 72)
+fuzz: elapsed: 10s, execs: 909492 (86997/sec), new interesting: 66 (total: 72)
+PASS
+ok  	github.com/zeroward/waygate/internal/downloads	10.110s

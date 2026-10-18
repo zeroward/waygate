@@ -1,0 +1,128 @@
+# Idempotent: open the four follow-up issues if missing.
+name: open-followup-issues
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/open-followup-issues.yml"
+
+permissions:
+  issues: write
+
+jobs:
+  open:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const { data: open } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: "open",
+              per_page: 100,
+            });
+            const titles = new Set(open.map((i) => i.title));
+            const issues = [
+              {
+                title: "Home: show latest published KB article",
+                body: `Pin the newest **published** Knowledge Base article on \`/\` (by \`updated_at\`).
+
+            ## Product
+            - Below home metrics: title, category, one-line summary, link to \`/kb/:slug\`
+            - Hide if none published
+            - Reuse \`kb.ListPublished\` — no extra nav, no drafts
+
+            ## Checklist
+            - [ ] Home card for latest published article
+            - [ ] Empty/missing seed does not break home
+            - [ ] Tests: home HTML includes the seed “How to connect” title
+            `,
+              },
+              {
+                title: "Leaderboards: gold tab",
+                body: `Add a **Gold** tab on \`/leaderboards\` (\`?tab=gold\`).
+
+            ## Product
+            - Same table chrome as playtime/kills/honor/arena
+            - Source: \`characters.money\`, format with existing \`wow.Gold\`
+            - Exclude \`BOT_USERNAME_PREFIXES\` (\`rndbot*\`)
+            - Consider a small denylist for AH-bot names (e.g. Auctioneer) — call out in the PR
+            - Do not link Armory until issue #1 ships (plain names are fine)
+
+            ## Checklist
+            - [ ] \`?tab=gold\` query + tab in the template
+            - [ ] Bots excluded
+            - [ ] Demo snapshot has a gold board
+            - [ ] Tests for tab and formatting
+            `,
+              },
+              {
+                title: "Admin panel: staff action log",
+                body: `Persist staff/player-admin events you already slog into Gatehouse **SQLite** (not the WoW DBs) and show them on \`/staff\`.
+
+            ## Events
+            Unstuck, staff account create/reset/rank, download upload/delete, KB create/update/delete.
+
+            ## Product
+            - Table on Admin panel: time, actor, action, target (newest first)
+            - Retention: last ~200 rows or 30 days
+            - \`GM_MIN_LEVEL\` same as the rest of \`/staff\`
+
+            ## Data
+            New \`staff_events\` table in \`data/\` (same SQLite as KB). Insert-only from handlers.
+
+            ## Checklist
+            - [ ] Schema/migration
+            - [ ] Write events from existing handlers (no SOAP)
+            - [ ] \`/staff\` table UI
+            - [ ] Tests: an unstuck or rank change appears in the log
+            `,
+              },
+              {
+                title: "Player tickets for realm change requests",
+                body: `In-app queue so players do not use Discord for “rename this toon / I need X”. **Not** Zendesk, not SOAP, not the WoW DBs.
+
+            ## Product
+            - Logged-in: \`/tickets\` — list mine, open new (gold), view thread
+            - Staff (\`GM_MIN_LEVEL\`): \`/staff/tickets\` — all open, reply, set status
+            - Categories (fixed): Name change, Character transfer/restore, Guild, Items, Other
+            - Optional character picker from **that account’s** toons (same ownership as Unstuck)
+            - Status: Open → In progress → Done / Closed
+            - Player cannot edit the original after submit; may comment while Open/In progress
+            - CSRF on writes; rate-limit opens; escape body text (no raw HTML)
+
+            ## Data (SQLite in \`data/\`)
+            - \`tickets\`: id, public_ref, account_id, username, category, title, character_guid, character_name, status, created_at, updated_at, closed_by
+            - \`ticket_messages\`: id, ticket_id, author_username, from_staff, body_text, created_at
+            - Actor = session username (no extra username field)
+
+            ## Out of scope
+            Auto-rename, item injection, Discord, attachments, email (SMTP notify can be a later PR).
+
+            ## Checklist
+            - [ ] Player list/create/view + comment
+            - [ ] Staff queue, status, comment
+            - [ ] Character must belong to session account
+            - [ ] CSRF + rate limit
+            - [ ] Schema/migration
+            - [ ] Demo mode without MySQL
+            - [ ] Tests: ownership, CSRF, staff vs player
+            `,
+              },
+            ];
+            for (const iss of issues) {
+              if (titles.has(iss.title)) {
+                core.info("skip exists: " + iss.title);
+                continue;
+              }
+              const { data } = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title: iss.title,
+                labels: ["enhancement", "alpha"],
+                body: iss.body,
+              });
+              core.info(data.html_url);
+            }

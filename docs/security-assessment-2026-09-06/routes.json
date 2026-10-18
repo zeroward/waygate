@@ -1,0 +1,728 @@
+{
+  "note": "Direct calls only, not a proof of authorization. Login, password and reset handlers also inspect session state inline; delegated guards require manual review.",
+  "routes": [
+    {
+      "route": "GET /healthz",
+      "handler": "health",
+      "file": "internal/web/server.go",
+      "line": 377,
+      "direct_guard_calls": []
+    },
+    {
+      "route": "GET /",
+      "handler": "home",
+      "file": "internal/web/handlers.go",
+      "line": 37,
+      "direct_guard_calls": []
+    },
+    {
+      "route": "GET /register",
+      "handler": "registerGET",
+      "file": "internal/web/handlers.go",
+      "line": 171,
+      "direct_guard_calls": []
+    },
+    {
+      "route": "POST /register",
+      "handler": "registerPOST",
+      "file": "internal/web/handlers.go",
+      "line": 212,
+      "direct_guard_calls": [
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "GET /connect",
+      "handler": "connectRedirect",
+      "file": "internal/web/kb_handlers.go",
+      "line": 37,
+      "direct_guard_calls": []
+    },
+    {
+      "route": "GET /connect/",
+      "handler": "connectRedirect",
+      "file": "internal/web/kb_handlers.go",
+      "line": 37,
+      "direct_guard_calls": []
+    },
+    {
+      "route": "GET /kb",
+      "handler": "kbIndex",
+      "file": "internal/web/kb_handlers.go",
+      "line": 78,
+      "direct_guard_calls": [
+        "requireLogin"
+      ]
+    },
+    {
+      "route": "GET /kb/{slug}",
+      "handler": "kbArticle",
+      "file": "internal/web/kb_handlers.go",
+      "line": 109,
+      "direct_guard_calls": [
+        "requireLogin"
+      ]
+    },
+    {
+      "route": "GET /realmlist.wtf",
+      "handler": "realmlistFile",
+      "file": "internal/web/kb_handlers.go",
+      "line": 41,
+      "direct_guard_calls": [
+        "requireLogin"
+      ]
+    },
+    {
+      "route": "GET /downloads",
+      "handler": "downloadsPage",
+      "file": "internal/web/handlers.go",
+      "line": 105,
+      "direct_guard_calls": [
+        "requireLogin"
+      ]
+    },
+    {
+      "route": "GET /downloads/{id}",
+      "handler": "downloadsFile",
+      "file": "internal/web/handlers.go",
+      "line": 128,
+      "direct_guard_calls": [
+        "requireLogin"
+      ]
+    },
+    {
+      "route": "GET /online",
+      "handler": "online",
+      "file": "internal/web/handlers.go",
+      "line": 150,
+      "direct_guard_calls": []
+    },
+    {
+      "route": "GET /leaderboards",
+      "handler": "leaderboards",
+      "file": "internal/web/handlers.go",
+      "line": 155,
+      "direct_guard_calls": []
+    },
+    {
+      "route": "GET /armory",
+      "handler": "armorySearch",
+      "file": "internal/web/armory_handlers.go",
+      "line": 11,
+      "direct_guard_calls": [
+        "requireLogin"
+      ]
+    },
+    {
+      "route": "GET /armory/mv/{path...}",
+      "handler": "armoryModelProxy",
+      "file": "internal/web/armory_proxy.go",
+      "line": 112,
+      "direct_guard_calls": [
+        "requireLogin"
+      ]
+    },
+    {
+      "route": "GET /armory/display/{entry}/{displayId}",
+      "handler": "armoryDisplayMap",
+      "file": "internal/web/armory_proxy.go",
+      "line": 206,
+      "direct_guard_calls": [
+        "requireLogin"
+      ]
+    },
+    {
+      "route": "GET /armory/guild/{name}",
+      "handler": "armoryGuild",
+      "file": "internal/web/armory_handlers.go",
+      "line": 65,
+      "direct_guard_calls": [
+        "requireLogin"
+      ]
+    },
+    {
+      "route": "GET /armory/{name}",
+      "handler": "armoryInspect",
+      "file": "internal/web/armory_handlers.go",
+      "line": 43,
+      "direct_guard_calls": [
+        "requireLogin"
+      ]
+    },
+    {
+      "route": "GET /companion",
+      "handler": "companionPage",
+      "file": "internal/web/companion_handlers.go",
+      "line": 10,
+      "direct_guard_calls": [
+        "requireLogin"
+      ]
+    },
+    {
+      "route": "GET /companion/live",
+      "handler": "companionLive",
+      "file": "internal/web/companion_handlers.go",
+      "line": 63,
+      "direct_guard_calls": [
+        "requireLoginJSON"
+      ]
+    },
+    {
+      "route": "GET /account",
+      "handler": "accountGET",
+      "file": "internal/web/handlers.go",
+      "line": 1017,
+      "direct_guard_calls": []
+    },
+    {
+      "route": "POST /account/login",
+      "handler": "loginPOST",
+      "file": "internal/web/handlers.go",
+      "line": 1283,
+      "direct_guard_calls": [
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /account/login/totp",
+      "handler": "totpLoginPOST",
+      "file": "internal/web/totp_handlers.go",
+      "line": 11,
+      "direct_guard_calls": [
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /account/totp/start",
+      "handler": "totpStartPOST",
+      "file": "internal/web/totp_handlers.go",
+      "line": 41,
+      "direct_guard_calls": [
+        "requireLogin",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /account/totp/confirm",
+      "handler": "totpConfirmPOST",
+      "file": "internal/web/totp_handlers.go",
+      "line": 69,
+      "direct_guard_calls": [
+        "requireLogin",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /account/totp/disable",
+      "handler": "totpDisablePOST",
+      "file": "internal/web/totp_handlers.go",
+      "line": 90,
+      "direct_guard_calls": [
+        "requireLogin",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /account/passkey/register/begin",
+      "handler": "passkeyRegisterBegin",
+      "file": "internal/web/passkey_handlers.go",
+      "line": 109,
+      "direct_guard_calls": [
+        "requireLoginJSON",
+        "requireCSRFJSON"
+      ]
+    },
+    {
+      "route": "POST /account/passkey/register/finish",
+      "handler": "passkeyRegisterFinish",
+      "file": "internal/web/passkey_handlers.go",
+      "line": 158,
+      "direct_guard_calls": [
+        "requireLoginJSON",
+        "requireCSRFJSON"
+      ]
+    },
+    {
+      "route": "POST /account/passkey/login/begin",
+      "handler": "passkeyLoginBegin",
+      "file": "internal/web/passkey_handlers.go",
+      "line": 198,
+      "direct_guard_calls": [
+        "requireCSRFJSON"
+      ]
+    },
+    {
+      "route": "POST /account/passkey/login/finish",
+      "handler": "passkeyLoginFinish",
+      "file": "internal/web/passkey_handlers.go",
+      "line": 228,
+      "direct_guard_calls": [
+        "requireCSRFJSON"
+      ]
+    },
+    {
+      "route": "POST /account/passkey/delete",
+      "handler": "passkeyDeletePOST",
+      "file": "internal/web/passkey_handlers.go",
+      "line": 285,
+      "direct_guard_calls": [
+        "requireLogin",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /account/logout",
+      "handler": "logoutPOST",
+      "file": "internal/web/handlers.go",
+      "line": 1324,
+      "direct_guard_calls": [
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /account/password",
+      "handler": "passwordPOST",
+      "file": "internal/web/handlers.go",
+      "line": 1333,
+      "direct_guard_calls": [
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /account/unstuck",
+      "handler": "unstuckPOST",
+      "file": "internal/web/handlers.go",
+      "line": 1236,
+      "direct_guard_calls": [
+        "requireLogin",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /account/wow",
+      "handler": "wowCredentialPOST",
+      "file": "internal/web/handlers.go",
+      "line": 1078,
+      "direct_guard_calls": [
+        "requireLogin",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /account/wow/unlock",
+      "handler": "wowUnlockPOST",
+      "file": "internal/web/handlers.go",
+      "line": 1165,
+      "direct_guard_calls": [
+        "requireLogin",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /account/wow/password",
+      "handler": "wowPasswordPOST",
+      "file": "internal/web/handlers.go",
+      "line": 1182,
+      "direct_guard_calls": [
+        "requireLogin",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /account/wg",
+      "handler": "wgCreatePOST",
+      "file": "internal/web/wg_handlers.go",
+      "line": 105,
+      "direct_guard_calls": [
+        "requireLogin",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /account/wg/{id}/delete",
+      "handler": "wgDeletePOST",
+      "file": "internal/web/wg_handlers.go",
+      "line": 157,
+      "direct_guard_calls": [
+        "requireLogin",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "GET /account/wg/{id}/{kind}",
+      "handler": "wgDownload",
+      "file": "internal/web/wg_handlers.go",
+      "line": 183,
+      "direct_guard_calls": [
+        "requireLogin"
+      ]
+    },
+    {
+      "route": "GET /tickets",
+      "handler": "ticketsList",
+      "file": "internal/web/ticket_handlers.go",
+      "line": 13,
+      "direct_guard_calls": [
+        "requireLogin"
+      ]
+    },
+    {
+      "route": "GET /tickets/new",
+      "handler": "ticketsNew",
+      "file": "internal/web/ticket_handlers.go",
+      "line": 27,
+      "direct_guard_calls": [
+        "requireLogin"
+      ]
+    },
+    {
+      "route": "POST /tickets",
+      "handler": "ticketsCreate",
+      "file": "internal/web/ticket_handlers.go",
+      "line": 42,
+      "direct_guard_calls": [
+        "requireLogin",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "GET /tickets/{id}",
+      "handler": "ticketsView",
+      "file": "internal/web/ticket_handlers.go",
+      "line": 98,
+      "direct_guard_calls": [
+        "requireLogin"
+      ]
+    },
+    {
+      "route": "POST /tickets/{id}/comment",
+      "handler": "ticketsComment",
+      "file": "internal/web/ticket_handlers.go",
+      "line": 110,
+      "direct_guard_calls": [
+        "requireLogin",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "GET /staff/tickets",
+      "handler": "staffTickets",
+      "file": "internal/web/ticket_handlers.go",
+      "line": 134,
+      "direct_guard_calls": [
+        "requireMod"
+      ]
+    },
+    {
+      "route": "GET /staff/tickets/{id}",
+      "handler": "staffTicketView",
+      "file": "internal/web/ticket_handlers.go",
+      "line": 147,
+      "direct_guard_calls": [
+        "requireMod"
+      ]
+    },
+    {
+      "route": "POST /staff/tickets/{id}",
+      "handler": "staffTicketUpdate",
+      "file": "internal/web/ticket_handlers.go",
+      "line": 162,
+      "direct_guard_calls": [
+        "requireMod",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "GET /staff",
+      "handler": "staffGET",
+      "file": "internal/web/handlers.go",
+      "line": 414,
+      "direct_guard_calls": []
+    },
+    {
+      "route": "POST /staff/banner",
+      "handler": "staffBannerPOST",
+      "file": "internal/web/staff_banner.go",
+      "line": 43,
+      "direct_guard_calls": [
+        "requireStaff",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /staff/events",
+      "handler": "staffEventPOST",
+      "file": "internal/web/staff_calendar.go",
+      "line": 38,
+      "direct_guard_calls": [
+        "requireStaff",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /staff/events/{id}/delete",
+      "handler": "staffEventDeletePOST",
+      "file": "internal/web/staff_calendar.go",
+      "line": 67,
+      "direct_guard_calls": [
+        "requireStaff",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /staff/create",
+      "handler": "staffCreatePOST",
+      "file": "internal/web/handlers.go",
+      "line": 694,
+      "direct_guard_calls": [
+        "requireStaff",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /staff/reset",
+      "handler": "staffResetPOST",
+      "file": "internal/web/handlers.go",
+      "line": 739,
+      "direct_guard_calls": [
+        "requireStaff",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /staff/rank",
+      "handler": "staffRankPOST",
+      "file": "internal/web/handlers.go",
+      "line": 778,
+      "direct_guard_calls": [
+        "requireStaff",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /staff/ban",
+      "handler": "staffBanPOST",
+      "file": "internal/web/handlers.go",
+      "line": 884,
+      "direct_guard_calls": [
+        "requireStaff",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /staff/unban",
+      "handler": "staffUnbanPOST",
+      "file": "internal/web/handlers.go",
+      "line": 951,
+      "direct_guard_calls": [
+        "requireStaff",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /staff/wg",
+      "handler": "wgEndpointPOST",
+      "file": "internal/web/wg_handlers.go",
+      "line": 58,
+      "direct_guard_calls": [
+        "requireStaff",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /staff/register-key",
+      "handler": "registerKeyPOST",
+      "file": "internal/web/handlers.go",
+      "line": 568,
+      "direct_guard_calls": [
+        "requireStaff",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "POST /staff/downloads",
+      "handler": "staffDownloadPOST",
+      "file": "internal/web/staff_downloads.go",
+      "line": 15,
+      "direct_guard_calls": [
+        "requireStaff",
+        "ValidCSRF"
+      ]
+    },
+    {
+      "route": "POST /staff/downloads/delete",
+      "handler": "staffDownloadDeletePOST",
+      "file": "internal/web/staff_downloads.go",
+      "line": 158,
+      "direct_guard_calls": [
+        "requireStaff",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "GET /staff/kb",
+      "handler": "staffKB",
+      "file": "internal/web/kb_handlers.go",
+      "line": 172,
+      "direct_guard_calls": [
+        "requireKBEditor"
+      ]
+    },
+    {
+      "route": "GET /staff/kb/new",
+      "handler": "staffKBNew",
+      "file": "internal/web/kb_handlers.go",
+      "line": 187,
+      "direct_guard_calls": [
+        "requireKBEditor"
+      ]
+    },
+    {
+      "route": "POST /staff/kb",
+      "handler": "staffKBCreate",
+      "file": "internal/web/kb_handlers.go",
+      "line": 223,
+      "direct_guard_calls": [
+        "requireKBEditor",
+        "requireCSRF"
+      ]
+    },
+    {
+      "route": "POST /staff/kb/preview",
+      "handler": "staffKBPreview",
+      "file": "internal/web/kb_handlers.go",
+      "line": 315,
+      "direct_guard_calls": [
+        "requireKBEditor",
+        "requireCSRF"
+      ]
+    },
+    {
+      "route": "GET /staff/kb/{id}",
+      "handler": "staffKBEdit",
+      "file": "internal/web/kb_handlers.go",
+      "line": 200,
+      "direct_guard_calls": [
+        "requireKBEditor"
+      ]
+    },
+    {
+      "route": "POST /staff/kb/{id}",
+      "handler": "staffKBUpdate",
+      "file": "internal/web/kb_handlers.go",
+      "line": 248,
+      "direct_guard_calls": [
+        "requireKBEditor",
+        "requireCSRF"
+      ]
+    },
+    {
+      "route": "POST /staff/kb/{id}/delete",
+      "handler": "staffKBDelete",
+      "file": "internal/web/kb_handlers.go",
+      "line": 284,
+      "direct_guard_calls": [
+        "requireKBEditor",
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "GET /account/verify/{token}",
+      "handler": "verifyGET",
+      "file": "internal/web/handlers.go",
+      "line": 1380,
+      "direct_guard_calls": []
+    },
+    {
+      "route": "POST /account/verify/{token}",
+      "handler": "verifyPOST",
+      "file": "internal/web/handlers.go",
+      "line": 1393,
+      "direct_guard_calls": [
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "GET /account/reset",
+      "handler": "resetGET",
+      "file": "internal/web/handlers.go",
+      "line": 1432,
+      "direct_guard_calls": []
+    },
+    {
+      "route": "POST /account/reset",
+      "handler": "resetPOST",
+      "file": "internal/web/handlers.go",
+      "line": 1440,
+      "direct_guard_calls": [
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "GET /account/reset/{token}",
+      "handler": "resetConfirmGET",
+      "file": "internal/web/handlers.go",
+      "line": 1470,
+      "direct_guard_calls": []
+    },
+    {
+      "route": "POST /account/reset/{token}",
+      "handler": "resetConfirmPOST",
+      "file": "internal/web/handlers.go",
+      "line": 1481,
+      "direct_guard_calls": [
+        "requireCSRF",
+        "parseForm"
+      ]
+    },
+    {
+      "route": "GET /contact",
+      "handler": "contactGET",
+      "file": "internal/web/handlers.go",
+      "line": 1516,
+      "direct_guard_calls": []
+    },
+    {
+      "route": "POST /contact",
+      "handler": "contactPOST",
+      "file": "internal/web/handlers.go",
+      "line": 1520,
+      "direct_guard_calls": [
+        "requireCSRF",
+        "parseForm"
+      ]
+    }
+  ]
+}
