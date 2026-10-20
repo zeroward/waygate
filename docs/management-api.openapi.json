@@ -266,70 +266,264 @@
       }
     },
     "/api/v1/admin/accounts": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" }
+      ],
       "get": {
         "operationId": "adminListAccounts",
         "security": [{ "adminBearer": [] }],
         "summary": "List and search accounts with Gatehouse identity links",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Case-insensitive username or email substring filter (max 32 chars).",
+            "schema": { "type": "string", "maxLength": 32 }
+          },
+          {
+            "name": "bots",
+            "in": "query",
+            "description": "Include random playerbot accounts matching BOT_USERNAME_PREFIXES when set to 1 or true.",
+            "schema": { "type": "string", "enum": ["0", "1", "true", "false"] }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size (1..100, default 40).",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 40 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Zero-based pagination offset.",
+            "schema": { "type": "integer", "minimum": 0, "default": 0 }
+          }
+        ],
         "responses": {
-          "200": { "$ref": "#/components/responses/AdminData" },
+          "200": {
+            "description": "Paginated account list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminAccountList" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
-          "403": { "$ref": "#/components/responses/Unauthorized" },
-          "404": { "$ref": "#/components/responses/NotFound" }
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
         }
       },
       "post": {
         "operationId": "adminCreateAccount",
         "security": [{ "adminBearer": [] }],
         "summary": "Create a Gatehouse and WoW account",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminCreateAccountRequest" }
+            }
+          }
+        },
         "responses": {
-          "201": { "$ref": "#/components/responses/AdminData" },
-          "400": { "$ref": "#/components/responses/Unauthorized" },
+          "201": {
+            "description": "Created account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminAccount" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
           "401": { "$ref": "#/components/responses/Unauthorized" },
-          "409": { "$ref": "#/components/responses/Unauthorized" }
+          "403": { "$ref": "#/components/responses/Forbidden" },
+          "409": { "$ref": "#/components/responses/Conflict" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
         }
       }
     },
     "/api/v1/admin/accounts/{username}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" },
+        {
+          "name": "username",
+          "in": "path",
+          "required": true,
+          "description": "WoW or Gatehouse account username (3..16 ASCII alphanumeric characters).",
+          "schema": { "type": "string", "minLength": 3, "maxLength": 16 }
+        }
+      ],
       "get": {
         "operationId": "adminGetAccount",
         "security": [{ "adminBearer": [] }],
         "summary": "Inspect account, Gatehouse identity, linked logins, and characters",
         "responses": {
-          "200": { "$ref": "#/components/responses/AdminData" },
+          "200": {
+            "description": "Account detail with Gatehouse identity, linked logins, and characters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminAccountDetail" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
     },
     "/api/v1/admin/accounts/{username}/password": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" },
+        {
+          "name": "username",
+          "in": "path",
+          "required": true,
+          "description": "Target WoW username.",
+          "schema": { "type": "string", "minLength": 3, "maxLength": 16 }
+        }
+      ],
       "post": {
         "operationId": "adminResetAccountPassword",
         "security": [{ "adminBearer": [] }],
         "summary": "Reset WoW and linked Gatehouse password and revoke active sessions",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminResetPasswordRequest" }
+            }
+          }
+        },
         "responses": {
-          "200": { "$ref": "#/components/responses/AdminData" },
+          "200": {
+            "description": "Password reset result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminResetPasswordResult" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
     },
     "/api/v1/admin/accounts/{username}/rank": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" },
+        {
+          "name": "username",
+          "in": "path",
+          "required": true,
+          "description": "Target WoW or Gatehouse username.",
+          "schema": { "type": "string", "minLength": 3, "maxLength": 16 }
+        }
+      ],
       "put": {
         "operationId": "adminSetAccountRank",
         "security": [{ "adminBearer": [] }],
         "summary": "Set rank (0..3) across Gatehouse and linked WoW logins",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminSetRankRequest" }
+            }
+          }
+        },
         "responses": {
-          "200": { "$ref": "#/components/responses/AdminData" },
-          "400": { "$ref": "#/components/responses/Unauthorized" },
+          "200": {
+            "description": "Rank update result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminSetRankResult" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
     },
     "/api/v1/admin/accounts/{username}/ban": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" },
+        {
+          "name": "username",
+          "in": "path",
+          "required": true,
+          "description": "Target WoW or Gatehouse username.",
+          "schema": { "type": "string", "minLength": 3, "maxLength": 16 }
+        }
+      ],
       "post": {
         "operationId": "adminBanAccount",
         "security": [{ "adminBearer": [] }],
         "summary": "Suspend account and linked WoW logins and revoke sessions",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminBanRequest" }
+            }
+          }
+        },
         "responses": {
-          "200": { "$ref": "#/components/responses/AdminData" },
+          "200": {
+            "description": "Suspension result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminBanResult" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" }
         }
       },
@@ -338,185 +532,828 @@
         "security": [{ "adminBearer": [] }],
         "summary": "Lift suspension across linked WoW logins",
         "responses": {
-          "200": { "$ref": "#/components/responses/AdminData" },
+          "200": {
+            "description": "Unban result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminUnbanResult" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Forbidden" },
           "404": { "$ref": "#/components/responses/NotFound" }
         }
       }
     },
     "/api/v1/admin/banner": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" }
+      ],
       "get": {
         "operationId": "adminGetBanner",
         "security": [{ "adminBearer": [] }],
         "summary": "Get maintenance banner state",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "responses": {
+          "200": {
+            "description": "Current banner state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminBannerState" }
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       "put": {
         "operationId": "adminSetBanner",
         "security": [{ "adminBearer": [] }],
         "summary": "Set maintenance banner message and optional expiration",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminSetBannerRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated banner state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminBannerState" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
       },
       "delete": {
         "operationId": "adminClearBanner",
         "security": [{ "adminBearer": [] }],
         "summary": "Clear maintenance banner",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "responses": {
+          "200": {
+            "description": "Cleared banner state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminBannerState" }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/admin/register-key": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" }
+      ],
       "get": {
         "operationId": "adminGetRegisterKey",
         "security": [{ "adminBearer": [] }],
         "summary": "Get registration key state",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "responses": {
+          "200": {
+            "description": "Registration key state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminRegisterKeyState" }
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       "put": {
         "operationId": "adminSetRegisterKey",
         "security": [{ "adminBearer": [] }],
         "summary": "Set or clear registration key",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminSetRegisterKeyRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated registration key state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminRegisterKeyState" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
       },
       "delete": {
         "operationId": "adminClearRegisterKey",
         "security": [{ "adminBearer": [] }],
         "summary": "Clear registration key (open public registration)",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "responses": {
+          "200": {
+            "description": "Cleared registration key state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminRegisterKeyState" }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/admin/calendar": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" }
+      ],
       "get": {
         "operationId": "adminListCalendar",
         "security": [{ "adminBearer": [] }],
         "summary": "List realm calendar events",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max events to return (1..50, default 20).",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Realm calendar events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": ["events"],
+                      "properties": {
+                        "events": {
+                          "type": "array",
+                          "items": { "$ref": "#/components/schemas/AdminCalendarEvent" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       "post": {
         "operationId": "adminCreateCalendarEvent",
         "security": [{ "adminBearer": [] }],
         "summary": "Create realm calendar event",
-        "responses": { "201": { "$ref": "#/components/responses/AdminData" } }
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminCreateCalendarEventRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created calendar event.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminCalendarEvent" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
       }
     },
     "/api/v1/admin/calendar/{id}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "Calendar event numeric ID.",
+          "schema": { "type": "integer", "minimum": 1 }
+        }
+      ],
       "delete": {
         "operationId": "adminDeleteCalendarEvent",
         "security": [{ "adminBearer": [] }],
         "summary": "Delete realm calendar event by ID",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "responses": {
+          "200": {
+            "description": "Deleted calendar event.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminDeletedID" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
       }
     },
     "/api/v1/admin/audit": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" }
+      ],
       "get": {
         "operationId": "adminListAuditEvents",
         "security": [{ "adminBearer": [] }],
         "summary": "List recent staff and API audit events",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Max audit events to return (1..200, default 200).",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 200, "default": 200 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recent staff audit events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "required": ["events"],
+                      "properties": {
+                        "events": {
+                          "type": "array",
+                          "items": { "$ref": "#/components/schemas/AdminAuditEvent" }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/admin/tickets": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" }
+      ],
       "get": {
         "operationId": "adminListTickets",
         "security": [{ "adminBearer": [] }],
         "summary": "List support tickets filtered by status or account_id",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "description": "Ticket status filter (default active = open + in-progress).",
+            "schema": { "type": "string", "enum": ["active", "open", "in-progress", "done", "closed", "all"], "default": "active" }
+          },
+          {
+            "name": "account_id",
+            "in": "query",
+            "description": "Filter by Gatehouse account_id.",
+            "schema": { "type": "integer", "minimum": 1 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Page size (1..100, default 50).",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 50 }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Zero-based pagination offset.",
+            "schema": { "type": "integer", "minimum": 0, "default": 0 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated support tickets.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminTicketList" }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/api/v1/admin/tickets/{id}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "Ticket numeric ID.",
+          "schema": { "type": "integer", "minimum": 1 }
+        }
+      ],
       "get": {
         "operationId": "adminGetTicket",
         "security": [{ "adminBearer": [] }],
         "summary": "Get ticket and message thread",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "responses": {
+          "200": {
+            "description": "Ticket with full message thread.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminTicket" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
       },
       "patch": {
         "operationId": "adminUpdateTicket",
         "security": [{ "adminBearer": [] }],
         "summary": "Update ticket status and/or post a staff reply",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminUpdateTicketRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated ticket with full message thread.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminTicket" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
       }
     },
     "/api/v1/admin/kb": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" }
+      ],
       "get": {
         "operationId": "adminListKBArticles",
         "security": [{ "adminBearer": [] }],
         "summary": "List all Knowledge Base articles (including drafts) and categories",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "responses": {
+          "200": {
+            "description": "KB articles and categories.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminKBList" }
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       "post": {
         "operationId": "adminCreateKBArticle",
         "security": [{ "adminBearer": [] }],
         "summary": "Create Knowledge Base article",
-        "responses": { "201": { "$ref": "#/components/responses/AdminData" } }
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminUpsertKBArticleRequest" }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Created KB article.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminArticle" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
       }
     },
     "/api/v1/admin/kb/{id}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "Article numeric ID (for GET/PUT/DELETE) or article slug (for GET).",
+          "schema": { "type": "string" }
+        }
+      ],
       "get": {
         "operationId": "adminGetKBArticle",
         "security": [{ "adminBearer": [] }],
         "summary": "Get Knowledge Base article by numeric ID or slug",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "responses": {
+          "200": {
+            "description": "KB article with markdown and rendered HTML.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminArticle" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
       },
       "put": {
         "operationId": "adminUpdateKBArticle",
         "security": [{ "adminBearer": [] }],
         "summary": "Update Knowledge Base article by numeric ID",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminUpsertKBArticleRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated KB article.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminArticle" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
       },
       "delete": {
         "operationId": "adminDeleteKBArticle",
         "security": [{ "adminBearer": [] }],
         "summary": "Delete Knowledge Base article by numeric ID",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "responses": {
+          "200": {
+            "description": "Deleted KB article.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminDeletedID" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
       }
     },
     "/api/v1/admin/downloads": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" }
+      ],
       "get": {
         "operationId": "adminListDownloads",
         "security": [{ "adminBearer": [] }],
         "summary": "List downloads catalog and storage status",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "description": "Optional category filter: client, patches, or mods.",
+            "schema": { "type": "string", "enum": ["client", "patches", "mods"] }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Downloads catalog and storage state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminDownloadsList" }
+                  }
+                }
+              }
+            }
+          }
+        }
       },
       "post": {
         "operationId": "adminUploadDownload",
         "security": [{ "adminBearer": [] }],
         "summary": "Upload downloadable archive via multipart/form-data",
-        "responses": { "201": { "$ref": "#/components/responses/AdminData" } }
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "required": ["file", "category"],
+                "properties": {
+                  "file": { "type": "string", "format": "binary", "description": "Archive file (.zip, .7z, .rar, .mpq, .patch)." },
+                  "id": { "type": "string", "description": "Optional catalog ID slug." },
+                  "category": { "type": "string", "enum": ["client", "patches", "mods"] },
+                  "title": { "type": "string", "maxLength": 120 },
+                  "version": { "type": "string", "maxLength": 40 },
+                  "description": { "type": "string", "maxLength": 2000 },
+                  "source_url": { "type": "string", "format": "uri" },
+                  "addon_id": { "type": "string" },
+                  "mandatory": { "type": "string", "enum": ["0", "1", "true", "false"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Uploaded download item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminDownload" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" }
+        }
       }
     },
     "/api/v1/admin/downloads/{id}": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" },
+        {
+          "name": "id",
+          "in": "path",
+          "required": true,
+          "description": "Download catalog item ID.",
+          "schema": { "type": "string" }
+        }
+      ],
       "delete": {
         "operationId": "adminDeleteDownload",
         "security": [{ "adminBearer": [] }],
         "summary": "Remove download entry and file",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "responses": {
+          "200": {
+            "description": "Deleted download item.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminDeletedSlug" }
+                  }
+                }
+              }
+            }
+          },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
       }
     },
     "/api/v1/admin/game/unstuck": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" }
+      ],
       "post": {
         "operationId": "adminUnstuckCharacter",
         "security": [{ "adminBearer": [] }],
         "summary": "Unstuck an offline character by GUID or name",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminUnstuckRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Unstuck result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminUnstuckResult" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "409": { "$ref": "#/components/responses/Conflict" }
+        }
       }
     },
     "/api/v1/admin/game/announce": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" }
+      ],
       "post": {
         "operationId": "adminGameAnnounce",
         "security": [{ "adminBearer": [] }],
         "summary": "Broadcast an in-game announcement via SOAP",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminAnnounceRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Announcement broadcast result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminAnnounceResult" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
       }
     },
     "/api/v1/admin/game/soap": {
+      "parameters": [
+        { "$ref": "#/components/parameters/AdminActorHeader" }
+      ],
       "post": {
         "operationId": "adminGameSOAP",
         "security": [{ "adminBearer": [] }],
         "summary": "Execute a non-credential worldserver SOAP command",
-        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/AdminSOAPRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "SOAP command execution result.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": { "$ref": "#/components/schemas/AdminSOAPResult" }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "503": { "$ref": "#/components/responses/Unavailable" }
+        }
       }
     }
   },
   "components": {
+    "parameters": {
+      "AdminActorHeader": {
+        "name": "X-Admin-Actor",
+        "in": "header",
+        "required": false,
+        "description": "Optional sub-actor identifier (1..32 alphanumeric, dot, underscore, or hyphen characters) recorded in staff_events as api:<actor>.",
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9._-]{1,32}$"
+        }
+      }
+    },
     "securitySchemes": {
       "managementBearer": {
         "type": "http",
@@ -595,6 +1432,411 @@
           "message": {
             "type": "string"
           }
+        }
+      },
+      "AdminAccount": {
+        "type": "object",
+        "required": ["id", "username", "email", "join_date", "last_login", "last_ip", "online", "expansion", "gm_level", "rank_name", "locked", "banned", "linked"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 1 },
+          "username": { "type": "string" },
+          "email": { "type": "string" },
+          "join_date": { "type": "string" },
+          "last_login": { "type": "string" },
+          "last_ip": { "type": "string" },
+          "online": { "type": "boolean" },
+          "expansion": { "type": "integer", "enum": [0, 1, 2] },
+          "gm_level": { "type": "integer", "minimum": 0, "maximum": 4 },
+          "rank_name": { "type": "string", "enum": ["Player", "Moderator", "GM", "Admin", "Super GM"] },
+          "locked": { "type": "boolean" },
+          "banned": { "type": "boolean" },
+          "ban_reason": { "type": "string" },
+          "ban_until": { "type": "string" },
+          "gatehouse": { "type": "string" },
+          "linked": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "AdminAccountList": {
+        "type": "object",
+        "required": ["accounts", "total", "limit", "offset"],
+        "properties": {
+          "accounts": { "type": "array", "items": { "$ref": "#/components/schemas/AdminAccount" } },
+          "total": { "type": "integer", "minimum": 0 },
+          "limit": { "type": "integer", "minimum": 1 },
+          "offset": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "AdminIdentity": {
+        "type": "object",
+        "required": ["id", "username", "email", "staff_level", "rank_name", "auth_mode", "totp_enabled", "passkey_count"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 1 },
+          "username": { "type": "string" },
+          "email": { "type": "string" },
+          "staff_level": { "type": "integer", "minimum": 0, "maximum": 4 },
+          "rank_name": { "type": "string" },
+          "auth_mode": { "type": "string", "enum": ["local", "sso"] },
+          "totp_enabled": { "type": "boolean" },
+          "passkey_count": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "AdminCharacter": {
+        "type": "object",
+        "required": ["guid", "account_id", "login", "name", "level", "race", "race_id", "class", "class_id", "location", "faction", "gold", "played", "online"],
+        "properties": {
+          "guid": { "type": "integer", "minimum": 1 },
+          "account_id": { "type": "integer", "minimum": 1 },
+          "login": { "type": "string" },
+          "name": { "type": "string" },
+          "level": { "type": "integer", "minimum": 1, "maximum": 80 },
+          "race": { "type": "string" },
+          "race_id": { "type": "integer" },
+          "class": { "type": "string" },
+          "class_id": { "type": "integer" },
+          "location": { "type": "string" },
+          "faction": { "type": "string" },
+          "gold": { "type": "string" },
+          "played": { "type": "string" },
+          "online": { "type": "boolean" }
+        }
+      },
+      "AdminAccountDetail": {
+        "type": "object",
+        "required": ["account", "identity", "linked_logins", "characters"],
+        "properties": {
+          "account": { "$ref": "#/components/schemas/AdminAccount" },
+          "identity": {
+            "anyOf": [
+              { "$ref": "#/components/schemas/AdminIdentity" },
+              { "type": "null" }
+            ]
+          },
+          "linked_logins": { "type": "array", "items": { "type": "string" } },
+          "characters": { "type": "array", "items": { "$ref": "#/components/schemas/AdminCharacter" } }
+        }
+      },
+      "AdminCreateAccountRequest": {
+        "type": "object",
+        "required": ["username", "password"],
+        "properties": {
+          "username": { "type": "string", "minLength": 3, "maxLength": 16 },
+          "password": { "type": "string", "minLength": 8, "maxLength": 16 },
+          "email": { "type": "string", "format": "email" },
+          "expansion": { "type": "integer", "enum": [0, 1, 2], "default": 2 }
+        }
+      },
+      "AdminResetPasswordRequest": {
+        "type": "object",
+        "required": ["password"],
+        "properties": {
+          "password": { "type": "string", "minLength": 8, "maxLength": 16 },
+          "sync_gatehouse": { "type": "boolean", "default": true }
+        }
+      },
+      "AdminResetPasswordResult": {
+        "type": "object",
+        "required": ["username", "updated", "gatehouse_updated"],
+        "properties": {
+          "username": { "type": "string" },
+          "updated": { "type": "boolean" },
+          "gatehouse_updated": { "type": "boolean" }
+        }
+      },
+      "AdminSetRankRequest": {
+        "type": "object",
+        "required": ["rank"],
+        "properties": {
+          "rank": { "type": "integer", "enum": [0, 1, 2, 3], "description": "0=Player, 1=Moderator, 2=GM, 3=Admin." }
+        }
+      },
+      "AdminSetRankResult": {
+        "type": "object",
+        "required": ["username", "gatehouse", "rank", "rank_name", "updated_logins"],
+        "properties": {
+          "username": { "type": "string" },
+          "gatehouse": { "type": "string" },
+          "rank": { "type": "integer", "enum": [0, 1, 2, 3] },
+          "rank_name": { "type": "string", "enum": ["Player", "Moderator", "GM", "Admin"] },
+          "updated_logins": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "AdminBanRequest": {
+        "type": "object",
+        "required": ["duration", "reason"],
+        "properties": {
+          "duration": { "type": "string", "enum": ["1h", "1d", "7d", "30d", "permanent", "perm", "-1"] },
+          "reason": { "type": "string", "minLength": 3, "maxLength": 255 }
+        }
+      },
+      "AdminBanResult": {
+        "type": "object",
+        "required": ["target", "duration", "reason", "suspended_logins"],
+        "properties": {
+          "target": { "type": "string" },
+          "duration": { "type": "string" },
+          "reason": { "type": "string" },
+          "suspended_logins": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "AdminUnbanResult": {
+        "type": "object",
+        "required": ["target", "unbanned_logins"],
+        "properties": {
+          "target": { "type": "string" },
+          "unbanned_logins": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "AdminBannerState": {
+        "type": "object",
+        "required": ["active", "message", "until"],
+        "properties": {
+          "active": { "type": "string" },
+          "message": { "type": "string" },
+          "until": { "type": "string" }
+        }
+      },
+      "AdminSetBannerRequest": {
+        "type": "object",
+        "properties": {
+          "message": { "type": "string", "maxLength": 280 },
+          "until": { "type": "string", "description": "RFC 3339 UTC timestamp or empty." }
+        }
+      },
+      "AdminRegisterKeyState": {
+        "type": "object",
+        "required": ["required", "register_key"],
+        "properties": {
+          "required": { "type": "boolean" },
+          "register_key": { "type": "string" }
+        }
+      },
+      "AdminSetRegisterKeyRequest": {
+        "type": "object",
+        "required": ["register_key"],
+        "properties": {
+          "register_key": { "type": "string", "description": "Empty string opens registration; otherwise 4..64 printable ASCII characters without spaces." }
+        }
+      },
+      "AdminCalendarEvent": {
+        "type": "object",
+        "required": ["id", "date", "title", "detail", "created_by", "created_at"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 1 },
+          "date": { "type": "string", "format": "date" },
+          "title": { "type": "string" },
+          "detail": { "type": "string" },
+          "created_by": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AdminCreateCalendarEventRequest": {
+        "type": "object",
+        "required": ["date", "title"],
+        "properties": {
+          "date": { "type": "string", "format": "date", "description": "YYYY-MM-DD" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "detail": { "type": "string", "maxLength": 280 }
+        }
+      },
+      "AdminAuditEvent": {
+        "type": "object",
+        "required": ["at", "actor", "action", "target"],
+        "properties": {
+          "at": { "type": "string", "format": "date-time" },
+          "actor": { "type": "string" },
+          "action": { "type": "string" },
+          "target": { "type": "string" }
+        }
+      },
+      "AdminTicketMessage": {
+        "type": "object",
+        "required": ["id", "ticket_id", "author", "from_staff", "body", "created_at"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 1 },
+          "ticket_id": { "type": "integer", "minimum": 1 },
+          "author": { "type": "string" },
+          "from_staff": { "type": "boolean" },
+          "body": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "AdminTicket": {
+        "type": "object",
+        "required": ["id", "public_ref", "account_id", "username", "category", "title", "character_guid", "character_name", "status", "created_at", "updated_at", "closed_by"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 1 },
+          "public_ref": { "type": "string" },
+          "account_id": { "type": "integer", "minimum": 1 },
+          "username": { "type": "string" },
+          "category": { "type": "string" },
+          "title": { "type": "string" },
+          "character_guid": { "type": "integer", "minimum": 0 },
+          "character_name": { "type": "string" },
+          "status": { "type": "string", "enum": ["open", "in-progress", "done", "closed"] },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "closed_by": { "type": "string" },
+          "messages": { "type": "array", "items": { "$ref": "#/components/schemas/AdminTicketMessage" } }
+        }
+      },
+      "AdminTicketList": {
+        "type": "object",
+        "required": ["tickets", "total", "limit", "offset"],
+        "properties": {
+          "tickets": { "type": "array", "items": { "$ref": "#/components/schemas/AdminTicket" } },
+          "total": { "type": "integer", "minimum": 0 },
+          "limit": { "type": "integer", "minimum": 1 },
+          "offset": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "AdminUpdateTicketRequest": {
+        "type": "object",
+        "properties": {
+          "status": { "type": "string", "enum": ["open", "in-progress", "done", "closed"] },
+          "body": { "type": "string", "minLength": 1, "maxLength": 4000 }
+        }
+      },
+      "AdminArticle": {
+        "type": "object",
+        "required": ["id", "slug", "title", "summary", "category", "sort_order", "published", "created_by", "updated_by", "created_at", "updated_at"],
+        "properties": {
+          "id": { "type": "integer", "minimum": 1 },
+          "slug": { "type": "string" },
+          "title": { "type": "string" },
+          "summary": { "type": "string" },
+          "category": { "type": "string" },
+          "sort_order": { "type": "integer" },
+          "published": { "type": "boolean" },
+          "created_by": { "type": "string" },
+          "updated_by": { "type": "string" },
+          "created_at": { "type": "string", "format": "date-time" },
+          "updated_at": { "type": "string", "format": "date-time" },
+          "body_markdown": { "type": "string" },
+          "html": { "type": "string" }
+        }
+      },
+      "AdminKBList": {
+        "type": "object",
+        "required": ["articles", "categories"],
+        "properties": {
+          "articles": { "type": "array", "items": { "$ref": "#/components/schemas/AdminArticle" } },
+          "categories": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "AdminUpsertKBArticleRequest": {
+        "type": "object",
+        "required": ["title", "body_markdown"],
+        "properties": {
+          "title": { "type": "string", "minLength": 1, "maxLength": 120 },
+          "slug": { "type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$" },
+          "category": { "type": "string", "maxLength": 64 },
+          "summary": { "type": "string", "maxLength": 240 },
+          "body_markdown": { "type": "string", "maxLength": 100000 },
+          "sort_order": { "type": "integer", "default": 0 },
+          "published": { "type": "boolean", "default": false }
+        }
+      },
+      "AdminDownload": {
+        "type": "object",
+        "required": ["id", "title", "category", "label", "description", "version", "featured", "file_name", "size_bytes", "size_human", "sha256", "ready", "source_url", "addon_id", "uploaded_at", "clamav", "mandatory"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "category": { "type": "string", "enum": ["client", "patches", "mods"] },
+          "label": { "type": "string" },
+          "description": { "type": "string" },
+          "version": { "type": "string" },
+          "featured": { "type": "boolean" },
+          "file_name": { "type": "string" },
+          "size_bytes": { "type": "integer", "minimum": 0 },
+          "size_human": { "type": "string" },
+          "sha256": { "type": "string" },
+          "ready": { "type": "boolean" },
+          "source_url": { "type": "string" },
+          "addon_id": { "type": "string" },
+          "uploaded_at": { "type": "string" },
+          "clamav": { "type": "string" },
+          "mandatory": { "type": "boolean" }
+        }
+      },
+      "AdminDownloadsList": {
+        "type": "object",
+        "required": ["writable", "scanning", "max_bytes", "scan_max_bytes", "items"],
+        "properties": {
+          "writable": { "type": "boolean" },
+          "scanning": { "type": "boolean" },
+          "max_bytes": { "type": "integer", "minimum": 0 },
+          "scan_max_bytes": { "type": "integer", "minimum": 0 },
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/AdminDownload" } }
+        }
+      },
+      "AdminUnstuckRequest": {
+        "type": "object",
+        "properties": {
+          "guid": { "type": "integer", "minimum": 1, "description": "Character GUID (provide guid or name)." },
+          "name": { "type": "string", "description": "Character name (provide guid or name)." }
+        }
+      },
+      "AdminUnstuckResult": {
+        "type": "object",
+        "required": ["guid", "name", "from_map", "from_zone", "to_map", "to_zone", "via"],
+        "properties": {
+          "guid": { "type": "integer", "minimum": 1 },
+          "name": { "type": "string" },
+          "from_map": { "type": "integer" },
+          "from_zone": { "type": "integer" },
+          "to_map": { "type": "integer" },
+          "to_zone": { "type": "integer" },
+          "via": { "type": "string", "enum": ["soap", "sql", "demo"] }
+        }
+      },
+      "AdminAnnounceRequest": {
+        "type": "object",
+        "required": ["message"],
+        "properties": {
+          "message": { "type": "string", "minLength": 1, "maxLength": 255 },
+          "mode": { "type": "string", "enum": ["announce", "notify", "both"], "default": "announce" }
+        }
+      },
+      "AdminAnnounceResult": {
+        "type": "object",
+        "required": ["sent", "mode", "message"],
+        "properties": {
+          "sent": { "type": "boolean" },
+          "mode": { "type": "string", "enum": ["announce", "notify", "both"] },
+          "message": { "type": "string" },
+          "demo": { "type": "boolean" }
+        }
+      },
+      "AdminSOAPRequest": {
+        "type": "object",
+        "required": ["command"],
+        "properties": {
+          "command": { "type": "string", "description": "Worldserver console command (credential/account lifecycle commands are rejected)." }
+        }
+      },
+      "AdminSOAPResult": {
+        "type": "object",
+        "required": ["command", "result"],
+        "properties": {
+          "command": { "type": "string" },
+          "result": { "type": "string" }
+        }
+      },
+      "AdminDeletedID": {
+        "type": "object",
+        "required": ["deleted", "id"],
+        "properties": {
+          "deleted": { "type": "boolean", "const": true },
+          "id": { "type": "integer", "minimum": 1 }
+        }
+      },
+      "AdminDeletedSlug": {
+        "type": "object",
+        "required": ["deleted", "id"],
+        "properties": {
+          "deleted": { "type": "boolean", "const": true },
+          "id": { "type": "string" }
         }
       },
       "Population": {
@@ -1416,6 +2658,42 @@
                 "data": { "type": "object" }
               }
             }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "Invalid request body, path parameter, query parameter, or header.",
+        "headers": {
+          "Cache-Control": { "$ref": "#/components/headers/CacheControl" },
+          "Content-Length": { "$ref": "#/components/headers/ContentLength" }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "Authenticated token lacks required administrative scope or rank permission.",
+        "headers": {
+          "Cache-Control": { "$ref": "#/components/headers/CacheControl" },
+          "Content-Length": { "$ref": "#/components/headers/ContentLength" }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "Resource conflict (e.g. username/email/slug already taken, or character is online).",
+        "headers": {
+          "Cache-Control": { "$ref": "#/components/headers/CacheControl" },
+          "Content-Length": { "$ref": "#/components/headers/ContentLength" }
+        },
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/ErrorResponse" }
           }
         }
       }

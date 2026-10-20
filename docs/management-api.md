@@ -99,6 +99,8 @@ Authentication runs before route and method checks when enabled. Error bodies ne
 
 The programmatic administration API lives under `/api/v1/admin/...` on the same listener as Gatehouse. It is authenticated by a dedicated `ADMIN_API_TOKEN` bearer secret and is completely separate from `MANAGEMENT_API_TOKEN`.
 
+For a single-file, LLM-optimized specification with complete request/response JSON schemas and error codes, see [`admin-api-llm.md`](admin-api-llm.md) alongside [`management-api.openapi.json`](management-api.openapi.json).
+
 ## Authentication, Scope, and Actor Attribution
 
 1. Generate a dedicated secret using `openssl rand -hex 32` and set `ADMIN_API_TOKEN` in Waygate's `.env` or environment.
