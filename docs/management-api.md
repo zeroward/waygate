@@ -92,3 +92,74 @@ A dedicated endpoint whose section cannot be collected returns HTTP 503, with no
 | 500 | `internal_error` | Unexpected request failure |
 
 Authentication runs before route and method checks when enabled. Error bodies never include SQL, internal hosts, credential values, or stack traces. API calls do not create/refresh website sessions or write application data; the only SOAP command used by collection is the existing read-only `server info` probe.
+
+---
+
+# Programmatic Administration API (`Admin API v1`)
+
+The programmatic administration API lives under `/api/v1/admin/...` on the same listener as Gatehouse. It is authenticated by a dedicated `ADMIN_API_TOKEN` bearer secret and is completely separate from `MANAGEMENT_API_TOKEN`.
+
+## Authentication, Scope, and Actor Attribution
+
+1. Generate a dedicated secret using `openssl rand -hex 32` and set `ADMIN_API_TOKEN` in Waygate's `.env` or environment.
+2. Like `MANAGEMENT_API_TOKEN`, `ADMIN_API_TOKEN` must be at least 32 printable ASCII characters without spaces. When empty, all `/api/v1/admin/...` routes return HTTP 404 (`not_found`).
+3. If both `MANAGEMENT_API_TOKEN` and `ADMIN_API_TOKEN` are configured, they **must be distinct**. Startup fails if they are identical.
+4. `MANAGEMENT_API_TOKEN` remains strictly read-only. Presenting `MANAGEMENT_API_TOKEN` to `/api/v1/admin/...` returns HTTP 403 (`insufficient_scope`). Presenting `ADMIN_API_TOKEN` authorizes both `/api/v1/admin/...` and the read-only `/api/v1/...` dashboard endpoints.
+5. **Actor Attribution**: Admin API mutations record `actor = "api"` in the staff audit log (`staff_events`). Callers may optionally supply `X-Admin-Actor: <name>` (matching `^[A-Za-z0-9._-]{1,32}$`) to record `actor = "api:<name>"`.
+6. **Effective Rank Ceiling**: The Admin API operates at effective GM rank `4` (Super GM), allowing it to inspect and manage `Player (0)`, `Moderator (1)`, `GM (2)`, and `Admin (3)` accounts, and to grant ranks `0`, `1`, `2`, or `3` (never `4`).
+
+All Admin API responses return `{"data": ...}` on success and `{"error": {"code": "...", "message": "..."}}` on error, with `Cache-Control: no-store` and no session cookies.
+
+## Administrative Resources
+
+### 1. Accounts & Access
+| Method & Path | Description |
+| --- | --- |
+| `GET /api/v1/admin/accounts` | List/search accounts (`?q=&bots=0\|1&limit=40&offset=0`) with Gatehouse links |
+| `GET /api/v1/admin/accounts/{username}` | Inspect a WoW or Gatehouse account, identity MFA/passkey metadata, linked logins, and characters |
+| `POST /api/v1/admin/accounts` | Create a new Gatehouse + WoW account (`{"username", "password", "email", "expansion"}`) |
+| `POST /api/v1/admin/accounts/{username}/password` | Reset password (`{"password", "sync_gatehouse": true}`) and revoke active sessions |
+| `PUT /api/v1/admin/accounts/{username}/rank` | Set rank `0..3` (`{"rank": 0\|1\|2\|3}`) across Gatehouse and linked WoW logins |
+| `POST /api/v1/admin/accounts/{username}/ban` | Suspend account and linked logins (`{"duration": "1h"\|"1d"\|"7d"\|"30d"\|"permanent", "reason": "..."}`) |
+| `DELETE /api/v1/admin/accounts/{username}/ban` | Lift suspension across linked WoW logins |
+
+### 2. Portal Operations
+| Method & Path | Description |
+| --- | --- |
+| `GET /api/v1/admin/banner` | Get current maintenance banner (`active`, `message`, `until`) |
+| `PUT /api/v1/admin/banner` | Set maintenance banner (`{"message": "...", "until": "2026-11-01T04:00:00Z"}`) |
+| `DELETE /api/v1/admin/banner` | Clear maintenance banner |
+| `GET /api/v1/admin/register-key` | Get registration key configuration (`required`, `register_key`) |
+| `PUT /api/v1/admin/register-key` | Set or clear registration key (`{"register_key": "..."}`) |
+| `DELETE /api/v1/admin/register-key` | Open public registration (clear registration key) |
+| `GET /api/v1/admin/calendar` | List realm calendar events (`?limit=20`) |
+| `POST /api/v1/admin/calendar` | Create calendar event (`{"date": "YYYY-MM-DD", "title": "...", "detail": "..."}`) |
+| `DELETE /api/v1/admin/calendar/{id}` | Delete calendar event by ID |
+| `GET /api/v1/admin/audit` | List recent staff audit events (`?limit=200`) |
+
+### 3. Support Tickets
+| Method & Path | Description |
+| --- | --- |
+| `GET /api/v1/admin/tickets` | List tickets (`?status=active\|open\|in-progress\|done\|closed\|all&account_id=&limit=50&offset=0`) |
+| `GET /api/v1/admin/tickets/{id}` | Get full ticket and message history |
+| `PATCH /api/v1/admin/tickets/{id}` | Update status (`open`, `in-progress`, `done`, `closed`) and/or post staff reply (`{"status", "body"}`) |
+
+### 4. Knowledge Base & Downloads
+| Method & Path | Description |
+| --- | --- |
+| `GET /api/v1/admin/kb` | List all Knowledge Base articles (including drafts) and categories |
+| `GET /api/v1/admin/kb/{id}` | Get article by numeric ID or slug (includes `body_markdown` and rendered `html`) |
+| `POST /api/v1/admin/kb` | Create article (`{"title", "slug", "category", "summary", "body_markdown", "sort_order", "published"}`) |
+| `PUT /api/v1/admin/kb/{id}` | Update article by numeric ID |
+| `DELETE /api/v1/admin/kb/{id}` | Delete article by numeric ID |
+| `GET /api/v1/admin/downloads` | List downloads catalog (`?category=`) and storage/scanner status |
+| `POST /api/v1/admin/downloads` | Upload archive via `multipart/form-data` (`file`, `category`, `title`, `version`, `description`, `source_url`, `addon_id`, `mandatory`) |
+| `DELETE /api/v1/admin/downloads/{id}` | Remove download entry and underlying file |
+
+### 5. In-Game / Worldserver Actions
+| Method & Path | Description |
+| --- | --- |
+| `POST /api/v1/admin/game/unstuck` | Unstuck offline character by `guid` or `name` (`{"guid": 102}` or `{"name": "Thassarian"}`) |
+| `POST /api/v1/admin/game/announce` | Broadcast worldserver message (`{"message": "...", "mode": "announce"\|"notify"\|"both"}`) |
+| `POST /api/v1/admin/game/soap` | Execute non-credential worldserver SOAP command (`{"command": "server info"}`) |
+

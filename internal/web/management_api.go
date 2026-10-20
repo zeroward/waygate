@@ -93,16 +93,43 @@ func isManagementAPIPath(path string) bool {
 	return path == "/api" || strings.HasPrefix(path, "/api/")
 }
 
+func isAdminAPIPath(path string) bool {
+	return path == "/api/v1/admin" || strings.HasPrefix(path, "/api/v1/admin/")
+}
+
+func matchBearerToken(expected, candidate string) bool {
+	if expected == "" || candidate == "" {
+		return false
+	}
+	want := sha256.Sum256([]byte(expected))
+	got := sha256.Sum256([]byte(candidate))
+	return subtle.ConstantTimeCompare(want[:], got[:]) == 1
+}
+
+func extractBearerToken(r *http.Request) (string, bool) {
+	auth := r.Header.Values("Authorization")
+	if len(auth) != 1 {
+		return "", false
+	}
+	scheme, token, found := strings.Cut(auth[0], " ")
+	if !found || !strings.EqualFold(scheme, "Bearer") || token == "" {
+		return "", false
+	}
+	return token, true
+}
+
 func (s *Server) managementAPI(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
-	if s.cfg.ManagementAPIToken == "" {
+	if isAdminAPIPath(r.URL.Path) {
+		s.adminAPI(w, r)
+		return
+	}
+	if s.cfg.ManagementAPIToken == "" && s.cfg.AdminAPIToken == "" {
 		writeManagementError(w, r, http.StatusNotFound, "not_found", "Endpoint not found.")
 		return
 	}
-	auth := r.Header.Values("Authorization")
-	scheme, token, found := strings.Cut(r.Header.Get("Authorization"), " ")
-	want, got := sha256.Sum256([]byte(s.cfg.ManagementAPIToken)), sha256.Sum256([]byte(token))
-	if len(auth) != 1 || !found || !strings.EqualFold(scheme, "Bearer") || subtle.ConstantTimeCompare(want[:], got[:]) != 1 {
+	token, ok := extractBearerToken(r)
+	if !ok || (!matchBearerToken(s.cfg.ManagementAPIToken, token) && !matchBearerToken(s.cfg.AdminAPIToken, token)) {
 		w.Header().Set("WWW-Authenticate", `Bearer realm="management"`)
 		writeManagementError(w, r, http.StatusUnauthorized, "unauthorized", "A valid management API bearer token is required.")
 		return

@@ -55,7 +55,7 @@ func RankName(level uint8) string {
 }
 
 func CanGrantRank(actorGM, targetGM, newLevel uint8) error {
-	if newLevel != RankPlayer && newLevel != RankGM && newLevel != RankAdmin {
+	if newLevel != RankPlayer && newLevel != RankMod && newLevel != RankGM && newLevel != RankAdmin {
 		return ErrBadRank
 	}
 	if targetGM > actorGM {

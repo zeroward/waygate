@@ -211,6 +211,52 @@ func (s *Store) ListOpenTickets(ctx context.Context) ([]Ticket, error) {
 	return scanTickets(rows)
 }
 
+func (s *Store) ListTickets(ctx context.Context, statusFilter string, accountID uint32, limit, offset int) ([]Ticket, int, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	statusFilter = strings.ToLower(strings.TrimSpace(statusFilter))
+	var where []string
+	var args []any
+	switch statusFilter {
+	case "", "active":
+		where = append(where, "status IN (?, ?)")
+		args = append(args, TicketOpen, TicketInProgress)
+	case "all":
+	case TicketOpen, TicketInProgress, TicketDone, TicketClosed:
+		where = append(where, "status = ?")
+		args = append(args, statusFilter)
+	default:
+		return nil, 0, ErrBadStatus
+	}
+	if accountID > 0 {
+		where = append(where, "account_id = ?")
+		args = append(args, accountID)
+	}
+	clause := ""
+	if len(where) > 0 {
+		clause = " WHERE " + strings.Join(where, " AND ")
+	}
+	var total int
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM tickets`+clause, args...).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+	qArgs := append(append([]any{}, args...), limit, offset)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, public_ref, account_id, username, category, title, character_guid, character_name, status, created_at, updated_at, closed_by FROM tickets`+clause+` ORDER BY updated_at DESC, id DESC LIMIT ? OFFSET ?`, qArgs...)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer rows.Close()
+	list, err := scanTickets(rows)
+	if err != nil {
+		return nil, 0, err
+	}
+	return list, total, nil
+}
+
 func (s *Store) AddTicketMessage(ctx context.Context, id int64, author string, fromStaff bool, body string) error {
 	body = strings.TrimSpace(body)
 	author = strings.TrimSpace(author)

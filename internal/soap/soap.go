@@ -135,6 +135,62 @@ func BuildUnstuckCommand(character string) string {
 	return "unstuck " + quote(character) + " inn"
 }
 
+func (c *Client) Announce(ctx context.Context, message, mode string) error {
+	message = strings.TrimSpace(message)
+	if message == "" {
+		return fmt.Errorf("message is required")
+	}
+	if err := rejectUnsafe(message); err != nil {
+		return err
+	}
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "announce":
+		_, err := c.Execute(ctx, "server announce "+quote(message))
+		return err
+	case "notify":
+		_, err := c.Execute(ctx, "server notify "+quote(message))
+		return err
+	case "both":
+		if _, err := c.Execute(ctx, "server announce "+quote(message)); err != nil {
+			return err
+		}
+		_, err := c.Execute(ctx, "server notify "+quote(message))
+		return err
+	default:
+		return fmt.Errorf("invalid announce mode")
+	}
+}
+
+func ValidateSafeCommand(command string) error {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return fmt.Errorf("command is required")
+	}
+	if strings.ContainsAny(command, "\x00\r\n") {
+		return fmt.Errorf("command contains invalid characters")
+	}
+	for _, r := range command {
+		if r < 32 {
+			return fmt.Errorf("command contains control characters")
+		}
+	}
+	fields := strings.Fields(strings.ToLower(command))
+	if len(fields) > 0 {
+		first := strings.TrimLeft(fields[0], ".")
+		if first == "account" && len(fields) >= 2 {
+			switch fields[1] {
+			case "create", "password", "onetimetoken", "delete":
+				return fmt.Errorf("credential and account lifecycle commands must use the accounts API")
+			case "set":
+				if len(fields) >= 3 && (fields[2] == "password" || fields[2] == "gmlevel" || fields[2] == "sec") {
+					return fmt.Errorf("credential and rank commands must use the accounts API")
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func (c *Client) Execute(ctx context.Context, command string) (string, error) {
 	body := Envelope(command)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL, strings.NewReader(body))

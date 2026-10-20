@@ -264,6 +264,256 @@
           }
         }
       }
+    },
+    "/api/v1/admin/accounts": {
+      "get": {
+        "operationId": "adminListAccounts",
+        "security": [{ "adminBearer": [] }],
+        "summary": "List and search accounts with Gatehouse identity links",
+        "responses": {
+          "200": { "$ref": "#/components/responses/AdminData" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "post": {
+        "operationId": "adminCreateAccount",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Create a Gatehouse and WoW account",
+        "responses": {
+          "201": { "$ref": "#/components/responses/AdminData" },
+          "400": { "$ref": "#/components/responses/Unauthorized" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "409": { "$ref": "#/components/responses/Unauthorized" }
+        }
+      }
+    },
+    "/api/v1/admin/accounts/{username}": {
+      "get": {
+        "operationId": "adminGetAccount",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Inspect account, Gatehouse identity, linked logins, and characters",
+        "responses": {
+          "200": { "$ref": "#/components/responses/AdminData" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/admin/accounts/{username}/password": {
+      "post": {
+        "operationId": "adminResetAccountPassword",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Reset WoW and linked Gatehouse password and revoke active sessions",
+        "responses": {
+          "200": { "$ref": "#/components/responses/AdminData" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/admin/accounts/{username}/rank": {
+      "put": {
+        "operationId": "adminSetAccountRank",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Set rank (0..3) across Gatehouse and linked WoW logins",
+        "responses": {
+          "200": { "$ref": "#/components/responses/AdminData" },
+          "400": { "$ref": "#/components/responses/Unauthorized" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/admin/accounts/{username}/ban": {
+      "post": {
+        "operationId": "adminBanAccount",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Suspend account and linked WoW logins and revoke sessions",
+        "responses": {
+          "200": { "$ref": "#/components/responses/AdminData" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      },
+      "delete": {
+        "operationId": "adminUnbanAccount",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Lift suspension across linked WoW logins",
+        "responses": {
+          "200": { "$ref": "#/components/responses/AdminData" },
+          "404": { "$ref": "#/components/responses/NotFound" }
+        }
+      }
+    },
+    "/api/v1/admin/banner": {
+      "get": {
+        "operationId": "adminGetBanner",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Get maintenance banner state",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      },
+      "put": {
+        "operationId": "adminSetBanner",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Set maintenance banner message and optional expiration",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      },
+      "delete": {
+        "operationId": "adminClearBanner",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Clear maintenance banner",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      }
+    },
+    "/api/v1/admin/register-key": {
+      "get": {
+        "operationId": "adminGetRegisterKey",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Get registration key state",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      },
+      "put": {
+        "operationId": "adminSetRegisterKey",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Set or clear registration key",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      },
+      "delete": {
+        "operationId": "adminClearRegisterKey",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Clear registration key (open public registration)",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      }
+    },
+    "/api/v1/admin/calendar": {
+      "get": {
+        "operationId": "adminListCalendar",
+        "security": [{ "adminBearer": [] }],
+        "summary": "List realm calendar events",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      },
+      "post": {
+        "operationId": "adminCreateCalendarEvent",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Create realm calendar event",
+        "responses": { "201": { "$ref": "#/components/responses/AdminData" } }
+      }
+    },
+    "/api/v1/admin/calendar/{id}": {
+      "delete": {
+        "operationId": "adminDeleteCalendarEvent",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Delete realm calendar event by ID",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      }
+    },
+    "/api/v1/admin/audit": {
+      "get": {
+        "operationId": "adminListAuditEvents",
+        "security": [{ "adminBearer": [] }],
+        "summary": "List recent staff and API audit events",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      }
+    },
+    "/api/v1/admin/tickets": {
+      "get": {
+        "operationId": "adminListTickets",
+        "security": [{ "adminBearer": [] }],
+        "summary": "List support tickets filtered by status or account_id",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      }
+    },
+    "/api/v1/admin/tickets/{id}": {
+      "get": {
+        "operationId": "adminGetTicket",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Get ticket and message thread",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      },
+      "patch": {
+        "operationId": "adminUpdateTicket",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Update ticket status and/or post a staff reply",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      }
+    },
+    "/api/v1/admin/kb": {
+      "get": {
+        "operationId": "adminListKBArticles",
+        "security": [{ "adminBearer": [] }],
+        "summary": "List all Knowledge Base articles (including drafts) and categories",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      },
+      "post": {
+        "operationId": "adminCreateKBArticle",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Create Knowledge Base article",
+        "responses": { "201": { "$ref": "#/components/responses/AdminData" } }
+      }
+    },
+    "/api/v1/admin/kb/{id}": {
+      "get": {
+        "operationId": "adminGetKBArticle",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Get Knowledge Base article by numeric ID or slug",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      },
+      "put": {
+        "operationId": "adminUpdateKBArticle",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Update Knowledge Base article by numeric ID",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      },
+      "delete": {
+        "operationId": "adminDeleteKBArticle",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Delete Knowledge Base article by numeric ID",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      }
+    },
+    "/api/v1/admin/downloads": {
+      "get": {
+        "operationId": "adminListDownloads",
+        "security": [{ "adminBearer": [] }],
+        "summary": "List downloads catalog and storage status",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      },
+      "post": {
+        "operationId": "adminUploadDownload",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Upload downloadable archive via multipart/form-data",
+        "responses": { "201": { "$ref": "#/components/responses/AdminData" } }
+      }
+    },
+    "/api/v1/admin/downloads/{id}": {
+      "delete": {
+        "operationId": "adminDeleteDownload",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Remove download entry and file",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      }
+    },
+    "/api/v1/admin/game/unstuck": {
+      "post": {
+        "operationId": "adminUnstuckCharacter",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Unstuck an offline character by GUID or name",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      }
+    },
+    "/api/v1/admin/game/announce": {
+      "post": {
+        "operationId": "adminGameAnnounce",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Broadcast an in-game announcement via SOAP",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      }
+    },
+    "/api/v1/admin/game/soap": {
+      "post": {
+        "operationId": "adminGameSOAP",
+        "security": [{ "adminBearer": [] }],
+        "summary": "Execute a non-credential worldserver SOAP command",
+        "responses": { "200": { "$ref": "#/components/responses/AdminData" } }
+      }
     }
   },
   "components": {
@@ -272,6 +522,11 @@
         "type": "http",
         "scheme": "bearer",
         "description": "Dedicated MANAGEMENT_API_TOKEN, minimum 32 printable ASCII characters without spaces. Send in Authorization only. No cookies or query-string credentials."
+      },
+      "adminBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Dedicated ADMIN_API_TOKEN, minimum 32 printable ASCII characters without spaces, distinct from MANAGEMENT_API_TOKEN."
       }
     },
     "schemas": {
@@ -1139,6 +1394,28 @@
           },
           "Content-Length": {
             "$ref": "#/components/headers/ContentLength"
+          }
+        }
+      },
+      "AdminData": {
+        "description": "Administrative resource or action response.",
+        "headers": {
+          "Cache-Control": {
+            "$ref": "#/components/headers/CacheControl"
+          },
+          "Content-Length": {
+            "$ref": "#/components/headers/ContentLength"
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "type": "object",
+              "required": ["data"],
+              "properties": {
+                "data": { "type": "object" }
+              }
+            }
           }
         }
       }

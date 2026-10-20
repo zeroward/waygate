@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 var (
@@ -185,4 +186,40 @@ func demoUnstuck(guid uint32) (UnstuckResult, error) {
 		return UnstuckResult{GUID: ch.GUID, Name: ch.Name, Via: "demo", ToMap: 571, ToZone: 4395}, nil
 	}
 	return UnstuckResult{}, ErrCharNotFound
+}
+
+func (c *Cache) UnstuckByAdmin(ctx context.Context, guid uint32, name string) (UnstuckResult, error) {
+	name = strings.TrimSpace(name)
+	if guid == 0 && name == "" {
+		return UnstuckResult{}, ErrCharNotFound
+	}
+	if c.cfg.DemoMode || c.db == nil {
+		for _, ch := range demoCharacters() {
+			if (guid != 0 && ch.GUID == guid) || (guid == 0 && strings.EqualFold(ch.Name, name)) {
+				if ch.Online {
+					return UnstuckResult{}, ErrCharOnline
+				}
+				return UnstuckResult{GUID: ch.GUID, Name: ch.Name, Via: "demo", ToMap: 571, ToZone: 4395}, nil
+			}
+		}
+		return UnstuckResult{}, ErrCharNotFound
+	}
+	var q string
+	var arg any
+	if guid != 0 {
+		q = fmt.Sprintf("SELECT c.`guid`, c.`account` FROM %s c WHERE c.`guid` = ? AND c.`deleteDate` IS NULL LIMIT 1", c.db.QChar("characters"))
+		arg = guid
+	} else {
+		q = fmt.Sprintf("SELECT c.`guid`, c.`account` FROM %s c WHERE UPPER(c.`name`) = UPPER(?) AND c.`deleteDate` IS NULL LIMIT 1", c.db.QChar("characters"))
+		arg = name
+	}
+	var foundGUID, accountID uint32
+	err := c.db.SQL.QueryRowContext(ctx, q, arg).Scan(&foundGUID, &accountID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return UnstuckResult{}, ErrCharNotFound
+	}
+	if err != nil {
+		return UnstuckResult{}, err
+	}
+	return c.Unstuck(ctx, accountID, foundGUID)
 }

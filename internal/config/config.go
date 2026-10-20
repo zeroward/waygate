@@ -1,6 +1,8 @@
 package config
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	"fmt"
 	"os"
 	"strconv"
@@ -15,6 +17,7 @@ type Config struct {
 	TrustProxy         bool
 	SiteURL            string
 	ManagementAPIToken string
+	AdminAPIToken      string
 
 	SessionSecure bool
 	SessionTTL    time.Duration
@@ -120,6 +123,7 @@ func Load() (Config, error) {
 		TrustProxy:         envBool("TRUST_PROXY", false),
 		SiteURL:            siteURL,
 		ManagementAPIToken: env("MANAGEMENT_API_TOKEN", ""),
+		AdminAPIToken:      env("ADMIN_API_TOKEN", ""),
 		SessionSecure:      envBool("SESSION_SECURE_COOKIE", secureDefault),
 		SessionTTL:         time.Duration(envInt("SESSION_TTL_HOURS", 24)) * time.Hour,
 		CoreName:           env("CORE_NAME", "AzerothCore WotLK 3.3.5a"),
@@ -288,15 +292,32 @@ func (c *Config) validate() error {
 
 // ValidateManagementAPI also runs in web.New for callers constructing Config directly.
 func (c Config) ValidateManagementAPI() error {
-	if c.ManagementAPIToken == "" {
+	if err := validateAPIToken("MANAGEMENT_API_TOKEN", c.ManagementAPIToken); err != nil {
+		return err
+	}
+	if err := validateAPIToken("ADMIN_API_TOKEN", c.AdminAPIToken); err != nil {
+		return err
+	}
+	if c.ManagementAPIToken != "" && c.AdminAPIToken != "" {
+		m := sha256.Sum256([]byte(c.ManagementAPIToken))
+		a := sha256.Sum256([]byte(c.AdminAPIToken))
+		if subtle.ConstantTimeCompare(m[:], a[:]) == 1 {
+			return fmt.Errorf("ADMIN_API_TOKEN and MANAGEMENT_API_TOKEN must be distinct")
+		}
+	}
+	return nil
+}
+
+func validateAPIToken(name, token string) error {
+	if token == "" {
 		return nil
 	}
-	if len(c.ManagementAPIToken) < 32 {
-		return fmt.Errorf("MANAGEMENT_API_TOKEN must contain at least 32 ASCII characters")
+	if len(token) < 32 {
+		return fmt.Errorf("%s must contain at least 32 ASCII characters", name)
 	}
-	for _, ch := range c.ManagementAPIToken {
+	for _, ch := range token {
 		if ch < 33 || ch > 126 {
-			return fmt.Errorf("MANAGEMENT_API_TOKEN must contain printable ASCII characters without spaces")
+			return fmt.Errorf("%s must contain printable ASCII characters without spaces", name)
 		}
 	}
 	return nil

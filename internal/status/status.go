@@ -86,6 +86,13 @@ func New(cfg config.Config, database *db.DB, soapc *soap.Client) *Cache {
 
 func (c *Cache) Database() *db.DB { return c.db }
 
+func (c *Cache) SOAP() *soap.Client {
+	if c == nil {
+		return nil
+	}
+	return c.soap
+}
+
 // Get shares one bounded refresh across web and API callers. A disconnected caller
 // cannot cancel collection for other clients or publish cancellation as realm data.
 func (c *Cache) Get(ctx context.Context) Snapshot {
